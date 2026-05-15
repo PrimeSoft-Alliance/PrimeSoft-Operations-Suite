@@ -21,9 +21,14 @@ export default function SettingsManager() {
     fetch('/api/dashboard/settings')
       .then(res => res.json())
       .then(data => {
-        setSettings(data);
-        if (data.adminEmail) {
-          setSecurityData(prev => ({ ...prev, email: data.adminEmail }));
+        if (data) {
+          setSettings(data);
+          if (data.adminEmail) {
+            setSecurityData(prev => ({ ...prev, email: data.adminEmail }));
+          }
+        } else {
+          // Set default settings if none exist
+          setSettings({ businessName: '', services: [], branding: {}, chatbotPrimaryColor: '#6366f1' });
         }
       });
   }, []);

@@ -1,18 +1,20 @@
-# PrimeSoft Operations Suite
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-A comprehensive business automation platform enabling IT service delivery, AI-driven customer reception, automated appointment scheduling, and centralized administrative management.
+# Run and deploy your AI Studio app
 
-## Features
+This contains everything you need to run your app locally.
 
-- **Public-Facing Business Portal**: Dynamic service showcase, about page, and integrated booking/contact forms.
-- **AI Receptionist**: Groq-powered AI chatbot trained on your business data to assist customers professionally.
-- **Automated Bookings**: Sync-aware availability system with manual booking management.
-- **Admin Dashboard**: Centralized hub for managing bookings, contacts, AI instructions, and business settings.
-- **Backend Automation**: Server-side processing for email notifications and system maintenance.
+View your app in AI Studio: https://ai.studio/apps/a2ad8dac-2626-407a-a1b7-fe5f7146a8c7
 
-## Built With
+## Run Locally
 
-- **Frontend**: React (TypeScript, Tailwind CSS)
-- **Backend API**: Node.js, Express
-- **Database**: MongoDB Atlas
-- **AI Integration**: Groq API
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

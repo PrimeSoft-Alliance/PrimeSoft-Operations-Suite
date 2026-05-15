@@ -76,9 +76,9 @@ export default function SuperAdminLayout() {
             {menuItems.find(i => i.path === location.pathname)?.label || 'Super Admin Portal'}
           </h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-500">{user.email}</span>
+            <span className="text-sm text-gray-500">{user?.email}</span>
             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
-              {user.email[0].toUpperCase()}
+              {user?.email?.[0]?.toUpperCase()}
             </div>
           </div>
         </header>
