@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Users, BarChart3, Settings, LogOut, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { cn } from '../../lib/utils';
 
 export default function SuperAdminLayout() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -45,10 +47,10 @@ export default function SuperAdminLayout() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <div className="w-64 bg-indigo-900 text-white flex flex-col">
+      <div className={cn("bg-indigo-900 text-white flex flex-col transition-all duration-300", isCollapsed ? "w-20" : "w-64")}>
         <div className="p-6 flex items-center gap-3">
-          <ShieldCheck className="w-8 h-8 text-indigo-400" />
-          <span className="text-xl font-bold">Super Admin</span>
+          <ShieldCheck className="w-8 h-8 text-indigo-400 shrink-0" />
+          {!isCollapsed && <span className="text-xl font-bold">Super Admin</span>}
         </div>
         
         <nav className="flex-1 px-4 space-y-1">
@@ -60,8 +62,8 @@ export default function SuperAdminLayout() {
                 location.pathname === item.path ? 'bg-indigo-800 text-white' : 'text-indigo-100 hover:bg-indigo-800'
               }`}
             >
-              <item.icon className="w-5 h-5" />
-              {item.label}
+              <item.icon className="w-5 h-5 shrink-0" />
+              {!isCollapsed && <span>{item.label}</span>}
             </Link>
           ))}
         </nav>
@@ -71,14 +73,17 @@ export default function SuperAdminLayout() {
             onClick={handleLogout}
             className="flex items-center gap-3 w-full px-4 py-3 text-indigo-100 hover:bg-indigo-800 rounded-lg transition-colors"
           >
-            <LogOut className="w-5 h-5" />
-            Logout
+            <LogOut className="w-5 h-5 shrink-0" />
+            {!isCollapsed && <span>Logout</span>}
           </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-8">
+          <button onClick={() => setIsCollapsed(!isCollapsed)} className="text-gray-600 hover:text-indigo-600">
+             {isCollapsed ? '→' : '←'}
+          </button>
           <h1 className="text-xl font-semibold text-gray-800">
             {menuItems.find(i => i.path === location.pathname)?.label || 'Super Admin Portal'}
           </h1>

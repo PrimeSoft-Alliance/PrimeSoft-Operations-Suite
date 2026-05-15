@@ -16,6 +16,7 @@ import SettingsManager from './pages/dashboard/SettingsManager';
 import Login from './pages/Login';
 import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
 import ClientsManager from './pages/superadmin/ClientsManager';
+import GlobalStats from './pages/superadmin/GlobalStats';
 
 export default function App() {
   return (
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/superadmin" element={<SuperAdminLayout />}>
           <Route index element={<ClientsManager />} />
           <Route path="clients" element={<ClientsManager />} />
+          <Route path="stats" element={<GlobalStats />} />
         </Route>
       </Routes>
     </BrowserRouter>
