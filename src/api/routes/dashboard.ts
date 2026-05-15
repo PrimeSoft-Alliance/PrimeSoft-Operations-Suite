@@ -1,4 +1,5 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { Booking, Contact, Settings, UsageStats, AILog, Client } from '../models';
 import { authMiddleware } from '../auth';
 import { sendEmail } from '../email';
@@ -125,7 +126,9 @@ router.get('/stats', async (req, res) => {
 // Bookings
 router.get('/bookings', async (req, res) => {
   try {
+    console.log('Fetching bookings for CID:', getCid(req));
     const bookings = await Booking.find({ clientId: getCid(req) }).sort({ createdAt: -1 });
+    console.log('Bookings found:', bookings.length);
     res.json(bookings);
   } catch (error) { res.status(500).json({ error: 'Failed' }); }
 });
@@ -173,6 +176,21 @@ router.put('/settings', async (req, res) => {
     );
     res.json(settings);
   } catch (e) { res.status(500).json({ error: 'Failed' }); }
+});
+
+router.post('/security', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const clientId = getCid(req);
+    
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+    
+    await Client.findOneAndUpdate({ clientId }, { email, password: hash });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update security' });
+  }
 });
 
 export default router;

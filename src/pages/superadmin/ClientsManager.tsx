@@ -169,12 +169,7 @@ export default function ClientsManager() {
               </div>
             )}
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              // For onboarding-first model, we might just want to save the clientId 
-              // or just use the existing handleAddClient but maybe simplified.
-              handleAddClient(e);
-            }} className="space-y-4">
+            <form onSubmit={handleAddClient} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unique Client ID</label>
                 <input
@@ -185,8 +180,35 @@ export default function ClientsManager() {
                   onChange={e => setNewClient({...newClient, clientId: e.target.value})}
                 />
               </div>
-              <p className="text-xs text-gray-500 italic">You can also fully pre-create the account or generate an onboarding link after IDs are reserved.</p>
-              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
+                <input
+                  required
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={newClient.businessName}
+                  onChange={e => setNewClient({...newClient, businessName: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  required
+                  type="email"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={newClient.email}
+                  onChange={e => setNewClient({...newClient, email: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  required
+                  type="password"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={newClient.password}
+                  onChange={e => setNewClient({...newClient, password: e.target.value})}
+                />
+              </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
@@ -199,7 +221,7 @@ export default function ClientsManager() {
                   type="submit"
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
                 >
-                  Confirm ID
+                  Create Client
                 </button>
               </div>
             </form>

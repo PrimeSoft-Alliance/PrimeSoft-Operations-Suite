@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 
 export default function SettingsManager() {
   const [settings, setSettings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   
@@ -21,6 +22,7 @@ export default function SettingsManager() {
     fetch('/api/dashboard/settings')
       .then(res => res.json())
       .then(data => {
+        setLoading(false);
         if (data) {
           setSettings(data);
           if (data.adminEmail) {
@@ -62,7 +64,7 @@ export default function SettingsManager() {
     setSecuritySuccess('');
     
     try {
-      const res = await fetch('/api/auth/setup', {
+      const res = await fetch('/api/dashboard/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: securityData.email, password: securityData.password })
@@ -162,7 +164,8 @@ export default function SettingsManager() {
     }
   };
 
-  if (!settings) return null;
+  if (loading) return <div className="p-8 text-center text-gray-500">Loading settings...</div>;
+  if (!settings) return <div className="p-8 text-center text-red-500">Error loading settings.</div>;
 
   return (
     <div className="max-w-4xl space-y-8 pb-12">

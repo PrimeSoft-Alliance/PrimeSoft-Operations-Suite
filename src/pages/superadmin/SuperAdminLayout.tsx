@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 
 export default function SuperAdminLayout() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -20,7 +21,12 @@ export default function SuperAdminLayout() {
           setLoading(false);
         }
       })
-      .catch(() => navigate('/login'));
+      .catch(err => {
+        console.error('Auth check error:', err);
+        setError('Authentication check failed. Please login again.');
+        setLoading(false);
+        setTimeout(() => navigate('/login'), 2000);
+      });
   }, [navigate]);
 
   const handleLogout = async () => {
@@ -29,6 +35,7 @@ export default function SuperAdminLayout() {
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  if (error) return <div className="flex items-center justify-center h-screen text-red-600">{error}</div>;
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Overview', path: '/superadmin' },
