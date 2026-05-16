@@ -15,6 +15,8 @@ export default function Onboarding() {
 
   const [formData, setFormData] = useState({
     businessName: '',
+    businessType: '',
+    subdomain: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -148,6 +150,34 @@ export default function Onboarding() {
                   value={formData.businessName}
                   onChange={e => setFormData({...formData, businessName: e.target.value})}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700 ml-1">Business Type</label>
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. IT Solutions"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
+                  value={formData.businessType}
+                  onChange={e => setFormData({...formData, businessType: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-gray-700 ml-1">Subdomain</label>
+                <div className="relative flex items-center">
+                  <input
+                    required
+                    type="text"
+                    placeholder="my-business"
+                    className="w-full pl-4 pr-32 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all font-mono"
+                    value={formData.subdomain}
+                    onChange={e => setFormData({...formData, subdomain: e.target.value})}
+                  />
+                  <span className="absolute right-4 text-gray-400 font-mono text-sm pointer-events-none">.client.com</span>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-gray-700 ml-1">Contact Phone</label>

@@ -6,8 +6,9 @@ export default function ContactsManager() {
 
   const fetchContacts = () => {
     fetch('/api/dashboard/contacts')
-      .then(res => res.json())
-      .then(data => setContacts(data));
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setContacts(Array.isArray(data) ? data : []))
+      .catch(console.error);
   };
 
   useEffect(() => {

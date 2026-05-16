@@ -13,11 +13,16 @@ export default function Login() {
       .then(res => res.json())
       .then(data => {
         if (data.authenticated) {
-          if (data.role === 'superadmin') navigate('/superadmin');
-          else navigate('/dashboard');
+          if (data.role === 'superadmin') navigate('/superadmin', { replace: true });
+          else navigate('/dashboard', { replace: true });
         }
       });
   }, [navigate]);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.reload();
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,14 +32,14 @@ export default function Login() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: email.trim(), password })
       });
       const data = await res.json();
       if (data.success) {
         if (data.role === 'superadmin') {
-          navigate('/superadmin');
+          navigate('/superadmin', { replace: true });
         } else {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true });
         }
       } else {
         setError(data.error || 'Login failed');
@@ -80,6 +85,16 @@ export default function Login() {
           <button type="submit" disabled={loading} className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-70">
             {loading ? 'Authenticating...' : 'Sign In'}
           </button>
+          
+          <div className="pt-4 text-center">
+            <button 
+              type="button"
+              onClick={handleLogout}
+              className="text-xs text-slate-400 hover:text-indigo-600 transition"
+            >
+              Clear Session / Logout
+            </button>
+          </div>
         </form>
       </div>
     </div>

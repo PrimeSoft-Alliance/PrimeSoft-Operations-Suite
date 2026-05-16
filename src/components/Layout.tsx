@@ -4,17 +4,20 @@ import Chatbot from './Chatbot';
 import { useEffect, useState } from 'react';
 import { cn } from '../lib/utils';
 
+import { useClientId } from '../lib/useClientId';
+
 export default function Layout() {
   const [businessName, setBusinessName] = useState('PrimeSoft Alliance');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const clientId = useClientId();
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location]);
 
   useEffect(() => {
-    fetch('/api/public/settings')
+    fetch(`/api/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
         if (data) {
@@ -61,12 +64,14 @@ export default function Layout() {
             <span className="font-bold text-xl tracking-tight text-gray-900 truncate max-w-[200px] sm:max-w-none">{businessName}</span>
           </Link>
           
-          <nav className="hidden md:flex space-x-8 items-center">
+          <nav className="hidden md:flex space-x-6 items-center">
             <Link to="/" className="text-sm font-medium hover:text-primary transition-colors">Home</Link>
             <Link to="/services" className="text-sm font-medium hover:text-primary transition-colors">Services</Link>
             <Link to="/about" className="text-sm font-medium hover:text-primary transition-colors">About</Link>
             <Link to="/contact" className="text-sm font-medium hover:text-primary transition-colors">Contact</Link>
-            <Link to="/booking" className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:opacity-90 transition-colors shadow-sm ml-2">
+            <Link to="/login" className="text-sm font-medium bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors">Client Login</Link>
+            <Link to="/superadmin" className="text-sm font-medium bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">Superadmin Login</Link>
+            <Link to="/booking" className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-colors shadow-sm ml-2 whitespace-nowrap">
               Start Project
             </Link>
           </nav>
@@ -85,11 +90,13 @@ export default function Layout() {
           "fixed inset-0 top-16 bg-white z-40 md:hidden transition-transform duration-200 ease-in-out border-t border-gray-100",
           isMobileMenuOpen ? "translate-x-0" : "translate-x-full"
         )}>
-          <div className="flex flex-col px-6 pt-6 pb-8 space-y-6 overflow-y-auto h-full">
+          <div className="flex flex-col px-6 pt-6 pb-8 space-y-5 overflow-y-auto h-full">
             <Link to="/" className="text-lg font-medium text-gray-900 hover:text-primary">Home</Link>
             <Link to="/services" className="text-lg font-medium text-gray-900 hover:text-primary">Services</Link>
             <Link to="/about" className="text-lg font-medium text-gray-900 hover:text-primary">About</Link>
             <Link to="/contact" className="text-lg font-medium text-gray-900 hover:text-primary">Contact</Link>
+            <Link to="/login" className="text-lg font-medium text-gray-900 hover:text-primary">Client Login</Link>
+            <Link to="/superadmin" className="text-lg font-medium text-indigo-600 hover:text-indigo-700">Superadmin Login</Link>
             <div className="pt-6 border-t border-gray-100 mt-auto">
               <Link to="/booking" className="flex justify-center items-center w-full bg-primary text-white px-6 py-4 rounded-xl text-base font-medium hover:opacity-90 transition-colors shadow-sm">
                 Start Project

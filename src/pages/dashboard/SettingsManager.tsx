@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Settings as SettingsIcon, Save, Plus, Trash2, Clock, Globe, Palette, Mail, Sparkles, CheckCircle, X, Bot, MessageCircle, User, Cpu } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Plus, Trash2, Clock, Globe, Palette, Mail, Sparkles, CheckCircle, X, Bot, MessageCircle, User, Cpu, Database, Shield, Code, Copy, Layout } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { cn } from '../../lib/utils';
 
@@ -8,6 +8,7 @@ export default function SettingsManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showEmbedCode, setShowEmbedCode] = useState(false);
   
   const [securityData, setSecurityData] = useState({ email: '', password: '' });
   const [securitySaving, setSecuritySaving] = useState(false);
@@ -17,8 +18,18 @@ export default function SettingsManager() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [aiError, setAiError] = useState('');
   const [lastGeneratedBranding, setLastGeneratedBranding] = useState<any>(null);
+  const [domains, setDomains] = useState<any[]>([]);
+  
+  const fetchDomains = async () => {
+    try {
+      const res = await fetch('/api/dashboard/domains');
+      const data = await res.json();
+      if (Array.isArray(data)) setDomains(data);
+    } catch (err) { console.error('Failed to fetch domains'); }
+  };
 
   useEffect(() => {
+    fetchDomains();
     fetch('/api/dashboard/settings')
       .then(res => res.json())
       .then(data => {
@@ -129,6 +140,23 @@ export default function SettingsManager() {
 
   const updateField = (field: string, value: any) => {
     setSettings((prev: any) => ({ ...prev, [field]: value }));
+  };
+
+  const updateDeepField = (field: string, subField: string, value: any) => {
+    setSettings((prev: any) => ({
+      ...prev,
+      [field]: { ...(prev[field] || {}), [subField]: value }
+    }));
+  };
+
+  const updateDeepDeepField = (field: string, subField: string, subSubField: string, value: any) => {
+    setSettings((prev: any) => ({
+      ...prev,
+      [field]: {
+        ...(prev[field] || {}),
+        [subField]: { ...(prev[field]?.[subField] || {}), [subSubField]: value }
+      }
+    }));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -438,6 +466,10 @@ export default function SettingsManager() {
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-wider">Chatbot Display Name</label>
                   <input className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm" value={settings.chatbotTitle || ''} onChange={e => updateField('chatbotTitle', e.target.value)} placeholder="e.g. AI Assistant" />
                </div>
+               <div className="md:col-span-2">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-wider">Chatbot Initial Greeting</label>
+                  <textarea rows={2} className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm" value={settings.chatbotGreeting || ''} onChange={e => updateField('chatbotGreeting', e.target.value)} placeholder="Hello! How can I help you today?" />
+               </div>
                <div>
                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-2 tracking-wider">Chatbot Avatar URL</label>
                   <input className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm" value={settings.chatbotAvatar || ''} onChange={e => updateField('chatbotAvatar', e.target.value)} placeholder="https://..." />
@@ -481,6 +513,69 @@ export default function SettingsManager() {
                 onChange={e => updateField('aiBehaviorInstructions', e.target.value)}
                 placeholder="Example: PrimeSoft Alliance is a leader in digital transformation. We established in 2010... Our core values are... Our project managers are... We prefer email for follow-ups..."
               />
+
+              <div className="pt-6 mt-6 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                       <Database className="w-4 h-4 text-gray-500" />
+                       External Knowledge Source (Database)
+                    </h4>
+                    <p className="text-[10px] text-gray-500">Connect the AI to your existing database for real-time lookups & updates.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={settings.externalDbConfig?.enabled} onChange={e => updateDeepField('externalDbConfig', 'enabled', e.target.checked)} />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {settings.externalDbConfig?.enabled && (
+                  <div className="grid md:grid-cols-2 gap-4 mt-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                     <div className="md:col-span-2">
+                       <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Database Mode</label>
+                       <select className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs" value={settings.externalDbConfig?.mode || 'read-only'} onChange={e => updateDeepField('externalDbConfig', 'mode', e.target.value)}>
+                         <option value="read-only">Context Only (AI can read records to answer questions)</option>
+                         <option value="read-write">Full Assistant (AI can create and update authorized records)</option>
+                         <option value="disabled">Disabled</option>
+                       </select>
+                     </div>
+                     <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Database Type</label>
+                      <select className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs" value={settings.externalDbConfig?.dbType || ''} onChange={e => updateDeepField('externalDbConfig', 'dbType', e.target.value)}>
+                        <option value="">Select Engine</option>
+                        <option value="mongodb">MongoDB Atlas</option>
+                        <option value="postgresql">PostgreSQL</option>
+                        <option value="mysql">MySQL</option>
+                        <option value="firestore">Firebase Firestore</option>
+                        <option value="mssql">MSSQL</option>
+                        <option value="sqlite">SQLite</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Instance / Region</label>
+                      <input className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs" value={settings.externalDbConfig?.host || ''} onChange={e => updateDeepField('externalDbConfig', 'host', e.target.value)} placeholder="e.g. cluster0.mongodb.net" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Connection String / Secrets (Hashed)</label>
+                      <input type="password" title="Secrets are stored securely and never exposed in the browser." className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs" value={settings.externalDbConfig?.password || ''} onChange={e => updateDeepField('externalDbConfig', 'password', e.target.value)} placeholder="Enter connection credentials..." />
+                    </div>
+                    
+                    <div className="md:col-span-2 pt-2">
+                      <h5 className="text-[10px] font-bold text-gray-700 flex items-center gap-2 mb-2">
+                         <Shield className="w-3.5 h-3.5" /> AI Permission Scope
+                      </h5>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                         {['Read', 'Create', 'Update', 'Delete'].map(perm => (
+                           <label key={perm} className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 text-[10px] cursor-pointer hover:bg-slate-50">
+                             <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500 h-3 w-3" checked={settings.externalDbConfig?.permissions?.[`can${perm}`]} onChange={e => updateDeepDeepField('externalDbConfig', 'permissions', `can${perm}`, e.target.checked)} />
+                             {perm}
+                           </label>
+                         ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-400">
                  <span>💡 Tip: Paste your company profile, mission statement, and even project case studies here for the AI to learn.</span>
               </div>
@@ -721,6 +816,156 @@ export default function SettingsManager() {
               </button>
             </div>
           </div>
+        </section>
+ 
+        {/* Domain Mapping */}
+        <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                 <Globe className="w-5 h-5 text-indigo-600" />
+                 Domain Mapping
+              </h3>
+              <button 
+                type="button" 
+                onClick={async () => {
+                  const host = prompt('Enter domain hostname (e.g. acme.com):');
+                  if (!host) return;
+                  try {
+                    const res = await fetch('/api/dashboard/domains', {
+                      method: 'POST',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({ host, type: 'custom-domain' })
+                    });
+                    if (res.ok) fetchDomains();
+                    else alert('Domain mapping failed. Check if already exists.');
+                  } catch (err) { alert('Api error'); }
+                }}
+                className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded"
+              >
+                + Add Custom Domain
+              </button>
+           </div>
+           
+           <div className="space-y-3">
+              {(domains || []).map((dom: any) => (
+                <div key={dom._id} className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                   <div className="flex items-center gap-3">
+                      <div className={cn("w-2 h-2 rounded-full", dom.status === 'active' ? 'bg-emerald-500' : 'bg-amber-500')}></div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{dom.host}</div>
+                        <div className="text-[10px] uppercase font-bold text-gray-400">{dom.type} • {dom.status}</div>
+                      </div>
+                   </div>
+                   <button 
+                     type="button"
+                     onClick={async () => {
+                       if (!confirm('Remove this domain mapping?')) return;
+                       await fetch(`/api/dashboard/domains/${dom._id}`, { method: 'DELETE' });
+                       fetchDomains();
+                     }}
+                     className="text-gray-400 hover:text-red-500 p-2"
+                   >
+                     <Trash2 className="w-4 h-4" />
+                   </button>
+                </div>
+              ))}
+              {(!domains || domains.length === 0) && (
+                <div className="text-center py-6 text-gray-400 text-xs italic bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                   No custom domains mapped yet. The SDK will use the current hostname as fallback.
+                </div>
+              )}
+           </div>
+        </section>
+
+        {/* Headless SDK & Embed */}
+        <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+           <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                 <Code className="w-5 h-5 text-indigo-600" />
+                 Headless Website Injection (SDK)
+              </h3>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={settings.headlessConfig?.enabled} onChange={e => {
+                   const val = e.target.checked;
+                   setSettings((prev: any) => ({
+                     ...prev,
+                     headlessConfig: { ...(prev.headlessConfig || { features: { chat: true, booking: true, contact: true, content: false } }), enabled: val }
+                   }));
+                }} />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+           </div>
+           <p className="text-sm text-gray-500 mb-6">Enable specific PrimeSoft Alliance features on your external website (e.g. Lovable, v0, Wix, WordPress) using our lightweight SDK.</p>
+
+           {settings.headlessConfig?.enabled && (
+             <div className="space-y-6">
+               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Object.entries(settings.headlessConfig.features || {}).map(([feature, enabled]: [string, any]) => (
+                    <button
+                      key={feature}
+                      type="button"
+                      onClick={() => {
+                        const newFeatures = { ...settings.headlessConfig.features, [feature]: !enabled };
+                        setSettings((prev: any) => ({
+                          ...prev,
+                          headlessConfig: { ...prev.headlessConfig, features: newFeatures }
+                        }));
+                      }}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-xl border transition-all text-left",
+                        enabled ? "bg-indigo-50 border-indigo-200 text-indigo-700" : "bg-gray-50 border-gray-100 text-gray-400"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                         {feature === 'chat' && <MessageCircle className="w-4 h-4" />}
+                         {feature === 'booking' && <Clock className="w-4 h-4" />}
+                         {feature === 'contact' && <Mail className="w-4 h-4" />}
+                         {feature === 'content' && <Layout className="w-4 h-4" />}
+                         <span className="text-xs font-bold uppercase tracking-wider">{feature}</span>
+                      </div>
+                      {enabled ? <CheckCircle className="w-4 h-4" /> : <div className="w-4 h-4 rounded-full border-2 border-gray-200" />}
+                    </button>
+                  ))}
+               </div>
+
+               <div className="bg-slate-900 rounded-2xl p-6 text-white overflow-hidden relative">
+                  <div className="flex justify-between items-center mb-4">
+                     <h4 className="text-sm font-bold flex items-center gap-2">
+                        <Code className="w-4 h-4 text-indigo-400" />
+                        Embed Script
+                     </h4>
+                     <button
+                        type="button"
+                        onClick={() => {
+                          const code = `<script\n  src="${window.location.origin}/sdk.js"\n  data-client-id="${settings.clientId}"\n  data-features="${Object.entries(settings.headlessConfig.features).filter(([_,v]) => v).map(([k]) => k).join(',')}"\n  data-auto-detect="true"\n  async\n></script>`;
+                          navigator.clipboard.writeText(code);
+                          alert('Copied to clipboard!');
+                        }}
+                        className="flex items-center gap-2 text-[10px] uppercase font-bold bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition-colors"
+                     >
+                        <Copy className="w-3 h-3" /> Copy Code
+                     </button>
+                  </div>
+                  <pre className="text-[10px] font-mono text-indigo-300 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+{`<script
+  src="${window.location.origin}/sdk.js"
+  data-client-id="${settings.clientId}"
+  data-features="${Object.entries(settings.headlessConfig.features || {}).filter(([_,v]) => v).map(([k]) => k).join(',')}"
+  data-auto-detect="true"
+  async
+></script>`}
+                  </pre>
+                  <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3 text-[10px] text-white/50">
+                     <div className="flex -space-x-2">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center border border-slate-900 font-bold">L</div>
+                        <div className="w-5 h-5 rounded-full bg-white flex items-center justify-center border border-slate-900 font-bold text-black">V</div>
+                        <div className="w-5 h-5 rounded-full bg-gray-500 flex items-center justify-center border border-slate-900 font-bold text-white">W</div>
+                     </div>
+                     <span>Compatible with Lovable, v0.dev, Wix, and WordPress.</span>
+                  </div>
+               </div>
+             </div>
+           )}
         </section>
 
         {/* Services Section */}

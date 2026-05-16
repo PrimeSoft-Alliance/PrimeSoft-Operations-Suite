@@ -6,8 +6,14 @@ export default function DashboardHome() {
 
   useEffect(() => {
     fetch('/api/dashboard/stats')
-      .then(res => res.json())
-      .then(data => setStats(data));
+      .then(res => {
+         if (!res.ok) return null;
+         return res.json();
+      })
+      .then(data => {
+         if (data && !data.error) setStats(data);
+      })
+      .catch(console.error);
   }, []);
 
   if (!stats) return null;

@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Cpu, Sparkles, Phone, User, Bot } from 'lucide-react';
 import { clsx } from 'clsx';
+import { useLocation } from 'react-router-dom';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'motion/react';
+import { useClientId } from '../lib/useClientId';
 
 export function cn(...inputs: any[]) {
   return twMerge(clsx(inputs));
@@ -16,15 +18,17 @@ export default function Chatbot() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
   const [showPopup, setShowPopup] = useState(false);
   const [settings, setSettings] = useState<any>(null);
+  const clientId = useClientId();
 
   useEffect(() => {
-    fetch('/api/public/settings')
+    fetch(`/api/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(setSettings)
       .catch(console.error);
-  }, []);
+  }, [clientId]);
 
   const businessName = settings?.businessName || 'Assistant';
   const chatbotTitle = settings?.chatbotTitle || `${businessName} Assistant`;
@@ -41,6 +45,12 @@ export default function Chatbot() {
   };
   
   const ChatIcon = getIcon(settings?.chatbotIcon);
+
+  useEffect(() => {
+    if (settings?.chatbotGreeting && messages.length === 0) {
+       setMessages([{ role: 'assistant', content: settings.chatbotGreeting }]);
+    }
+  }, [settings]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -93,7 +103,13 @@ export default function Chatbot() {
         body: JSON.stringify({
           message: userMessage,
           sessionId,
-          history: messages
+          history: messages,
+          clientId,
+          pageContext: {
+            route: location.pathname,
+            page: location.pathname.split('/').pop() || 'home',
+            title: document.title,
+          }
         })
       });
       const data = await res.json();
@@ -191,11 +207,6 @@ export default function Chatbot() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-          {messages.length === 0 && (
-            <div className="text-center text-gray-500 text-sm py-4">
-              Hi there! How can I help you regarding {businessName} services today?
-            </div>
-          )}
           {messages.map((msg, idx) => (
             <div key={idx} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
               <div 

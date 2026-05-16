@@ -123,8 +123,44 @@ const settingsSchema = new mongoose.Schema({
   chatbotTitle: { type: String, default: 'Assistant' },
   chatbotAvatar: { type: String },
   chatbotPrimaryColor: { type: String, default: '#6366f1' },
+  chatbotGreeting: { type: String, default: "Hello! I'm here to help you with any questions about our services or booking. How can I assist you today?" },
   faqs: [faqSchema],
-  aiBehaviorInstructions: { type: String, default: 'You are a helpful receptionist. Never guess services, prices or availability. Encourage booking.' }
+  aiBehaviorInstructions: { type: String, default: 'You are a helpful receptionist. Never guess services, prices or availability. Encourage booking.' },
+  externalDbConfig: {
+    enabled: { type: Boolean, default: false },
+    mode: { type: String, enum: ['read-only', 'read-write', 'disabled'], default: 'read-only' },
+    dbType: { type: String },
+    host: { type: String },
+    port: { type: Number },
+    database: { type: String },
+    username: { type: String },
+    password: { type: String }, 
+    exposedTables: [{ type: String }],
+    permissions: {
+      canRead: { type: Boolean, default: true },
+      canCreate: { type: Boolean, default: false },
+      canUpdate: { type: Boolean, default: false },
+      canDelete: { type: Boolean, default: false },
+      approvalRequired: { type: Boolean, default: true }
+    }
+  },
+  emailTemplates: {
+    bookingConfirmation: { type: String, default: 'Hello {{customerName}}, your booking for {{service}} on {{date}} at {{time}} is confirmed.' },
+    bookingNotification: { type: String, default: 'New booking from {{customerName}} for {{service}} on {{date}} at {{time}}.' },
+    bookingReschedule: { type: String, default: 'Hello {{customerName}}, your booking has been rescheduled to {{date}} at {{time}}.' },
+    contactAck: { type: String, default: 'Hello {{customerName}}, we have received your message and will reply soon.' },
+    contactNotification: { type: String, default: 'New message from {{customerName}}: {{message}}' }
+  },
+  headlessConfig: {
+    enabled: { type: Boolean, default: false },
+    features: {
+      chat: { type: Boolean, default: true },
+      booking: { type: Boolean, default: true },
+      contact: { type: Boolean, default: true },
+      content: { type: Boolean, default: false }
+    },
+    allowedDomains: [{ type: String }]
+  }
 }, { timestamps: true });
 
 export const Settings = mongoose.models.Settings || mongoose.model<any>('Settings', settingsSchema);
@@ -132,16 +168,30 @@ export const Settings = mongoose.models.Settings || mongoose.model<any>('Setting
 const clientSchema = new mongoose.Schema({
   clientId: { type: String, required: true, unique: true },
   businessName: { type: String, required: true },
+  businessType: { type: String },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['client', 'superadmin'], default: 'client' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
+  plan: { type: String, default: 'starter' },
+  apiKey: { type: String, unique: true, sparse: true },
+  subdomain: { type: String, unique: true, sparse: true },
+  customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
   storageLimitBytes: { type: Number, default: 52428800 },
-  customDomain: { type: String, unique: true, sparse: true },
 }, { timestamps: true });
 
 export const Client = mongoose.models.Client || mongoose.model<any>('Client', clientSchema);
+
+const domainSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  host: { type: String, required: true, unique: true },
+  type: { type: String, enum: ['subdomain', 'custom-domain'], required: true },
+  status: { type: String, enum: ['active', 'suspended', 'pending'], default: 'active' },
+  verified: { type: Boolean, default: true }
+}, { timestamps: true });
+
+export const Domain = mongoose.models.Domain || mongoose.model<any>('Domain', domainSchema);
 
 const usageStatsSchema = new mongoose.Schema({
   clientId: { type: String, required: true },
@@ -152,12 +202,74 @@ const usageStatsSchema = new mongoose.Schema({
 
 export const UsageStats = mongoose.models.UsageStats || mongoose.model<any>('UsageStats', usageStatsSchema);
 
-const onboardingLinkSchema = new mongoose.Schema({
+const inviteSchema = new mongoose.Schema({
+  inviteId: { type: String, required: true, unique: true },
   clientId: { type: String, required: true },
   token: { type: String, required: true, unique: true },
   expiresAt: { type: Date, required: true },
-  isUsed: { type: Boolean, default: false },
-  onboardedEmail: { type: String }, // The email used for login later
+  status: { type: String, enum: ['pending', 'used', 'revoked', 'expired'], default: 'pending' },
+  customFields: [{ name: String, type: { type: String } }],
+  onboardedEmail: { type: String },
 }, { timestamps: true });
 
-export const OnboardingLink = mongoose.models.OnboardingLink || mongoose.model<any>('OnboardingLink', onboardingLinkSchema);
+export const Invite = mongoose.models.Invite || mongoose.model<any>('Invite', inviteSchema);
+
+const onboardingRequestSchema = new mongoose.Schema({
+  requestId: { type: String, required: true, unique: true },
+  businessName: { type: String, required: true },
+  email: { type: String, required: true },
+  phone: { type: String },
+  businessType: { type: String },
+  details: { type: Map, of: String },
+  status: { type: String, enum: ['pending', 'reviewing', 'approved', 'rejected', 'info_needed'], default: 'pending' },
+  superadminNotes: { type: String },
+}, { timestamps: true });
+
+export const OnboardingRequest = mongoose.models.OnboardingRequest || mongoose.model<any>('OnboardingRequest', onboardingRequestSchema);
+
+const auditLogSchema = new mongoose.Schema({
+  actor: { type: String, required: true }, // admin email or ID
+  action: { type: String, required: true },
+  target: { type: String }, // clientId or requestId
+  metadata: { type: Map, of: mongoose.Schema.Types.Mixed },
+  ip: { type: String }
+}, { timestamps: true });
+
+export const AuditLog = mongoose.models.AuditLog || mongoose.model<any>('AuditLog', auditLogSchema);
+
+const platformNotificationSchema = new mongoose.Schema({
+  type: { type: String, enum: ['info', 'warning', 'error', 'success'], default: 'info' },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  read: { type: Boolean, default: false },
+  link: { type: String },
+  clientId: { type: String }
+}, { timestamps: true });
+
+export const PlatformNotification = mongoose.models.PlatformNotification || mongoose.model<any>('PlatformNotification', platformNotificationSchema);
+
+const promptHistorySchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  promptType: { type: String, required: true },
+  promptContent: { type: String, required: true },
+  metadata: { type: Map, of: mongoose.Schema.Types.Mixed }
+}, { timestamps: true });
+
+export const PromptHistory = mongoose.models.PromptHistory || mongoose.model<any>('PromptHistory', promptHistorySchema);
+
+const platformSettingsSchema = new mongoose.Schema({
+  platformName: { type: String, default: 'PrimeSoft Alliance' },
+  supportEmail: { type: String, default: 'support@primesoft.com' },
+  maintenanceMode: { type: Boolean, default: false },
+  defaultAiLimit: { type: Number, default: 1000 },
+  defaultStorageMB: { type: Number, default: 50 },
+  allowAnonymousContact: { type: Boolean, default: true },
+  enforceMfa: { type: Boolean, default: false },
+  restrictSubdomains: { type: Boolean, default: true },
+  detailedAuditLogging: { type: Boolean, default: true },
+  masterDns: { type: String, default: 'primesoft.all' },
+  smtpVerified: { type: Boolean, default: true }
+}, { timestamps: true });
+
+export const PlatformSettings = mongoose.models.PlatformSettings || mongoose.model<any>('PlatformSettings', platformSettingsSchema);
+

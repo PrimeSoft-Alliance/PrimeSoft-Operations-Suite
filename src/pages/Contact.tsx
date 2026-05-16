@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
+import { useClientId } from '../lib/useClientId';
 
 export default function Contact() {
+  const clientId = useClientId();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -88,9 +90,6 @@ export default function Contact() {
     setError('');
 
     try {
-      const params = new URLSearchParams(window.location.search);
-      const clientId = params.get('clientId') || 'plumber-001';
-
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

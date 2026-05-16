@@ -1,5 +1,5 @@
 import express from 'express';
-import { Booking, Settings, UsageStats } from '../models';
+import { Booking, Settings, UsageStats, Client } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, endOfDay, parseISO, isBefore, isAfter, addMinutes, format } from 'date-fns';
 
@@ -67,7 +67,13 @@ router.post('/check-availability', async (req, res) => {
       // Buffer consideration is missing here for simplicity, but can be added. 
 
       if (!hasOverlap) {
-        availableSlots.push({ startTime: slotStartStr, endTime: slotEndStr });
+        const startTime12 = format(currentSlot, 'hh:mm a');
+        const endTime12 = format(slotEnd, 'hh:mm a');
+        availableSlots.push({ 
+          startTime: slotStartStr, 
+          endTime: slotEndStr,
+          displayTime: `${startTime12} - ${endTime12}`
+        });
       }
 
       currentSlot = addMinutes(currentSlot, slotDuration + buffer);
@@ -90,7 +96,6 @@ router.post('/', async (req, res) => {
     let usage = await UsageStats.findOne({ clientId, month: currentMonth });
     if (!usage) usage = await UsageStats.create({ clientId, month: currentMonth });
 
-    const { Client } = await import('../models');
     const clientRecord = await Client.findOne({ clientId });
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
 

@@ -1,21 +1,137 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
-import { Settings, Booking, Contact, OnboardingLink, Client } from '../models';
+import mongoose from 'mongoose';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, addMinutes, format } from 'date-fns';
 
 const router = express.Router();
 
+// Domain Resolution & Headless Config
+router.get('/headless/config', async (req, res) => {
+  try {
+    const host = req.query.host || req.hostname;
+    // Check Domain mappings first
+    let domain = await Domain.findOne({ host: host.toString(), status: 'active' });
+    let clientId = domain?.clientId;
+
+    if (!clientId) {
+      // Fallback: check subdomains or customDomain in Client model
+      const client = await Client.findOne({
+        $or: [
+          { customDomain: host },
+          { subdomain: host.toString().split('.')[0] }
+        ],
+        status: 'active'
+      });
+      clientId = client?.clientId;
+    }
+
+    if (!clientId) {
+      return res.status(404).json({ error: 'Tenant not resolved for host: ' + host });
+    }
+
+    const [client, settings] = await Promise.all([
+      Client.findOne({ clientId }),
+      Settings.findOne({ clientId })
+    ]);
+
+    if (!client || !settings) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    // Default features if headlessConfig is missing (backward compatibility)
+    const headless = settings.headlessConfig || {
+      enabled: true,
+      features: { chat: true, booking: true, contact: true, content: false }
+    };
+
+    res.json({
+      clientId: client.clientId,
+      businessName: client.businessName,
+      status: client.status,
+      headless,
+      branding: {
+        primaryColor: settings.primaryColor || '#6366f1',
+        fontFamily: settings.fontFamily || 'Inter',
+      },
+      ai: {
+        title: settings.chatbotTitle || 'Assistant',
+        avatar: settings.chatbotAvatar,
+        greeting: settings.chatbotGreeting,
+        color: settings.chatbotPrimaryColor || '#6366f1',
+        icon: settings.chatbotIcon || 'Cpu'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to resolve headless config' });
+  }
+});
+
+// Get content for headless editing/display
+router.get('/:clientId/content', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const settings = await Settings.findOne({ clientId });
+    if (!settings) return res.status(404).json({ error: 'Settings not found' });
+
+    res.json({
+      heroTitle: settings.heroTitle,
+      heroSubtitle: settings.heroSubtitle,
+      heroImage: settings.branding?.heroImage || settings.heroImage,
+      aboutText: settings.aboutText,
+      aboutImage: settings.aboutImage,
+      footerText: settings.footerText,
+      services: settings.services,
+      portfolio: settings.portfolioProjects,
+      stats: settings.clientStats
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch content' });
+  }
+});
+
+// Resolve hostname to clientId
+router.get('/tenant/resolve', async (req, res) => {
+  try {
+    const { host } = req.query;
+    if (!host) return res.status(400).json({ error: 'Host is required' });
+
+    // Check custom domains collection
+    const domain = await Domain.findOne({ host, status: 'active' });
+    if (domain) {
+      return res.json({ clientId: domain.clientId });
+    }
+
+    // Check client subdomain or customDomain
+    const client = await Client.findOne({
+      $or: [
+        { customDomain: host },
+        { subdomain: host.toString().split('.')[0] }
+      ],
+      status: 'active'
+    });
+
+    if (client) {
+      return res.json({ clientId: client.clientId });
+    }
+
+    res.status(404).json({ error: 'Tenant not found' });
+  } catch (err) {
+    res.status(500).json({ error: 'Resolution failed' });
+  }
+});
+
 // Get onboarding link details
 router.get('/onboarding/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const link = await OnboardingLink.findOne({ token, isUsed: false });
+    const link = await Invite.findOne({ token, status: 'pending' });
     
     if (!link) return res.status(404).json({ error: 'Link not found or already used' });
     if (new Date() > link.expiresAt) {
-      // If expired, delete the clientId too if requested (user said "clientid generated when generating the link will delete")
-      // But we should be careful here. For now just mark as expired.
+      link.status = 'expired';
+      await link.save();
       return res.status(400).json({ error: 'Link expired' });
     }
 
@@ -29,9 +145,9 @@ router.get('/onboarding/:token', async (req, res) => {
 router.post('/onboarding/:token', async (req, res) => {
   try {
     const { token } = req.params;
-    const { businessName, email, password, contactPhone, contactEmail, workingHours } = req.body;
+    const { businessName, businessType, subdomain, email, password, contactPhone, contactEmail, workingHours } = req.body;
 
-    const link = await OnboardingLink.findOne({ token, isUsed: false });
+    const link = await Invite.findOne({ token, status: 'pending' });
     if (!link || new Date() > link.expiresAt) return res.status(400).json({ error: 'Invalid or expired link' });
 
     // Create the account/update settings
@@ -41,8 +157,27 @@ router.post('/onboarding/:token', async (req, res) => {
     const client = await Client.create({
       clientId: link.clientId,
       businessName,
+      businessType,
+      subdomain,
       email,
       password: hash,
+      apiKey: 'psa_live_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)
+    });
+
+    if (subdomain) {
+      await Domain.create({
+        clientId: link.clientId,
+        host: `${String(subdomain).trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}.client.com`,
+        type: 'subdomain',
+        status: 'active'
+      });
+    }
+
+    await UsageStats.create({
+      clientId: link.clientId,
+      month: format(new Date(), 'yyyy-MM'),
+      aiMessageCount: 0,
+      storageUsedBytes: 0,
     });
 
     await Settings.create({
@@ -59,7 +194,7 @@ router.post('/onboarding/:token', async (req, res) => {
       }))
     });
 
-    link.isUsed = true;
+    link.status = 'used';
     link.onboardedEmail = email;
     await link.save();
 
@@ -158,6 +293,10 @@ router.get('/settings', async (req, res) => {
 router.post('/booking', async (req, res) => {
   try {
     const clientId = req.headers['x-client-id'] || 'plumber-001';
+    const client = await Client.findOne({ clientId });
+    if (!client || client.status === 'suspended') {
+      return res.status(403).json({ error: 'This business is currently not accepting bookings.' });
+    }
     const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, notes } = req.body;
 
     const settings = await Settings.findOne({ clientId });
@@ -194,6 +333,10 @@ router.post('/booking', async (req, res) => {
 router.post('/contact', async (req, res) => {
   try {
     const clientId = req.headers['x-client-id'] || 'plumber-001';
+    const client = await Client.findOne({ clientId });
+    if (!client || client.status === 'suspended') {
+      return res.status(403).json({ error: 'This business is currently not accepting messages.' });
+    }
     const { name, email, phone, message, preferredContactMethod } = req.body;
 
     const settings = await Settings.findOne({ clientId });

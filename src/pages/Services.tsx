@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Settings, Clock, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useClientId } from '../lib/useClientId';
 
 export default function Services() {
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const clientId = useClientId();
 
   useEffect(() => {
-    fetch('/api/public/settings')
+    fetch(`/api/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.services) {

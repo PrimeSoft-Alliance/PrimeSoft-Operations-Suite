@@ -13,10 +13,22 @@ import DashboardHome from './pages/dashboard/DashboardHome';
 import BookingsManager from './pages/dashboard/BookingsManager';
 import ContactsManager from './pages/dashboard/ContactsManager';
 import SettingsManager from './pages/dashboard/SettingsManager';
+import AvailabilityManager from './pages/dashboard/AvailabilityManager';
+import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import Login from './pages/Login';
 import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
 import ClientsManager from './pages/superadmin/ClientsManager';
 import GlobalStats from './pages/superadmin/GlobalStats';
+
+import SuperadminUsage from './pages/superadmin/SuperadminUsage';
+import SuperadminTemplates from './pages/superadmin/SuperadminTemplates';
+import SuperadminLogs from './pages/superadmin/SuperadminLogs';
+import OnboardingRequests from './pages/superadmin/OnboardingRequests';
+import PromptGenerator from './pages/superadmin/PromptGenerator';
+import SystemHealth from './pages/superadmin/SystemHealth';
+import DomainsManager from './pages/superadmin/DomainsManager';
+import NotificationsManager from './pages/superadmin/NotificationsManager';
+import PlatformSettings from './pages/superadmin/PlatformSettings';
 
 export default function App() {
   return (
@@ -38,13 +50,22 @@ export default function App() {
           <Route index element={<DashboardHome />} />
           <Route path="bookings" element={<BookingsManager />} />
           <Route path="contacts" element={<ContactsManager />} />
+          <Route path="availability" element={<AvailabilityManager />} />
+          <Route path="email-templates" element={<EmailTemplatesManager />} />
           <Route path="settings" element={<SettingsManager />} />
         </Route>
 
         <Route path="/superadmin" element={<SuperAdminLayout />}>
-          <Route index element={<ClientsManager />} />
+          <Route index element={<GlobalStats />} />
           <Route path="clients" element={<ClientsManager />} />
-          <Route path="stats" element={<GlobalStats />} />
+          <Route path="onboarding" element={<OnboardingRequests />} />
+          <Route path="prompts" element={<PromptGenerator />} />
+          <Route path="domains" element={<DomainsManager />} />
+          <Route path="usage" element={<SuperadminUsage />} />
+          <Route path="logs" element={<SuperadminLogs />} />
+          <Route path="health" element={<SystemHealth />} />
+          <Route path="notifications" element={<NotificationsManager />} />
+          <Route path="settings" element={<PlatformSettings />} />
         </Route>
       </Routes>
     </BrowserRouter>

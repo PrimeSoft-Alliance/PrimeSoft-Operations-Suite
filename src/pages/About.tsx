@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Target, Award, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useClientId } from '../lib/useClientId';
 
 export default function About() {
   const [settings, setSettings] = useState<any>(null);
+  const clientId = useClientId();
 
   useEffect(() => {
-    fetch('/api/public/settings')
+    fetch(`/api/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
         setSettings(data);

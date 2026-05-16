@@ -4,14 +4,16 @@ import 'react-calendar/dist/Calendar.css';
 import { format, isBefore, startOfDay, addMinutes } from 'date-fns';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { useClientId } from '../lib/useClientId';
 
 export default function Booking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const clientId = useClientId();
   const [services, setServices] = useState<any[]>([]);
   const [selectedService, setSelectedService] = useState(searchParams.get('service') || '');
   const [date, setDate] = useState<Date>(new Date());
-  const [availableSlots, setAvailableSlots] = useState<{startTime: string; endTime: string}[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<{startTime: string; endTime: string; displayTime?: string}[]>([]);
   const [selectedSlot, setSelectedSlot] = useState('');
   
   const [formData, setFormData] = useState({
@@ -28,9 +30,6 @@ export default function Booking() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const clientId = params.get('clientId') || 'plumber-001';
-    
     fetch(`/api/public/settings?clientId=${clientId}`)
       .then(async res => {
         if (!res.ok) throw new Error('Failed to load settings');
@@ -65,7 +64,7 @@ export default function Booking() {
     fetch('/api/booking/check-availability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: date.toISOString(), durationMinutes: duration })
+      body: JSON.stringify({ date: date.toISOString(), durationMinutes: duration, clientId })
     })
     .then(async res => {
       if (!res.ok) {
@@ -113,6 +112,7 @@ export default function Booking() {
           preferredDate: format(date, 'yyyy-MM-dd'),
           preferredStartTime: selectedSlot,
           preferredEndTime: slotObj?.endTime || '23:59', // fallback
+          clientId
         })
       });
       
@@ -226,13 +226,17 @@ export default function Booking() {
                         : 'bg-slate-50 text-slate-700 border border-slate-200 hover:border-blue-600'
                     }`}
                   >
-                    {slot.startTime}
+                    {slot.displayTime || slot.startTime}
                   </button>
                 ))}
               </div>
             )}
             {selectedSlot && (
-              <p className="mt-4 text-sm text-green-600 font-medium">Selected: {format(date, 'MMM do, yyyy')} at {selectedSlot}</p>
+              <p className="mt-4 text-sm text-green-600 font-medium">
+                Selected: {format(date, 'MMM do, yyyy')} at {
+                  availableSlots.find(s => s.startTime === selectedSlot)?.displayTime || selectedSlot
+                }
+              </p>
             )}
           </motion.div>
         </motion.div>

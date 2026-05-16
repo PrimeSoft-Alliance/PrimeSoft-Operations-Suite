@@ -123,6 +123,37 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Domains
+router.get('/domains', async (req, res) => {
+  try {
+    const { Domain } = await import('../models');
+    const domains = await Domain.find({ clientId: getCid(req) });
+    res.json(domains);
+  } catch (err) { res.status(500).json({ error: 'Failed to fetch domains' }); }
+});
+
+router.post('/domains', async (req, res) => {
+  try {
+    const { Domain } = await import('../models');
+    const { host, type } = req.body;
+    const domain = await Domain.create({ 
+      clientId: getCid(req), 
+      host, 
+      type: type || 'custom-domain',
+      status: 'pending'
+    });
+    res.json(domain);
+  } catch (err) { res.status(400).json({ error: 'Domain already exists or invalid' }); }
+});
+
+router.delete('/domains/:id', async (req, res) => {
+    try {
+      const { Domain } = await import('../models');
+      await Domain.findOneAndDelete({ _id: req.params.id, clientId: getCid(req) });
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'Delete failed' }); }
+});
+
 // Bookings
 router.get('/bookings', async (req, res) => {
   try {

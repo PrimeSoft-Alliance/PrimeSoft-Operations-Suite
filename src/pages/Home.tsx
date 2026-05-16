@@ -3,20 +3,20 @@ import { ArrowRight, Shield, Globe, Cpu, Code, CheckCircle, Database, PhoneCall 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 
+import { useClientId } from '../lib/useClientId';
+
 export default function Home() {
   const [settings, setSettings] = useState<any>(null);
+  const clientId = useClientId();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const clientId = params.get('clientId') || 'plumber-001';
-    
     fetch(`/api/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
         setSettings(data);
       })
       .catch(console.error);
-  }, []);
+  }, [clientId]);
 
   const businessName = settings?.businessName || 'PrimeSoft Alliance';
   const heroTitle = settings?.heroTitle || 'Empowering Digital Transformation';

@@ -1,5 +1,5 @@
 import express from 'express';
-import { Contact, Settings, UsageStats } from '../models';
+import { Contact, Settings, UsageStats, Client } from '../models';
 import { sendEmail } from '../email';
 
 const router = express.Router();
@@ -15,7 +15,6 @@ router.post('/', async (req, res) => {
     let usage = await UsageStats.findOne({ clientId, month: currentMonth });
     if (!usage) usage = await UsageStats.create({ clientId, month: currentMonth });
 
-    const { Client } = await import('../models');
     const clientRecord = await Client.findOne({ clientId });
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
 

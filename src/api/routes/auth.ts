@@ -17,7 +17,41 @@ const seedSuperAdmin = async () => {
       email: 'admin@system.com',
       password: hash,
       role: 'superadmin',
-      status: 'active'
+      status: 'active',
+      apiKey: 'psa_sa_' + Math.random().toString(36).substring(7)
+    });
+  }
+
+  const demoClient = await Client.findOne({ clientId: 'primesoft-solutions-demo' });
+  if (!demoClient) {
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash('client123', salt);
+    await Client.create({
+      clientId: 'primesoft-solutions-demo',
+      businessName: 'PrimeSoft Solutions',
+      email: 'client@primesoft.com',
+      password: hash,
+      role: 'client',
+      status: 'active',
+      apiKey: 'psa_cl_' + Math.random().toString(36).substring(7)
+    });
+
+    // Initialize settings for demo client
+    await Settings.create({
+      clientId: 'primesoft-solutions-demo',
+      businessName: 'PrimeSoft Solutions',
+      contactEmail: 'client@primesoft.com',
+      aboutText: 'A demo business for PrimeSoft Alliance platform testing.',
+      services: [
+        { id: '1', name: 'Custom Software Development', description: 'Tailored applications built to solve your unique challenges.', price: 2000, durationMinutes: 120 },
+        { id: '2', name: 'Cloud Integration', description: 'Modernizing infrastructure for agility.', price: 1500, durationMinutes: 90 }
+      ],
+      workingHours: Array.from({ length: 7 }, (_, i) => ({
+        day: i,
+        isOpen: i > 0 && i < 6,
+        openTime: '08:00',
+        closeTime: '17:00'
+      }))
     });
   }
 };
@@ -34,6 +68,10 @@ router.post('/login', async (req, res) => {
 
     if (client.status === 'suspended') {
       return res.status(403).json({ error: 'Account suspended. Please contact support.' });
+    }
+
+    if (!client.password || !password) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const isValid = await bcrypt.compare(password, client.password);
@@ -54,8 +92,8 @@ router.post('/login', async (req, res) => {
 
     res.cookie('admin_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000
     });
 
@@ -78,6 +116,7 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/check', async (req, res) => {
+  await seedSuperAdmin();
   const token = req.cookies.admin_token;
   if (!token) return res.json({ authenticated: false });
   try {
