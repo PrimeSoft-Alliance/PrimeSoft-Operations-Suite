@@ -8,10 +8,10 @@ export default function EmailTemplatesManager() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    fetch('/api/dashboard/settings')
+    fetch('/v1/dashboard/settings')
       .then(res => res.json())
       .then(data => {
-        setSettings(data);
+        if (data?.success) setSettings(data.data);
         setLoading(false);
       });
   }, []);
@@ -22,13 +22,13 @@ export default function EmailTemplatesManager() {
     setSaveSuccess(false);
     
     try {
-      const res = await fetch('/api/dashboard/settings', {
+      const res = await fetch('/v1/dashboard/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
       const data = await res.json();
-      setSettings(data);
+      if (data?.success) setSettings(data.data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {

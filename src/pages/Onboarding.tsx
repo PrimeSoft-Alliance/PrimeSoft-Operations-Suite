@@ -10,6 +10,8 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [clientId, setClientId] = useState('');
+  const [inviteFields, setInviteFields] = useState<any[]>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -28,11 +30,22 @@ export default function Onboarding() {
   });
 
   useEffect(() => {
-    fetch(`/api/public/onboarding/${token}`)
+    fetch(`/v1/public/onboarding/${token}`)
       .then(res => res.json())
       .then(data => {
-        if (data.error) setError(data.error);
-        else setClientId(data.clientId);
+        if (!data?.success) {
+           setError(data?.error?.message || 'Invalid link');
+        } else {
+           const payload = data.data;
+           setClientId(payload.clientId);
+           setInviteFields(payload.customFields || []);
+           if (payload.prefill) {
+             setFormData(prev => ({
+               ...prev,
+               ...payload.prefill
+             }));
+           }
+        }
       })
       .catch(() => setError('Failed to connect to server'))
       .finally(() => setLoading(false));
@@ -56,12 +69,13 @@ export default function Onboarding() {
         closeTime: formData.closingTime
       }));
 
-      const res = await fetch(`/api/public/onboarding/${token}`, {
+      const res = await fetch(`/v1/public/onboarding/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          workingHours
+          workingHours,
+          customFields: customFieldValues
         })
       });
       
@@ -248,6 +262,38 @@ export default function Onboarding() {
               </div>
             </div>
           </div>
+
+          {inviteFields.length > 0 && (
+            <div className="space-y-6 pt-6 border-t border-slate-100">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+                <CheckCircle2 className="w-5 h-5 text-primary" />
+                Additional Requirements
+              </h3>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                {inviteFields.map((field) => (
+                  <div key={field.name} className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700 ml-1">{field.name}</label>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        required
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
+                        value={customFieldValues[field.name] || ''}
+                        onChange={e => setCustomFieldValues({...customFieldValues, [field.name]: e.target.value})}
+                      />
+                    ) : (
+                      <input
+                        required
+                        type={field.type}
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
+                        value={customFieldValues[field.name] || ''}
+                        onChange={e => setCustomFieldValues({...customFieldValues, [field.name]: e.target.value})}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-6 pt-6 border-t border-slate-100">
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">

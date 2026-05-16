@@ -1,4 +1,5 @@
 import express from 'express';
+import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import { Booking, Contact, Settings, UsageStats, AILog, Client } from '../models';
 import { authMiddleware } from '../auth';
@@ -14,11 +15,12 @@ router.use(authMiddleware);
 
 // Theme Upload
 router.post('/upload-theme', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = (req as any).user.clientId;
     const { zipBase64 } = req.body;
     
-    if (!zipBase64) return res.status(400).json({ error: 'No zip data provided' });
+    if (!zipBase64) return envRes.sendError(400, 'API_ERROR', 'No zip data provided');
 
     const themeDir = path.join(process.cwd(), 'themes', clientId);
     if (!fs.existsSync(themeDir)) {
@@ -31,18 +33,19 @@ router.post('/upload-theme', async (req, res) => {
 
     await Settings.findOneAndUpdate({ clientId }, { hasCustomTheme: true });
 
-    res.json({ success: true, message: 'Theme uploaded and extracted successfully' });
+    envRes.sendSuccess({ message: 'Theme uploaded and extracted successfully'  });
   } catch (error) {
     console.error('Theme Upload Error:', error);
-    res.status(500).json({ error: 'Upload failed', details: String(error) });
+    envRes.sendError(500, 'API_ERROR', 'Upload failed', String(error));
   }
 });
 
 // Image Upload
 router.post('/upload-image', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { imageBase64, fileName } = req.body;
-    if (!imageBase64) return res.status(400).json({ error: 'No image data' });
+    if (!imageBase64) return envRes.sendError(400, 'API_ERROR', 'No image data');
 
     const buffer = Buffer.from(imageBase64, 'base64');
     const ext = fileName ? path.extname(fileName) : '.jpg';
@@ -55,10 +58,10 @@ router.post('/upload-image', async (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const url = `${protocol}://${host}/uploads/${uniqueName}`;
 
-    res.json({ success: true, url });
+    envRes.sendSuccess({ url  });
   } catch (error) {
     console.error('Image Upload Error:', error);
-    res.status(500).json({ error: 'Upload failed' });
+    envRes.sendError(500, 'API_ERROR', 'Upload failed');
   }
 });
 
@@ -67,9 +70,10 @@ const getCid = (req: any) => req.user.clientId;
 
 // Test SMTP
 router.post('/test-email', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { email, smtp } = req.body;
-    if (!email) return res.status(400).json({ error: 'Recipient email required' });
+    if (!email) return envRes.sendError(400, 'API_ERROR', 'Recipient email required');
     
     // For test-email, we use the sender settings from body if provided, 
     // otherwise we use the ones from the database for the current clientId
@@ -82,18 +86,19 @@ router.post('/test-email', async (req, res) => {
       smtp
     );
     if (result.success) {
-      res.json({ success: true, message: 'Test email sent. Please check your inbox (and spam folder).' });
+      envRes.sendSuccess({ message: 'Test email sent. Please check your inbox (and spam folder).'  });
     } else {
       res.status(500).json({ success: false, error: 'SMTP Authentication Failed', details: result.error });
     }
   } catch (error) {
     console.error('SMTP Test Error:', error);
-    res.status(500).json({ error: 'API Error during testing', details: error instanceof Error ? error.message : String(error) });
+    envRes.sendError(500, 'API_ERROR', 'API Error during testing', error instanceof Error ? error.message : String(error));
   }
 });
 
 // Setup
 router.get('/stats', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = getCid(req);
     const client = await Client.findOne({ clientId });
@@ -119,20 +124,22 @@ router.get('/stats', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to load stats' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to load stats');
   }
 });
 
 // Domains
 router.get('/domains', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { Domain } = await import('../models');
     const domains = await Domain.find({ clientId: getCid(req) });
-    res.json(domains);
-  } catch (err) { res.status(500).json({ error: 'Failed to fetch domains' }); }
+    envRes.sendSuccess(domains);
+  } catch (err) { envRes.sendError(500, 'API_ERROR', 'Failed to fetch domains'); }
 });
 
 router.post('/domains', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { Domain } = await import('../models');
     const { host, type } = req.body;
@@ -142,61 +149,68 @@ router.post('/domains', async (req, res) => {
       type: type || 'custom-domain',
       status: 'pending'
     });
-    res.json(domain);
-  } catch (err) { res.status(400).json({ error: 'Domain already exists or invalid' }); }
+    envRes.sendSuccess(domain);
+  } catch (err) { envRes.sendError(400, 'API_ERROR', 'Domain already exists or invalid'); }
 });
 
 router.delete('/domains/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
     try {
       const { Domain } = await import('../models');
       await Domain.findOneAndDelete({ _id: req.params.id, clientId: getCid(req) });
-      res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'Delete failed' }); }
+      envRes.sendSuccess({ success: true });
+    } catch (err) { envRes.sendError(500, 'API_ERROR', 'Delete failed'); }
 });
 
 // Bookings
 router.get('/bookings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     console.log('Fetching bookings for CID:', getCid(req));
     const bookings = await Booking.find({ clientId: getCid(req) }).sort({ createdAt: -1 });
     console.log('Bookings found:', bookings.length);
-    res.json(bookings);
-  } catch (error) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(bookings);
+  } catch (error) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 router.patch('/bookings/:id/status', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { status } = req.body;
     const booking = await Booking.findOneAndUpdate({ _id: req.params.id, clientId: getCid(req) }, { status }, { new: true });
-    res.json(booking);
-  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(booking);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 // Contacts
 router.get('/contacts', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const contacts = await Contact.find({ clientId: getCid(req) }).sort({ createdAt: -1 });
-    res.json(contacts);
-  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(contacts);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 router.patch('/contacts/:id/status', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { status } = req.body;
     const contact = await Contact.findOneAndUpdate({ _id: req.params.id, clientId: getCid(req) }, { status }, { new: true });
-    res.json(contact);
-  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(contact);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 // Settings
 router.get('/settings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     let settings = await Settings.findOne({ clientId: getCid(req) });
-    res.json(settings);
-  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(settings);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 router.put('/settings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const update = req.body;
     const clientId = getCid(req);
@@ -205,11 +219,12 @@ router.put('/settings', async (req, res) => {
       { $set: { ...update, clientId } },
       { new: true, upsert: true }
     );
-    res.json(settings);
-  } catch (e) { res.status(500).json({ error: 'Failed' }); }
+    envRes.sendSuccess(settings);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 router.post('/security', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { email, password } = req.body;
     const clientId = getCid(req);
@@ -218,9 +233,9 @@ router.post('/security', async (req, res) => {
     const hash = await bcrypt.hash(password, salt);
     
     await Client.findOneAndUpdate({ clientId }, { email, password: hash });
-    res.json({ success: true });
+    envRes.sendSuccess({ success: true });
   } catch (e) {
-    res.status(500).json({ error: 'Failed to update security' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to update security');
   }
 });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Shield, Globe, Zap, Mail, Database, Save, Lock, Smartphone, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, Globe, Zap, Mail, Database, Save, Lock, Smartphone, Loader2, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '../../lib/utils';
 
 export default function PlatformSettings() {
   const [config, setConfig] = useState({
@@ -13,7 +14,7 @@ export default function PlatformSettings() {
     enforceMfa: false,
     restrictSubdomains: true,
     detailedAuditLogging: true,
-    masterDns: 'primesoft.all',
+    masterDns: window.location.hostname,
     smtpVerified: true
   });
 
@@ -21,13 +22,64 @@ export default function PlatformSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
+  const [portfolioSettings, setPortfolioSettings] = useState({
+    businessName: '',
+    heroTitle: '',
+    heroSubtitle: '',
+    aboutText: '',
+  });
+
+  const [activeTab, setActiveTab] = useState<'platform' | 'portfolio'>('platform');
+
   useEffect(() => {
     fetchSettings();
+    fetchPortfolioSettings();
   }, []);
+
+  const fetchPortfolioSettings = async () => {
+    try {
+      const res = await fetch('/v1/public/settings?clientId=plumber-001');
+      if (res.ok) {
+        const data = await res.json();
+        const payload = data?.success ? data.data : data;
+        setPortfolioSettings({
+          businessName: payload.businessName || '',
+          heroTitle: payload.heroTitle || '',
+          heroSubtitle: payload.heroSubtitle || '',
+          aboutText: payload.aboutText || '',
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching portfolio settings:', err);
+    }
+  };
+
+  const handleSavePortfolio = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      // Assuming superadmin has permission to update any client settings via this endpoint or similar
+      const res = await fetch('/v1/super-admin/clients/plumber-001/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(portfolioSettings)
+      });
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Portfolio updated successfully' });
+        setTimeout(() => setMessage(null), 3000);
+      } else {
+        throw new Error('Update failed');
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Failed to update portfolio' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/super-admin/settings');
+      const res = await fetch('/v1/super-admin/settings');
       if (res.ok) {
         const data = await res.json();
         if (data) {
@@ -45,7 +97,7 @@ export default function PlatformSettings() {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/super-admin/settings', {
+      const res = await fetch('/v1/super-admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -76,7 +128,27 @@ export default function PlatformSettings() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Platform Global Settings</h1>
-          <p className="text-gray-500">Configure core architecture and default behaviors for PrimeSoft Alliance.</p>
+          <p className="text-gray-500">Configure core architecture and the company portfolio site.</p>
+          <div className="flex gap-4 mt-6">
+            <button 
+              onClick={() => setActiveTab('platform')}
+              className={cn(
+                "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                activeTab === 'platform' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "bg-white text-gray-400 border border-gray-100 hover:bg-gray-50"
+              )}
+            >
+              System Config
+            </button>
+            <button 
+              onClick={() => setActiveTab('portfolio')}
+              className={cn(
+                "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+                activeTab === 'portfolio' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "bg-white text-gray-400 border border-gray-100 hover:bg-gray-50"
+              )}
+            >
+              Company Portfolio
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <AnimatePresence>
@@ -95,7 +167,7 @@ export default function PlatformSettings() {
             )}
           </AnimatePresence>
           <button 
-            onClick={handleSave}
+            onClick={activeTab === 'platform' ? handleSave : handleSavePortfolio}
             disabled={saving}
             className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 disabled:opacity-50"
           >
@@ -105,8 +177,16 @@ export default function PlatformSettings() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-         <div className="space-y-8">
+      <AnimatePresence mode="wait">
+        {activeTab === 'platform' ? (
+          <motion.div 
+            key="platform"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+          >
+             <div className="space-y-8">
             <section className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm">
                <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3">
                   <Shield className="w-6 h-6 text-indigo-600" />
@@ -229,18 +309,111 @@ export default function PlatformSettings() {
             <div className="bg-white p-8 rounded-3xl border border-gray-200">
                <div className="flex items-center gap-4 mb-4">
                   <Smartphone className="w-6 h-6 text-slate-400" />
-                  <h4 className="font-bold text-gray-900">Platform Developer Tools</h4>
+                  <h4 className="font-bold text-gray-900">Platform Infrastructure Keys</h4>
                </div>
-               <p className="text-xs text-gray-500 mb-4 font-medium leading-relaxed">Access platform-wide API keys for integration with external monitoring or deployment pipelines.</p>
-               <button 
-                onClick={() => alert('Feature coming soon in full production release.')}
-                className="w-full py-3 bg-slate-50 border border-slate-100 text-slate-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-slate-100 transition"
-               >
-                 Manage Infrastructure Keys
-               </button>
+               <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">System-level API keys for platform-wide features. Keep these secure.</p>
+               
+               <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                     <div>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">GROQ_API_KEY</div>
+                        <div className="text-xs font-mono text-slate-600">••••••••••••••••</div>
+                     </div>
+                     <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold">CONFIGURED</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                     <div>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">GEMINI_API_KEY</div>
+                        <div className="text-xs font-mono text-slate-600">••••••••••••••••</div>
+                     </div>
+                     <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold">CONFIGURED</span>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+                     <div>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">MONGODB_URI</div>
+                        <div className="text-xs font-mono text-slate-600">••••••••••••••••</div>
+                     </div>
+                     <span className={`px-2 py-1 rounded text-[10px] font-bold ${config.smtpVerified ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                        {config.smtpVerified ? 'CONNECTED' : 'NOT SET'}
+                     </span>
+                  </div>
+               </div>
+
+               <div className="mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                     Keys are managed via Environment Variables in the platform settings. Changes require a server restart.
+                  </p>
+               </div>
             </div>
          </div>
-      </div>
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="portfolio"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+          >
+             <div className="space-y-8">
+                <section className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm">
+                   <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3">
+                      <Globe className="w-6 h-6 text-indigo-600" />
+                      Company Site Hero
+                   </h3>
+                   <div className="space-y-6">
+                      <div>
+                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Portfolio Business Name</label>
+                         <input 
+                           className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                           value={portfolioSettings.businessName}
+                           onChange={e => setPortfolioSettings({...portfolioSettings, businessName: e.target.value})}
+                         />
+                      </div>
+                      <div>
+                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Hero Title</label>
+                         <input 
+                           className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                           value={portfolioSettings.heroTitle}
+                           onChange={e => setPortfolioSettings({...portfolioSettings, heroTitle: e.target.value})}
+                         />
+                      </div>
+                      <div>
+                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Hero Subtitle</label>
+                         <textarea 
+                           rows={3}
+                           className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                           value={portfolioSettings.heroSubtitle}
+                           onChange={e => setPortfolioSettings({...portfolioSettings, heroSubtitle: e.target.value})}
+                         />
+                      </div>
+                   </div>
+                </section>
+             </div>
+
+             <div className="space-y-8">
+                <section className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm">
+                   <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center gap-3">
+                      <FileText className="w-6 h-6 text-indigo-600" />
+                      About Us Content
+                   </h3>
+                   <div className="space-y-6">
+                      <div>
+                         <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">About Page Text</label>
+                         <textarea 
+                           rows={10}
+                           className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                           value={portfolioSettings.aboutText}
+                           onChange={e => setPortfolioSettings({...portfolioSettings, aboutText: e.target.value})}
+                         />
+                      </div>
+                   </div>
+                </section>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

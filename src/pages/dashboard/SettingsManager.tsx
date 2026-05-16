@@ -22,27 +22,34 @@ export default function SettingsManager() {
   
   const fetchDomains = async () => {
     try {
-      const res = await fetch('/api/dashboard/domains');
+      const res = await fetch('/v1/dashboard/domains');
       const data = await res.json();
-      if (Array.isArray(data)) setDomains(data);
+      if (data?.success && Array.isArray(data.data)) setDomains(data.data);
     } catch (err) { console.error('Failed to fetch domains'); }
   };
 
   useEffect(() => {
     fetchDomains();
-    fetch('/api/dashboard/settings')
-      .then(res => res.json())
+    fetch('/v1/dashboard/settings')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load settings');
+        return res.json();
+      })
       .then(data => {
         setLoading(false);
-        if (data) {
-          setSettings(data);
-          if (data.adminEmail) {
-            setSecurityData(prev => ({ ...prev, email: data.adminEmail }));
+        if (data?.success && data.data) {
+          setSettings(data.data);
+          if (data.data.adminEmail) {
+            setSecurityData(prev => ({ ...prev, email: data.data.adminEmail }));
           }
         } else {
           // Set default settings if none exist
           setSettings({ businessName: '', services: [], branding: {}, chatbotPrimaryColor: '#6366f1' });
         }
+      })
+      .catch(err => {
+        console.error('Settings load error:', err);
+        setLoading(false);
       });
   }, []);
 
@@ -52,13 +59,13 @@ export default function SettingsManager() {
     setSaveSuccess(false);
     
     try {
-      const res = await fetch('/api/dashboard/settings', {
+      const res = await fetch('/v1/dashboard/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
       const data = await res.json();
-      setSettings(data);
+      if (data?.success) setSettings(data.data);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -75,7 +82,7 @@ export default function SettingsManager() {
     setSecuritySuccess('');
     
     try {
-      const res = await fetch('/api/dashboard/security', {
+      const res = await fetch('/v1/dashboard/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: securityData.email, password: securityData.password })
@@ -100,7 +107,7 @@ export default function SettingsManager() {
     setGeneratingAI(true);
     setAiError('');
     try {
-      const response = await fetch('/api/dashboard/ai/generate-branding', {
+      const response = await fetch('/v1/dashboard/ai/generate-branding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,7 +176,7 @@ export default function SettingsManager() {
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const res = await fetch('/api/dashboard/upload-image', {
+        const res = await fetch('/v1/dashboard/upload-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64, fileName: file.name })
@@ -792,7 +799,7 @@ export default function SettingsManager() {
                   const email = (document.getElementById('test-email-input') as HTMLInputElement).value;
                   if (!email) return alert('Enter an email address');
                   try {
-                    const res = await fetch('/api/dashboard/test-email', {
+                    const res = await fetch('/v1/dashboard/test-email', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ email, smtp: {
@@ -831,7 +838,7 @@ export default function SettingsManager() {
                   const host = prompt('Enter domain hostname (e.g. acme.com):');
                   if (!host) return;
                   try {
-                    const res = await fetch('/api/dashboard/domains', {
+                    const res = await fetch('/v1/dashboard/domains', {
                       method: 'POST',
                       headers: {'Content-Type': 'application/json'},
                       body: JSON.stringify({ host, type: 'custom-domain' })
@@ -860,7 +867,7 @@ export default function SettingsManager() {
                      type="button"
                      onClick={async () => {
                        if (!confirm('Remove this domain mapping?')) return;
-                       await fetch(`/api/dashboard/domains/${dom._id}`, { method: 'DELETE' });
+                       await fetch(`/v1/dashboard/domains/${dom._id}`, { method: 'DELETE' });
                        fetchDomains();
                      }}
                      className="text-gray-400 hover:text-red-500 p-2"

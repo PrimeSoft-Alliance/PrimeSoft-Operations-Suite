@@ -1,4 +1,5 @@
 import express from 'express';
+import { EnvelopeResponse } from '../middlewares/envelope';
 import { Groq } from 'groq-sdk';
 import { Settings } from '../models';
 
@@ -9,11 +10,12 @@ const groq = new Groq({
 
 // AI Brand Generator
 router.post('/generate-branding', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { businessName, services } = req.body;
     
     if (!process.env.GROQ_API_KEY) {
-      return res.status(500).json({ error: 'Groq API Key not configured' });
+      return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
     }
 
     const completion = await groq.chat.completions.create({
@@ -44,10 +46,10 @@ Return ONLY a JSON object with:
     });
 
     const result = JSON.parse(completion.choices[0].message.content || '{}');
-    res.json(result);
+    envRes.sendSuccess(result);
   } catch (error: any) {
     console.error('AI Branding Error:', error);
-    res.status(500).json({ error: 'Failed to generate branding' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate branding');
   }
 });
 

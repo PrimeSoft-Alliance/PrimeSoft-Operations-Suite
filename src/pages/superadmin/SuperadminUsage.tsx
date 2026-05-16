@@ -16,7 +16,7 @@ export default function SuperadminUsage() {
 
   const fetchClients = () => {
     setLoading(true);
-    fetch('/api/super-admin/clients')
+    fetch('/v1/super-admin/clients')
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         setClients(Array.isArray(data) ? data : []);
@@ -33,7 +33,7 @@ export default function SuperadminUsage() {
     if (!selectedTenant) return;
     setUpdating(true);
     try {
-      const res = await fetch(`/api/super-admin/clients/${selectedTenant.clientId}`, {
+      const res = await fetch(`/v1/super-admin/clients/${selectedTenant.clientId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

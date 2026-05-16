@@ -24,7 +24,7 @@ export default function Chatbot() {
   const clientId = useClientId();
 
   useEffect(() => {
-    fetch(`/api/public/settings?clientId=${clientId}`)
+    fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(setSettings)
       .catch(console.error);
@@ -97,7 +97,7 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,6 +113,11 @@ export default function Chatbot() {
         })
       });
       const data = await res.json();
+      
+      if (!res.ok) {
+        setMessages(prev => [...prev, { role: 'assistant', content: data.message || data.error || "I'm having trouble processing that right now." }]);
+        return;
+      }
       
       setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
     } catch (err) {

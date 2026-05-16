@@ -1,0 +1,1066 @@
+openapi: 3.1.0
+info:
+  title: PrimeSoft Alliance Unified API
+  version: 1.0.0
+  description: >
+    Production-grade, API-first SaaS platform for AI chatbots, bookings, contacts, forms,
+    content management, multimedia, and analytics.
+
+servers:
+  - url: "https://{domain}/v1"
+    description: "Production Environment (Render or custom domain)"
+    variables:
+      domain:
+        default: "your-app.onrender.com"
+        description: "The host domain of your application"
+  - url: "http://localhost:3000/v1"
+    description: Local Development
+
+tags:
+  - name: Authentication
+  - name: Chat
+  - name: Bookings
+  - name: Leads
+  - name: Forms
+  - name: Content
+  - name: Media
+  - name: Analytics
+  - name: Webhooks
+  - name: SDK Config
+  - name: Admin
+
+security:
+  - BearerAuth: []
+
+paths:
+  # --- Authentication ---
+  /auth/login:
+    post:
+      summary: Authenticate User or Client
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Authenticated successfully
+
+  # --- Chat ---
+  /chat/sessions:
+    post:
+      summary: Create a Chat Session
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '201':
+          description: Session created
+    get:
+      summary: List Chat Sessions
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: List of sessions
+  /chat/sessions/{session_id}:
+    get:
+      summary: Get Chat Session details
+      tags: [Chat]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Session details
+  /chat/sessions/{session_id}/messages:
+    get:
+      summary: Get Messages for Session
+      tags: [Chat]
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: List of messages
+  /chat/messages:
+    post:
+      summary: Send a Chat Message
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id, content]
+              properties:
+                session_id: { type: string }
+                content: { type: string }
+      responses:
+        '201':
+          description: Message accepted
+  /chat/stream:
+    post:
+      summary: Stream AI Chat Response
+      description: Initiates a streaming LLM response utilizing Server-Sent Events (SSE).
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                sessionId: { type: string }
+                message: { type: string }
+      responses:
+        '200':
+          description: SSE Stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+  /chat/intent:
+    post:
+      summary: Detect Intent
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Intent Detected
+  /chat/handoff:
+    post:
+      summary: Handoff to human
+      tags: [Chat]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Handed off
+
+  # --- Bookings ---
+  /availability:
+    get:
+      summary: Get Availability
+      tags: [Bookings]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+        - name: serviceId
+          in: query
+          schema: { type: string }
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Available slots
+  /bookings:
+    get:
+      summary: List Bookings
+      tags: [Bookings]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+        - $ref: '#/components/parameters/QueryPage'
+      responses:
+        '200':
+          description: Paginated bookings
+    post:
+      summary: Create a Booking
+      tags: [Bookings]
+      parameters:
+        - $ref: '#/components/parameters/HeaderIdempotencyKey'
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Booking'
+      responses:
+        '201':
+          description: Booking created
+  /bookings/{booking_id}:
+    get:
+      summary: Get Booking Details
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Booking details
+    patch:
+      summary: Update Booking
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Updated
+    delete:
+      summary: Delete Booking
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Deleted
+  /bookings/{booking_id}/confirm:
+    post:
+      summary: Confirm Booking
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Confirmed
+  /bookings/{booking_id}/cancel:
+    post:
+      summary: Cancel Booking
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Cancelled
+  /bookings/{booking_id}/reschedule:
+    post:
+      summary: Reschedule Booking
+      tags: [Bookings]
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date }
+                time: { type: string }
+      responses:
+        '200':
+          description: Rescheduled
+
+  # --- Leads ---
+  /leads:
+    post:
+      summary: Capture a Lead
+      tags: [Leads]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Lead'
+      responses:
+        '201':
+          description: Lead created
+    get:
+      summary: List Leads
+      tags: [Leads]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Paginated leads
+  /leads/{lead_id}:
+    get:
+      summary: Lead details
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Lead details
+    patch:
+      summary: Update lead
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Lead updated
+    delete:
+      summary: Delete lead
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Deleted
+  /leads/{lead_id}/tag:
+    post:
+      summary: Tag a lead
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tags:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Tagged
+  /leads/{lead_id}/assign:
+    post:
+      summary: Assign a lead
+      tags: [Leads]
+      parameters:
+        - name: lead_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: { type: string }
+      responses:
+        '200':
+          description: Assigned
+
+  # --- Forms ---
+  /forms/detect:
+    post:
+      summary: Detect Form schema from URL or HTML
+      tags: [Forms]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Detected schema
+  /forms/register:
+    post:
+      summary: Register a new form
+      tags: [Forms]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '201':
+          description: Form registered
+  /forms:
+    get:
+      summary: List all forms
+      tags: [Forms]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Paginated forms
+  /forms/{form_id}:
+    get:
+      summary: Get form details
+      tags: [Forms]
+      parameters:
+        - name: form_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Form details
+    patch:
+      summary: Update form
+      tags: [Forms]
+      parameters:
+        - name: form_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Form updated
+    delete:
+      summary: Delete form
+      tags: [Forms]
+      parameters:
+        - name: form_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Form deleted
+  /forms/{form_id}/submissions:
+    get:
+      summary: List form submissions
+      tags: [Forms]
+      parameters:
+        - name: form_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Paginated submissions
+    post:
+      summary: Submit Form
+      tags: [Forms]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+        - name: form_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '201':
+          description: Submitted
+  /forms/submissions/{submission_id}:
+    get:
+      summary: Get specific submission details
+      tags: [Forms]
+      parameters:
+        - name: submission_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Submission details
+
+  # --- Content Management ---
+  /content/items:
+    get:
+      summary: List Content Items
+      tags: [Content]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Content Items
+    post:
+      summary: Create Content Item
+      tags: [Content]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentItem'
+      responses:
+        '201':
+          description: Content Created
+  /content/items/{content_id}:
+    get:
+      summary: Get content details
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Content item
+    patch:
+      summary: Update content
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Content updated
+    delete:
+      summary: Delete content
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Content deleted
+  /content/items/{content_id}/publish:
+    post:
+      summary: Publish content
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Content published
+  /content/items/{content_id}/unpublish:
+    post:
+      summary: Unpublish content
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Content unpublished
+  /content/items/{content_id}/restore:
+    post:
+      summary: Restore content version
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version: { type: integer }
+      responses:
+        '200':
+          description: Content restored
+  /content/items/{content_id}/versions:
+    get:
+      summary: Get content version history
+      tags: [Content]
+      parameters:
+        - name: content_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Version history
+
+  # --- Media ---
+  /content/media:
+    get:
+      summary: List Media Assets
+      tags: [Media]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: List Media
+    post:
+      summary: Register Media Asset
+      tags: [Media]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, mime_type, size]
+              properties:
+                filename: { type: string }
+                mime_type: { type: string }
+                size: { type: integer }
+      responses:
+        '201':
+          description: Media registered
+  /content/media/{media_id}:
+    get:
+      summary: Get media details
+      tags: [Media]
+      parameters:
+        - name: media_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Media details
+    patch:
+      summary: Update media metadata
+      tags: [Media]
+      parameters:
+        - name: media_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Media updated
+    delete:
+      summary: Delete media
+      tags: [Media]
+      parameters:
+        - name: media_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Media deleted
+
+  # --- Webhooks ---
+  /webhooks:
+    post:
+      summary: Register Webhook
+      tags: [Webhooks]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookConfig'
+      responses:
+        '201':
+          description: Webhook registered
+    get:
+      summary: List Webhooks
+      tags: [Webhooks]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Webhooks
+  /webhooks/{webhook_id}:
+    get:
+      summary: Get webhook
+      tags: [Webhooks]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Webhook details
+    patch:
+      summary: Update webhook
+      tags: [Webhooks]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Webhook updated
+    delete:
+      summary: Delete webhook
+      tags: [Webhooks]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Deleted
+  /webhooks/{webhook_id}/test:
+    post:
+      summary: Test Webhook delivery
+      tags: [Webhooks]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Test payload fired
+
+  # --- SDK Config ---
+  /sdk/config:
+    get:
+      summary: Retrieve Widget Configuration
+      tags: [SDK Config]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Config details
+  /sdk/features:
+    get:
+      summary: Retrieve Feature Flags
+      tags: [SDK Config]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Feature flags
+  /sdk/status:
+    get:
+      summary: Status
+      tags: [SDK Config]
+      responses:
+        '200':
+          description: Service status
+
+  # --- Analytics ---
+  /analytics/overview:
+    get:
+      summary: Get platform and tenant metrics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Analytics returned
+  /analytics/chat:
+    get:
+      summary: Chat analytics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Chat Analytics
+  /analytics/bookings:
+    get:
+      summary: Bookings analytics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Bookings Analytics
+  /analytics/leads:
+    get:
+      summary: Leads analytics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Leads Analytics
+  /analytics/forms:
+    get:
+      summary: Forms analytics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Forms Analytics
+  /analytics/content:
+    get:
+      summary: Content analytics
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Content Analytics
+  /analytics/events:
+    get:
+      summary: Raw event pipeline
+      tags: [Analytics]
+      parameters:
+        - $ref: '#/components/parameters/HeaderClientId'
+      responses:
+        '200':
+          description: Events
+
+  # --- Admin / Superadmin ---
+  /admin/tenants:
+    get:
+      summary: List all Tenants
+      tags: [Admin]
+      responses:
+        '200':
+          description: Master tenant list
+    post:
+      summary: Create new Tenant
+      tags: [Admin]
+      responses:
+        '201':
+          description: Tenant created
+  /admin/tenants/{tenant_id}:
+    patch:
+      summary: Update Tenant
+      tags: [Admin]
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Tenant updated
+  /admin/usage:
+    get:
+      summary: Global usage statistics
+      tags: [Admin]
+      responses:
+        '200':
+          description: Master usage list
+  /admin/audit-logs:
+    get:
+      summary: Global audit logs
+      tags: [Admin]
+      responses:
+        '200':
+          description: Logs
+  /admin/health:
+    get:
+      summary: Detailed system health
+      tags: [Admin]
+      responses:
+        '200':
+          description: Health
+  /admin/system:
+    get:
+      summary: Platform configuration
+      tags: [Admin]
+      responses:
+        '200':
+          description: Configuration
+  /admin/quota/reset:
+    post:
+      summary: Reset Quotas manually
+      tags: [Admin]
+      responses:
+        '200':
+          description: Reset complete
+  /admin/users:
+    post:
+      summary: Invite Admins/Superadmins
+      tags: [Admin]
+      responses:
+        '201':
+          description: Invited
+  /admin/users/{user_id}:
+    patch:
+      summary: Modify User
+      tags: [Admin]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Updated
+  /admin/roles:
+    post:
+      summary: Manage RBAC global roles
+      tags: [Admin]
+      responses:
+        '201':
+          description: Roles defined
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    HeaderClientId:
+      name: x-client-id
+      in: header
+      required: true
+      schema: { type: string }
+    HeaderIdempotencyKey:
+      name: idempotency-key
+      in: header
+      required: false
+      schema: { type: string }
+    QueryPage:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+
+  schemas:
+    SuccessEnvelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        request_id: { type: string }
+        timestamp: { type: string, format: date-time }
+        meta: { type: object }
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        request_id: { type: string }
+        timestamp: { type: string, format: date-time }
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object }
+            retryable: { type: boolean }
+
+    Booking:
+      type: object
+      properties:
+        serviceId: { type: string }
+        customerName: { type: string }
+        email: { type: string, format: email }
+        date: { type: string, format: date }
+        time: { type: string }
+
+    Lead:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+
+    ContentItem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        status: { type: string, enum: [draft, published] }
+
+    WebhookConfig:
+      type: object
+      properties:
+        endpointUrl: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string }
+

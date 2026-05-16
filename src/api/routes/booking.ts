@@ -2,22 +2,27 @@ import express from 'express';
 import { Booking, Settings, UsageStats, Client } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, endOfDay, parseISO, isBefore, isAfter, addMinutes, format } from 'date-fns';
+import { EnvelopeResponse } from '../middlewares/envelope';
 
 const router = express.Router();
 
 router.post('/check-availability', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
   const { date, durationMinutes, clientId: bodyClientId } = req.body;
-  const clientId = bodyClientId || req.headers['x-client-id'] || 'plumber-001';
+  const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+  
+  if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
+
   try {
     const settings = await Settings.findOne({ clientId });
-    if (!settings) return res.status(500).json({ error: 'Settings not found' });
+    if (!settings) return envRes.sendError(404, 'NOT_FOUND', 'Settings not found');
 
     const reqDate = new Date(date);
     const dayOfWeek = reqDate.getDay();
     const workingHour = settings.workingHours.find((wh: any) => wh.day === dayOfWeek);
 
     if (!workingHour || !workingHour.isOpen) {
-      return res.json({ availableSlots: [] });
+      return envRes.sendSuccess({ availableSlots: [] });
     }
 
     const { openTime, closeTime } = workingHour;
@@ -79,17 +84,20 @@ router.post('/check-availability', async (req, res) => {
       currentSlot = addMinutes(currentSlot, slotDuration + buffer);
     }
 
-    res.json({ availableSlots });
+    envRes.sendSuccess({ availableSlots });
 
   } catch (error) {
-    res.status(500).json({ error: 'Check availability failed' });
+    envRes.sendError(500, 'SERVER_ERROR', 'Check availability failed');
   }
 });
 
 router.post('/', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
   try {
     const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes, clientId: bodyClientId } = req.body;
-    const clientId = bodyClientId || req.headers['x-client-id'] || 'plumber-001';
+    const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -105,7 +113,7 @@ router.post('/', async (req, res) => {
     }
 
     if (usage.storageBytesUsed >= storageLimit) {
-      return res.status(403).json({ error: 'Storage Limit reached. Cannot accept new bookings right now.' });
+      return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new bookings right now.');
     }
 
     const settings = await Settings.findOne({ clientId });
@@ -128,7 +136,7 @@ router.post('/', async (req, res) => {
     });
 
     if (existing) {
-      return res.status(400).json({ error: 'This time slot is no longer available. Please choose another.' });
+      return envRes.sendError(409, 'CONFLICT', 'This time slot is no longer available. Please choose another.');
     }
 
     const booking = await Booking.create({
@@ -159,9 +167,9 @@ router.post('/', async (req, res) => {
       clientId
     );
 
-    res.status(201).json(booking);
+    envRes.sendSuccess(booking);
   } catch (error) {
-    res.status(500).json({ error: 'Booking submission failed' });
+    envRes.sendError(500, 'SERVER_ERROR', 'Booking submission failed');
   }
 });
 

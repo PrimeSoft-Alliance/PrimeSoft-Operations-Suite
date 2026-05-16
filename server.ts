@@ -1,5 +1,8 @@
 import express from 'express';
 import mongoose from 'mongoose';
+
+console.log('--- SERVER.TS LOADED ---');
+
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
@@ -13,19 +16,40 @@ import authRoutes from './src/api/routes/auth';
 import dashboardRoutes from './src/api/routes/dashboard';
 import superAdminRoutes from './src/api/routes/superadmin';
 import aiRoutes from './src/api/routes/ai';
+import formsRoutes from './src/api/routes/forms';
+import leadsRoutes from './src/api/routes/leads';
+import contentRoutes from './src/api/routes/content';
+import mediaRoutes from './src/api/routes/media';
+import webhookRoutes from './src/api/routes/webhooks';
 import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
+import { requestEnvelopeMiddleware } from './src/api/middlewares/envelope';
+import { idempotencyMiddleware } from './src/api/middlewares/idempotency';
 import fs from 'fs';
 
 async function startServer() {
-
   const app = express();
   const PORT = 3000;
 
+  app.get('/health-check', (req, res) => res.json({ status: 'ok' }));
+  
   app.set('trust proxy', 1);
 
   // Middleware
-  app.use(cors());
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Allow all origins for development and known platform domains
+      if (!origin || origin.includes('.run.app') || origin.includes('localhost') || origin.includes('aistudio')) {
+        callback(null, true);
+      } else {
+        // Fallback for dynamic sites using the SDK
+        callback(null, true);
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-client-id', 'idempotency-key', 'x-api-version', 'x-request-id', 'x-api-key']
+  }));
   app.use(express.json({ limit: '50mb' }));
   app.use(cookieParser());
 
@@ -37,8 +61,19 @@ async function startServer() {
   app.use(async (req, res, next) => {
     try {
       const host = req.hostname;
-      // Skip for main platform domains
-      if (host.includes('.run.app') || host === 'localhost' || host === '0.0.0.0' || host.includes('aistudio')) {
+      
+      // LOG ALL REQUESTS
+      if (req.url.startsWith('/v1/')) {
+        console.log(`[API REQUEST] ${req.method} ${req.url} (Host: ${host})`);
+      }
+
+      // Skip for main platform domains OR API routes
+      if (host.includes('.run.app') || host.includes('localhost') || host === '0.0.0.0' || host.includes('aistudio') || req.url.startsWith('/v1/') || req.url.startsWith('/api/')) {
+        return next();
+      }
+
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('DB not connected, skipping domain lookup');
         return next();
       }
 
@@ -95,15 +130,34 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date() });
   });
+
+  app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware);
   
-  app.use('/api/public', publicRoutes);
-  app.use('/api/booking', bookingRoutes);
-  app.use('/api/contact', contactRoutes);
-  app.use('/api/chat', chatRoutes);
-  app.use('/api/auth', authRoutes);
-  app.use('/api/dashboard', dashboardRoutes);
-  app.use('/api/dashboard/ai', authMiddleware, aiRoutes);
-  app.use('/api/super-admin', superAdminRoutes);
+  app.use('/v1/public', publicRoutes);
+  app.use('/v1/booking', bookingRoutes);
+  app.use('/v1/bookings', bookingRoutes);
+  app.use('/v1/contact', contactRoutes);
+  app.use('/v1/chat', chatRoutes);
+  app.use('/v1/auth', authRoutes);
+  app.use('/v1/dashboard', dashboardRoutes);
+  app.use('/v1/dashboard/ai', authMiddleware, aiRoutes);
+  app.use('/v1/super-admin', superAdminRoutes);
+  app.use('/v1/forms', formsRoutes);
+  app.use('/v1/leads', leadsRoutes);
+  app.use('/v1/content', contentRoutes);
+  app.use('/v1/media', mediaRoutes);
+  app.use('/v1/webhooks', webhookRoutes);
+
+  // Catch unmatched API routes before serving the SPA
+  app.use('/v1/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: `API route not found: ${req.method} ${req.originalUrl}`
+      }
+    });
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

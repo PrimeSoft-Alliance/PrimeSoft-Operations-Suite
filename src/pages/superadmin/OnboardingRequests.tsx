@@ -11,10 +11,10 @@ export default function OnboardingRequests() {
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch('/api/super-admin/onboarding-requests');
+      const res = await fetch('/v1/super-admin/onboarding-requests');
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
-      setRequests(Array.isArray(data) ? data : []);
+      setRequests(data?.success && Array.isArray(data.data) ? data.data : []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -29,7 +29,7 @@ export default function OnboardingRequests() {
   const handleAction = async (requestId: string, action: 'approve' | 'reject' | 'info-request') => {
     setActionLoading(true);
     try {
-      const res = await fetch(`/api/super-admin/onboarding-requests/${requestId}/${action}`, {
+      const res = await fetch(`/v1/super-admin/onboarding-requests/${requestId}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action === 'approve' ? {} : (action === 'reject' ? { reason: notes } : { message: notes }))

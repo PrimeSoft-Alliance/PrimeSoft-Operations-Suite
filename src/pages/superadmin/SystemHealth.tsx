@@ -10,9 +10,9 @@ export default function SystemHealth() {
   const fetchHealth = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch('/api/super-admin/health');
+      const res = await fetch('/v1/super-admin/health');
       const data = await res.json();
-      setHealthData(data);
+      if (data?.success) setHealthData(data.data);
     } catch (err) {
       console.error(err);
     } finally {

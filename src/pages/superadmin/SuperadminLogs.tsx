@@ -8,9 +8,9 @@ export default function SuperadminLogs() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/api/super-admin/logs');
+      const res = await fetch('/v1/super-admin/logs');
       const data = await res.json();
-      setLogs(Array.isArray(data) ? data : []);
+      setLogs(data?.success && Array.isArray(data.data) ? data.data : []);
     } catch (err) {
       console.error(err);
     } finally {

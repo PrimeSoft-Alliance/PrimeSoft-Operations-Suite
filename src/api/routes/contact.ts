@@ -1,13 +1,17 @@
 import express from 'express';
 import { Contact, Settings, UsageStats, Client } from '../models';
 import { sendEmail } from '../email';
+import { EnvelopeResponse } from '../middlewares/envelope';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
   try {
     const { name, email, phone, subject, message, preferredContactMethod, clientId: bodyClientId } = req.body;
-    const clientId = bodyClientId || req.headers['x-client-id'] || 'plumber-001';
+    const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -24,7 +28,7 @@ router.post('/', async (req, res) => {
     }
 
     if (usage.storageBytesUsed >= storageLimit) {
-      return res.status(403).json({ error: 'Storage Limit reached. Cannot accept new messages right now.' });
+      return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new messages right now.');
     }
 
     const contact = await Contact.create({
@@ -52,9 +56,9 @@ router.post('/', async (req, res) => {
       clientId
     );
 
-    res.status(201).json(contact);
+    envRes.sendSuccess(contact);
   } catch (error) {
-    res.status(500).json({ error: 'Contact submission failed' });
+    envRes.sendError(500, 'SERVER_ERROR', 'Contact submission failed');
   }
 });
 

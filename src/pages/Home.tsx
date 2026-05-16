@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Shield, Globe, Cpu, Code, CheckCircle, Database, PhoneCall } from 'lucide-react';
+import { ArrowRight, Shield, Globe, Cpu, Code, CheckCircle, Database, PhoneCall, Zap } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
+import { cn } from '../lib/utils';
 
 import { useClientId } from '../lib/useClientId';
 
@@ -10,17 +11,27 @@ export default function Home() {
   const clientId = useClientId();
 
   useEffect(() => {
-    fetch(`/api/public/settings?clientId=${clientId}`)
+    // For the main company site, we prioritize the Platform Admin profile.
+    // If not resolving specifically via clientId from URL/Domain, we check 'plumber-001' or similar defaults.
+    fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
-        setSettings(data);
+        if (data?.success) setSettings(data.data);
+        else setSettings(data);
       })
       .catch(console.error);
   }, [clientId]);
 
   const businessName = settings?.businessName || 'PrimeSoft Alliance';
-  const heroTitle = settings?.heroTitle || 'Empowering Digital Transformation';
-  const heroSubtitle = settings?.heroSubtitle || `At ${businessName}, we develop, deploy, and manage cutting-edge software solutions. Transform your business with our custom enterprise systems and digital platforms.`;
+  const heroTitle = settings?.heroTitle || 'Architecting the Future of Enterprise Software';
+  const heroSubtitle = settings?.heroSubtitle || `At ${businessName}, we specialize in building high-performance digital ecosystems. From AI-driven automation to custom enterprise platforms, we turn complex visions into robust reality.`;
+
+  const services = settings?.services?.length > 0 ? settings.services : [
+    { name: 'Custom AI Solutions', description: 'Deploying state-of-the-art Gemini models to automate your operations and gain predictive insights.', icon: Zap },
+    { name: 'Enterprise Platforms', description: 'Robust, scalable backend architectures built with industry-standard security and high availability.', icon: Shield },
+    { name: 'Digital Ecosystems', description: 'Seamlessly integrated web and mobile experiences that connect your business with your users.', icon: Globe },
+    { name: 'Strategy & Consulting', description: 'Expert technical roadmap planning to navigate your digital transformation journey with confidence.', icon: Database },
+  ];
 
   const fadeUpVariant = {
     hidden: { opacity: 0, y: 30 },
@@ -38,62 +49,57 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="relative bg-slate-900 overflow-hidden min-h-[90vh] flex items-center">
-        <div className="absolute inset-0 z-0">
-          <motion.img 
-            initial={{ scale: 1.1 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 10, ease: "linear", repeat: Infinity, repeatType: "reverse" }}
-            src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&q=80" 
-            alt="Technology Background" 
-            className="w-full h-full object-cover opacity-30"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-blue-900/80 to-transparent" />
+      <section className="relative bg-white overflow-hidden min-h-screen flex items-center pt-20">
+        {/* Abstract Background */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_20%,rgba(99,102,241,0.08),transparent_50%)]" />
+          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_80%,rgba(16,185,129,0.05),transparent_50%)]" />
+          <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'radial-gradient(#6366f1 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
         </div>
         
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-16 pb-20">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 w-full py-20">
           <motion.div 
             initial="hidden"
             animate="visible"
             variants={staggerContainer}
-            className="max-w-3xl"
+            className="flex flex-col items-center text-center max-w-5xl mx-auto"
           >
-            <motion.span variants={fadeUpVariant} className="inline-flex items-center px-4 py-1.5 rounded-full bg-primary/20 text-primary font-medium text-sm mb-8 border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
-              <span className="flex w-2.5 h-2.5 rounded-full bg-primary mr-2 animate-pulse shadow-[0_0_8px_rgba(96,165,250,0.8)]"></span>
-              Pioneering Tomorrow's Tech Today
-            </motion.span>
-            <motion.h1 variants={fadeUpVariant} className="text-5xl md:text-7xl font-extrabold text-white tracking-tight leading-tight mb-6">
+            <motion.div variants={fadeUpVariant} className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] mb-10 shadow-sm">
+              <span className="flex w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+              Engineering Excellence
+            </motion.div>
+
+            <motion.h1 variants={fadeUpVariant} className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 tracking-tight leading-[0.9] mb-10">
               {heroTitle.split(' ').map((word, i, arr) => (
                 <React.Fragment key={i}>
-                  {i === arr.length - 2 ? <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">{word}</span> : word}
+                  {i >= arr.length - 2 ? <span className="text-indigo-600">{word}</span> : word}
                   {' '}
                 </React.Fragment>
               ))}
             </motion.h1>
-            <motion.p variants={fadeUpVariant} className="text-xl text-slate-300 mb-10 leading-relaxed max-w-2xl font-light">
+
+            <motion.p variants={fadeUpVariant} className="text-xl sm:text-2xl text-gray-400 mb-12 leading-relaxed max-w-3xl font-medium tracking-tight">
               {heroSubtitle}
             </motion.p>
-            <motion.div variants={fadeUpVariant} className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-              <Link to="/booking" className="inline-flex justify-center items-center px-8 py-4 bg-primary text-white font-bold rounded-xl transition-all shadow-[0_4px_20px_rgba(37,99,235,0.4)] hover:shadow-[0_6px_25px_rgba(37,99,235,0.5)] transform hover:-translate-y-0.5 group">
-                Book Service <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+
+            <motion.div variants={fadeUpVariant} className="flex flex-col sm:flex-row gap-6 w-full sm:w-auto">
+              <Link to="/get-started" className="inline-flex justify-center items-center px-10 py-5 bg-indigo-600 text-white font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all shadow-2xl shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-1 group">
+                Begin Onboarding <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link to="/contact" className="inline-flex justify-center items-center px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-semibold rounded-xl backdrop-blur-md transition-all border border-white/10 hover:border-white/20">
-                Contact Us
+              <Link to="/contact" className="inline-flex justify-center items-center px-10 py-5 bg-white text-gray-900 border-2 border-gray-100 font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all hover:bg-gray-50 hover:border-gray-200">
+                Book a Strategy Call
               </Link>
             </motion.div>
             
-            <motion.div variants={fadeUpVariant} className="mt-14 flex items-center gap-6 sm:gap-12 opacity-80 border-t border-white/10 pt-8 overflow-x-auto pb-4 no-scrollbar">
+            <motion.div variants={fadeUpVariant} className="mt-24 grid grid-cols-2 md:grid-cols-3 gap-12 sm:gap-20 border-t border-gray-50 pt-16 w-full">
               {(settings?.clientStats?.length > 0 ? settings.clientStats : [
-                { label: "Systems Deployed", value: "200+" },
-                { label: "Tech Stacks", value: "15+" },
-                { label: "Client Satisfaction", value: "99%" }
+                { label: "AI Deployments", value: "450+" },
+                { label: "Cloud Uptime", value: "99.99%" },
+                { label: "ROI Driven", value: "$12M+" }
               ]).map((stat: any, idx: number) => (
-                <div key={idx} className="flex items-center gap-6 sm:gap-12 flex-shrink-0">
-                  {idx > 0 && <div className="w-px h-12 bg-white/20 hidden sm:block"></div>}
-                  <div>
-                    <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-                    <div className="text-sm font-medium text-blue-200 uppercase tracking-wider text-[10px] sm:text-sm">{stat.label}</div>
-                  </div>
+                <div key={idx} className={cn("text-center", idx === 2 ? "hidden md:block" : "")}>
+                  <div className="text-4xl font-black text-gray-900 mb-2 tracking-tighter">{stat.value}</div>
+                  <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">{stat.label}</div>
                 </div>
               ))}
             </motion.div>
@@ -123,25 +129,20 @@ export default function Home() {
             variants={staggerContainer}
             className="grid md:grid-cols-4 sm:grid-cols-2 gap-6"
           >
-            {(settings?.services?.length > 0 ? settings.services.slice(0, 4) : [
-              { icon: Code, name: "Custom Software", description: "Tailored applications built to solve your unique challenges." },
-              { icon: Globe, name: "Web & Mobile", description: "Scalable digital platforms with world-class user experiences." },
-              { icon: Database, name: "Cloud Integration", description: "Modernizing infrastructure for maximum agility and speed." },
-              { icon: Cpu, name: "IT Consulting", description: "Expert guidance on digital transformation and architecture." }
-            ]).map((s: any, i: number) => {
-              const Icon = s.icon || [Code, Globe, Database, Cpu][i % 4];
+            {services.slice(0, 4).map((s: any, i: number) => {
+              const Icon = s.icon || [Zap, Shield, Globe, Database][i % 4];
               return (
                 <motion.div 
                   key={i} 
                   variants={fadeUpVariant}
                   whileHover={{ y: -5 }}
-                  className="group p-8 rounded-3xl bg-white border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-900/5 transition-all duration-300"
+                  className="group p-10 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300"
                 >
-                  <div className="w-14 h-14 bg-slate-50 group-hover:bg-primary rounded-2xl flex items-center justify-center text-primary group-hover:text-white mb-6 transition-colors duration-300 transform group-hover:rotate-3 group-hover:scale-110">
-                    <Icon className="w-7 h-7" />
+                  <div className="w-16 h-16 bg-slate-50 group-hover:bg-indigo-600 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:text-white mb-8 transition-all duration-300 transform group-hover:rotate-6">
+                    <Icon className="w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{s.name}</h3>
-                  <p className="text-gray-500 leading-relaxed text-sm">{s.description}</p>
+                  <h3 className="text-xl font-black text-gray-900 mb-3 tracking-tight">{s.name}</h3>
+                  <p className="text-gray-500 leading-relaxed text-sm font-medium">{s.description}</p>
                 </motion.div>
               );
             })}

@@ -11,7 +11,7 @@
   async function init() {
     try {
       // 1. Resolve Config
-      const configUrl = new URL(`${BASE_URL}/api/public/headless/config`);
+      const configUrl = new URL(`${BASE_URL}/v1/public/content/config`);
       if (!options.autoDetect && options.clientId) {
         configUrl.searchParams.set('clientId', options.clientId);
       }
@@ -95,7 +95,7 @@
           messagesElem.appendChild(botMsg);
 
           try {
-            const chatResp = await fetch(`${BASE_URL}/api/chat`, {
+            const chatResp = await fetch(`${BASE_URL}/v1/chat`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json', 'x-client-id': config.clientId },
                body: JSON.stringify({
@@ -124,7 +124,7 @@
           const formData = new FormData(form);
           const data = Object.fromEntries(formData.entries());
           try {
-            const res = await fetch(`${BASE_URL}/api/public/booking`, {
+            const res = await fetch(`${BASE_URL}/v1/public/booking`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-client-id': config.clientId },
               body: JSON.stringify(data)
@@ -148,7 +148,7 @@
           const formData = new FormData(form);
           const data = Object.fromEntries(formData.entries());
           try {
-            const res = await fetch(`${BASE_URL}/api/public/contact`, {
+            const res = await fetch(`${BASE_URL}/v1/public/contact`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'x-client-id': config.clientId },
               body: JSON.stringify(data)
@@ -169,7 +169,7 @@
       if (config.headless.features.content) {
         const contentElements = document.querySelectorAll('[data-psa-content]');
         if (contentElements.length > 0) {
-          const contentResp = await fetch(`${BASE_URL}/api/public/${config.clientId}/content`);
+          const contentResp = await fetch(`${BASE_URL}/v1/public/content?clientId=${config.clientId}`);
           const contentData = await contentResp.json();
           
           contentElements.forEach(el => {

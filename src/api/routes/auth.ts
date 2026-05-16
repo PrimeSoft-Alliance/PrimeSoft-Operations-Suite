@@ -1,11 +1,13 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { Client, Settings } from '../models';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
+// Initial SuperAdmin setup logic
 const seedSuperAdmin = async () => {
   const superAdmin = await Client.findOne({ role: 'superadmin' });
   if (!superAdmin) {
@@ -21,44 +23,59 @@ const seedSuperAdmin = async () => {
       apiKey: 'psa_sa_' + Math.random().toString(36).substring(7)
     });
   }
-
-  const demoClient = await Client.findOne({ clientId: 'primesoft-solutions-demo' });
-  if (!demoClient) {
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash('client123', salt);
-    await Client.create({
-      clientId: 'primesoft-solutions-demo',
-      businessName: 'PrimeSoft Solutions',
-      email: 'client@primesoft.com',
-      password: hash,
-      role: 'client',
-      status: 'active',
-      apiKey: 'psa_cl_' + Math.random().toString(36).substring(7)
-    });
-
-    // Initialize settings for demo client
-    await Settings.create({
-      clientId: 'primesoft-solutions-demo',
-      businessName: 'PrimeSoft Solutions',
-      contactEmail: 'client@primesoft.com',
-      aboutText: 'A demo business for PrimeSoft Alliance platform testing.',
-      services: [
-        { id: '1', name: 'Custom Software Development', description: 'Tailored applications built to solve your unique challenges.', price: 2000, durationMinutes: 120 },
-        { id: '2', name: 'Cloud Integration', description: 'Modernizing infrastructure for agility.', price: 1500, durationMinutes: 90 }
-      ],
-      workingHours: Array.from({ length: 7 }, (_, i) => ({
-        day: i,
-        isOpen: i > 0 && i < 6,
-        openTime: '08:00',
-        closeTime: '17:00'
-      }))
-    });
-  }
 };
 
-router.post('/login', async (req, res) => {
+router.get('/setup-status', async (req, res) => {
   try {
-    await seedSuperAdmin();
+    const superAdmin = await Client.findOne({ role: 'superadmin' });
+    res.json({ setupRequired: !superAdmin });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Logic to onboard superadmin using Secret
+router.post('/super-admin/onboard', async (req, res) => {
+  try {
+    const { email, password, secret } = req.body;
+    
+    // In dev, we can allow based on a secret in env
+    const SUPERADMIN_SECRET = process.env.SUPERADMIN_SETUP_SECRET || 'primesoft_init_2024';
+    
+    if (secret !== SUPERADMIN_SECRET) {
+      return res.status(403).json({ error: 'Unauthorized manual onboarding' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+
+    const existing = await Client.findOne({ email });
+    if (existing) {
+      existing.role = 'superadmin';
+      existing.password = hash;
+      await existing.save();
+      return res.json({ success: true, message: 'User promoted to superadmin' });
+    }
+
+    const sa = await Client.create({
+      clientId: 'super-admin-' + Math.random().toString(36).substring(7),
+      businessName: 'System Admin',
+      email,
+      password: hash,
+      role: 'superadmin',
+      status: 'active',
+      apiKey: 'psa_sa_' + crypto.randomBytes(16).toString('hex')
+    });
+
+    res.json({ success: true, clientId: sa.clientId });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to onboard superadmin' });
+  }
+});
+
+router.post('/login', async (req, res) => {
+  const envRes = res as any;
+  try {
     const { email, password } = req.body;
     
     const client = await Client.findOne({ email });
@@ -116,7 +133,6 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/check', async (req, res) => {
-  await seedSuperAdmin();
   const token = req.cookies.admin_token;
   if (!token) return res.json({ authenticated: false });
   try {
@@ -129,6 +145,26 @@ router.get('/check', async (req, res) => {
     });
   } catch (e) {
     res.json({ authenticated: false });
+  }
+});
+
+router.get('/me', async (req, res) => {
+  const token = req.cookies.admin_token;
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const client = await Client.findOne({ clientId: decoded.clientId });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    
+    res.json({
+      clientId: client.clientId,
+      email: client.email,
+      businessName: client.businessName,
+      role: client.role,
+      apiKey: client.apiKey
+    });
+  } catch (e) {
+    res.status(401).json({ error: 'Unauthorized' });
   }
 });
 

@@ -5,9 +5,9 @@ export default function ContactsManager() {
   const [contacts, setContacts] = useState<any[]>([]);
 
   const fetchContacts = () => {
-    fetch('/api/dashboard/contacts')
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setContacts(Array.isArray(data) ? data : []))
+    fetch('/v1/dashboard/contacts')
+      .then(res => res.json())
+      .then(data => setContacts(data?.data && Array.isArray(data.data) ? data.data : []))
       .catch(console.error);
   };
 
@@ -16,7 +16,7 @@ export default function ContactsManager() {
   }, []);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/dashboard/contacts/${id}/status`, {
+    await fetch(`/v1/dashboard/contacts/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })

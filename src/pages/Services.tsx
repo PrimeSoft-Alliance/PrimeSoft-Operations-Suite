@@ -10,11 +10,20 @@ export default function Services() {
   const clientId = useClientId();
 
   useEffect(() => {
-    fetch(`/api/public/settings?clientId=${clientId}`)
+    fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
-        if (data && data.services) {
-          setServices(data.services);
+        const payload = data?.success ? data.data : data;
+        if (payload?.services) {
+          setServices(payload.services);
+        } else {
+          // Robust defaults if empty
+          setServices([
+            { name: 'Custom AI Solutions', description: 'Deploying state-of-the-art Gemini models to automate your operations and gain predictive insights.', price: 5000, durationMinutes: 120 },
+            { name: 'Enterprise Platforms', description: 'Robust, scalable backend architectures built with industry-standard security and high availability.', price: 3500, durationMinutes: 240 },
+            { name: 'Digital Ecosystems', description: 'Seamlessly integrated web and mobile experiences that connect your business with your users.', price: 2500, durationMinutes: 120 },
+            { name: 'Strategy & Consulting', description: 'Expert technical roadmap planning to navigate your digital transformation journey with confidence.', price: 1500, durationMinutes: 60 },
+          ]);
         }
         setLoading(false);
       })
@@ -22,7 +31,7 @@ export default function Services() {
         console.error(err);
         setLoading(false);
       });
-  }, []);
+  }, [clientId]);
 
   const containerVariants = {
     hidden: { opacity: 0 },

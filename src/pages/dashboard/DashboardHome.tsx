@@ -5,13 +5,13 @@ export default function DashboardHome() {
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
-    fetch('/api/dashboard/stats')
+    fetch('/v1/dashboard/stats')
       .then(res => {
          if (!res.ok) return null;
          return res.json();
       })
       .then(data => {
-         if (data && !data.error) setStats(data);
+         if (data?.success) setStats(data.data);
       })
       .catch(console.error);
   }, []);

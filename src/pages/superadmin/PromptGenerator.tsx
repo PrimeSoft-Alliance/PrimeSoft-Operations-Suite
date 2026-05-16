@@ -16,7 +16,7 @@ export default function PromptGenerator() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/api/super-admin/clients')
+    fetch('/v1/super-admin/clients')
       .then(res => res.json())
       .then(data => {
         setClients(data);
@@ -27,7 +27,7 @@ export default function PromptGenerator() {
   const generatePrompts = async (clientId: string) => {
     setGenerating(true);
     try {
-      const res = await fetch(`/api/super-admin/builder-prompt/${clientId}`);
+      const res = await fetch(`/v1/super-admin/builder-prompt/${clientId}`);
       const data = await res.json();
       
       // Split or specifically generate other types in a real scenario

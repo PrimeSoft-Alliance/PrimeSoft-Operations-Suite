@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export default function DashboardLayout() {
@@ -11,7 +11,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    fetch('/api/auth/check')
+    fetch('/v1/auth/check')
       .then(res => res.json())
       .then(data => {
         if (!data.authenticated) navigate('/login');
@@ -23,17 +23,18 @@ export default function DashboardLayout() {
       });
 
     // Also fetch public settings for branding (favicon)
-    fetch('/api/public/settings')
+    fetch('/v1/public/settings')
       .then(res => res.json())
       .then(data => {
-        if (data && data.favicon) {
+        const settings = data?.success ? data.data : null;
+        if (settings && settings.favicon) {
            let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
            if (!link) {
              link = document.createElement('link');
              link.rel = 'icon';
              document.head.appendChild(link);
            }
-           link.href = data.favicon;
+           link.href = settings.favicon;
         }
       })
       .catch(console.error);
@@ -45,7 +46,7 @@ export default function DashboardLayout() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/v1/auth/logout', { method: 'POST' });
     navigate('/login');
   };
 
@@ -53,8 +54,12 @@ export default function DashboardLayout() {
 
   const links = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Operations Nexus', path: '/dashboard/nexus', icon: Zap },
     { name: 'Bookings', path: '/dashboard/bookings', icon: CalendarDays },
     { name: 'Contacts', path: '/dashboard/contacts', icon: MessageSquare },
+    { name: 'Forms', path: '/dashboard/forms', icon: FileText },
+    { name: 'Leads', path: '/dashboard/leads', icon: Users },
+    { name: 'Headless API', path: '/dashboard/developer', icon: Cpu },
     { name: 'Availability', path: '/dashboard/availability', icon: CalendarDays },
     { name: 'Email Config', path: '/dashboard/email-templates', icon: MessageSquare },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },
@@ -140,9 +145,20 @@ export default function DashboardLayout() {
               {links.find(l => l.path === location.pathname)?.name || 'Dashboard'}
             </h2>
           </div>
+          <div className="flex items-center gap-4">
+             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors hidden sm:block">Return to Site</Link>
+             <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 transition-colors lg:hidden"><LogOut className="w-5 h-5" /></button>
+          </div>
         </header>
         <div className="p-4 sm:p-8 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto">
+            <button 
+              onClick={() => navigate(-1)}
+              className="mb-6 text-xs font-black uppercase tracking-[0.2em] text-slate-400 hover:text-indigo-600 transition-all flex items-center gap-2 group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              Return
+            </button>
             <Outlet />
           </div>
         </div>

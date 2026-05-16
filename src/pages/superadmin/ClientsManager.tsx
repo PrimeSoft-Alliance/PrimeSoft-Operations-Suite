@@ -21,11 +21,18 @@ export default function ClientsManager() {
   const [newClient, setNewClient] = useState({
     clientId: '',
     businessName: '',
+    businessType: '',
+    subdomain: '',
     email: '',
     password: '',
+    contactPhone: '',
+    contactEmail: '',
+    businessDescription: '',
     aiMessageLimit: 1000,
-    storageLimitBytes: 52428800
+    storageLimitBytes: 52428800,
+    customFields: [] as { name: string, value: string }[]
   });
+  const [inviteFields, setInviteFields] = useState<{ name: string, type: string }[]>([]);
   const [error, setError] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
@@ -49,33 +56,47 @@ export default function ClientsManager() {
 
   const fetchDomains = async () => {
     try {
-      const res = await fetch('/api/super-admin/domains');
+      const res = await fetch('/v1/super-admin/domains');
       const data = await res.json();
-      if (Array.isArray(data)) setAllDomains(data);
+      if (data?.success && Array.isArray(data.data)) setAllDomains(data.data);
     } catch (err) { console.error('Domains fetch error'); }
   };
 
   const generateOnboardingLink = async (clientId: string) => {
     setSelectedClientId(clientId);
+    setOnboardingUrl('');
+    setInviteFields([]);
+    setShowOnboardingModal(true);
+  };
+
+  const submitOnboardingLink = async () => {
+    setUpdating(true);
     try {
-      const res = await fetch('/api/super-admin/generate-onboarding-link', {
+      const res = await fetch('/v1/super-admin/generate-onboarding-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, expiryHours })
+        body: JSON.stringify({ 
+          clientId: selectedClientId, 
+          expiryHours, 
+          customFields: inviteFields 
+        })
       });
       const data = await res.json();
       if (data.url) {
         setOnboardingUrl(data.url);
-        setShowOnboardingModal(true);
+      } else {
+        alert(data.error || 'Failed to generate link');
       }
     } catch (err) {
       alert('Failed to generate link');
+    } finally {
+      setUpdating(false);
     }
   };
 
   const generateBuilderPrompt = async (clientId: string) => {
     try {
-      const res = await fetch(`/api/super-admin/builder-prompt/${clientId}`);
+      const res = await fetch(`/v1/super-admin/builder-prompt/${clientId}`);
       const data = await res.json();
       if (data.prompt) {
         setWebsiteBuilderPrompt(data.prompt);
@@ -94,10 +115,10 @@ export default function ClientsManager() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch(`/api/super-admin/clients?t=${Date.now()}`);
+      const res = await fetch(`/v1/super-admin/clients?t=${Date.now()}`);
       if (!res.ok) throw new Error('fetch failed');
       const data = await res.json();
-      setClients(Array.isArray(data) ? data : []);
+      setClients(data?.success && Array.isArray(data.data) ? data.data : []);
     } catch (err) {
       console.error(err);
       setClients([]);
@@ -111,10 +132,18 @@ export default function ClientsManager() {
     setError('');
     setUpdating(true);
     try {
-      const res = await fetch('/api/super-admin/clients', {
+      const customFieldsObj: Record<string, string> = {};
+      newClient.customFields.forEach(f => {
+        if (f.name) customFieldsObj[f.name] = f.value;
+      });
+
+      const res = await fetch('/v1/super-admin/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newClient)
+        body: JSON.stringify({
+          ...newClient,
+          customFields: customFieldsObj
+        })
       });
       const data = await res.json();
       if (data.success) {
@@ -123,10 +152,16 @@ export default function ClientsManager() {
         setNewClient({
           clientId: '',
           businessName: '',
+          businessType: '',
+          subdomain: '',
           email: '',
           password: '',
+          contactPhone: '',
+          contactEmail: '',
+          businessDescription: '',
           aiMessageLimit: 1000,
-          storageLimitBytes: 52428800
+          storageLimitBytes: 52428800,
+          customFields: []
         });
       } else {
         setError(data.error || 'Failed to add client');
@@ -148,7 +183,7 @@ export default function ClientsManager() {
       onConfirm: async () => {
         setUpdating(true);
         try {
-          const res = await fetch(`/api/super-admin/clients/${clientId}`, { method: 'DELETE' });
+          const res = await fetch(`/v1/super-admin/clients/${clientId}`, { method: 'DELETE' });
           const data = await res.json();
           if (res.ok && data.success) {
             await fetchClients();
@@ -171,7 +206,7 @@ export default function ClientsManager() {
     if (!editingClient) return;
     setUpdating(true);
     try {
-      const res = await fetch(`/api/super-admin/clients/${editingClient.clientId}`, {
+      const res = await fetch(`/v1/super-admin/clients/${editingClient.clientId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -210,7 +245,7 @@ export default function ClientsManager() {
       onConfirm: async () => {
         setUpdating(true);
         try {
-          const res = await fetch(`/api/super-admin/clients/${clientId}`, {
+          const res = await fetch(`/v1/super-admin/clients/${clientId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: statusToSet })
@@ -242,6 +277,18 @@ export default function ClientsManager() {
           <p className="text-gray-500">Manage business accounts and their quotas</p>
         </div>
         <button
+          onClick={() => {
+            setSelectedClientId('');
+            setOnboardingUrl('');
+            setInviteFields([]);
+            setShowOnboardingModal(true);
+          }}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition"
+        >
+          <LinkIcon className="w-5 h-5" />
+          Onboarding Link
+        </button>
+        <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
         >
@@ -271,7 +318,7 @@ export default function ClientsManager() {
                          message: `Are you sure you want to remove the domain mapping for ${dom.host}?`,
                          type: 'danger',
                          onConfirm: async () => {
-                           await fetch(`/api/super-admin/domains/${dom._id}`, { method: 'DELETE' });
+                           await fetch(`/v1/super-admin/domains/${dom._id}`, { method: 'DELETE' });
                            fetchDomains();
                            setConfirmModal(prev => ({ ...prev, show: false }));
                          }
@@ -423,6 +470,95 @@ export default function ClientsManager() {
                   onChange={e => setNewClient({...newClient, password: e.target.value})}
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Business Type</label>
+                  <input
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={newClient.businessType}
+                    onChange={e => setNewClient({...newClient, businessType: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
+                  <input
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={newClient.subdomain}
+                    onChange={e => setNewClient({...newClient, subdomain: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+                  <input
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={newClient.contactPhone}
+                    onChange={e => setNewClient({...newClient, contactPhone: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+                  <input
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                    value={newClient.contactEmail}
+                    onChange={e => setNewClient({...newClient, contactEmail: e.target.value})}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">About Text / Description</label>
+                <textarea
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  value={newClient.businessDescription}
+                  onChange={e => setNewClient({...newClient, businessDescription: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-bold text-gray-700">Custom Fields</label>
+                  <button 
+                    type="button" 
+                    onClick={() => setNewClient({...newClient, customFields: [...newClient.customFields, { name: '', value: '' }]})}
+                    className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Add Field
+                  </button>
+                </div>
+                {newClient.customFields.map((field, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input 
+                      placeholder="Name" 
+                      className="flex-1 px-3 py-1.5 border rounded-lg text-sm outline-none"
+                      value={field.name}
+                      onChange={e => {
+                        const next = [...newClient.customFields];
+                        next[idx].name = e.target.value;
+                        setNewClient({...newClient, customFields: next});
+                      }}
+                    />
+                    <input 
+                      placeholder="Value" 
+                      className="flex-1 px-3 py-1.5 border rounded-lg text-sm outline-none"
+                      value={field.value}
+                      onChange={e => {
+                        const next = [...newClient.customFields];
+                        next[idx].value = e.target.value;
+                        setNewClient({...newClient, customFields: next});
+                      }}
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setNewClient({...newClient, customFields: newClient.customFields.filter((_, i) => i !== idx)})}
+                      className="p-1.5 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
@@ -467,11 +603,23 @@ export default function ClientsManager() {
               </h3>
               
               <div className="space-y-6">
+                {!selectedClientId && (
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Target Client ID (Required for Link)</label>
+                    <input 
+                      placeholder="e.g., smith-plumbing"
+                      value={selectedClientId}
+                      onChange={e => setSelectedClientId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Adjust Expiry (Hours)</label>
                   <div className="flex items-center gap-4">
                     <input 
-                      type="range" min="1" max="72" 
+                      type="range" min="1" max="168" 
                       value={expiryHours} 
                       onChange={e => setExpiryHours(parseInt(e.target.value))}
                       className="flex-1 accent-emerald-600"
@@ -480,26 +628,87 @@ export default function ClientsManager() {
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
-                  <p className="text-sm font-medium text-slate-500 mb-2">Share this link with your client:</p>
-                  <div className="flex items-center gap-2">
-                    <input 
-                      readOnly 
-                      value={onboardingUrl} 
-                      className="flex-1 bg-white border border-slate-200 px-3 py-2 rounded-lg text-sm font-mono truncate"
-                    />
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Required Custom Fields</label>
                     <button 
-                      onClick={() => {
-                        navigator.clipboard.writeText(onboardingUrl);
-                        alert('Copied!');
-                      }}
-                      className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                      onClick={() => setInviteFields([...inviteFields, { name: '', type: 'text' }])}
+                      className="text-xs text-emerald-600 hover:underline flex items-center gap-1 font-bold"
                     >
-                      <Copy className="w-4 h-4" />
+                      <Plus className="w-3 h-3" /> Add Requirement
                     </button>
                   </div>
+                  
+                  {inviteFields.map((field, idx) => (
+                    <div key={idx} className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <input 
+                        placeholder="Field Label (e.g. VAT Number)" 
+                        className="flex-1 bg-white border border-slate-200 px-3 py-2 rounded-lg text-sm outline-none"
+                        value={field.name}
+                        onChange={e => {
+                          const next = [...inviteFields];
+                          next[idx].name = e.target.value;
+                          setInviteFields(next);
+                        }}
+                      />
+                      <select 
+                        className="bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs outline-none"
+                        value={field.type}
+                        onChange={e => {
+                          const next = [...inviteFields];
+                          next[idx].type = e.target.value;
+                          setInviteFields(next);
+                        }}
+                      >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="email">Email</option>
+                        <option value="textarea">Large Text</option>
+                      </select>
+                      <button 
+                        onClick={() => setInviteFields(inviteFields.filter((_, i) => i !== idx))}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-xs text-gray-500 italic text-center">This link will expire at {new Date(new Date().getTime() + expiryHours * 60 * 60 * 1000).toLocaleString()}</p>
+
+                <button 
+                  disabled={updating || !selectedClientId}
+                  onClick={submitOnboardingLink}
+                  className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition shadow-xl shadow-emerald-500/20 disabled:opacity-50"
+                >
+                  {updating ? 'Generating...' : 'Generate New Link'}
+                </button>
+
+                {onboardingUrl && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl"
+                  >
+                    <p className="text-sm font-medium text-emerald-600 mb-2 font-bold">Share this link with your client:</p>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        readOnly 
+                        value={onboardingUrl} 
+                        className="flex-1 bg-white border border-emerald-200 px-3 py-2 rounded-lg text-sm font-mono truncate"
+                      />
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(onboardingUrl);
+                          alert('Copied!');
+                        }}
+                        className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-emerald-500 mt-2 italic text-center">Expires at {new Date(new Date().getTime() + expiryHours * 60 * 60 * 1000).toLocaleString()}</p>
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           </div>

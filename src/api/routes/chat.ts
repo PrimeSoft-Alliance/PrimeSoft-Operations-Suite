@@ -1,7 +1,7 @@
 import express from 'express';
 import { Groq } from 'groq-sdk';
 import jwt from 'jsonwebtoken';
-import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite } from '../models';
+import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings } from '../models';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
 
@@ -72,20 +72,49 @@ router.post('/', async (req, res) => {
     // Check for auth token in cookies
     let userRole = 'visitor';
     let userEmail = null;
+    let decoded: any = null;
     const token = req.cookies?.admin_token;
     if (token) {
        try {
-          const decoded: any = jwt.verify(token, JWT_SECRET);
+          decoded = jwt.verify(token, JWT_SECRET);
           userRole = decoded.role;
           userEmail = decoded.email;
        } catch(e) {}
     }
 
+    // Global maintenance check
+    const platformSettings = await PlatformSettings.findOne();
+    if (platformSettings?.maintenanceMode && userRole !== 'superadmin') {
+      return res.status(503).json({ 
+        message: 'The platform is currently undergoing scheduled maintenance. Please try again later or contact support.',
+        maintenance: true 
+      });
+    }
+
     const clientRecord = await Client.findOne({ clientId });
-    if (!clientRecord) return res.status(404).json({ error: 'Client not found' });
+    
+    // Auto-create default plumber-001 client if it doesn't exist to ensure landing page chatbot always works
+    if (!clientRecord && clientId === 'plumber-001') {
+      await Client.create({
+        clientId: 'plumber-001',
+        businessName: 'PrimeSoft Alliance',
+        email: 'hello@your-app.onrender.com',
+        password: 'platform-internal-reserved',
+        role: 'client',
+        status: 'active'
+      });
+      // Just proceed to create settings if needed
+    }
+
+    if (!clientRecord && clientId !== 'plumber-001') {
+      return res.status(404).json({ 
+        error: 'Client not found', 
+        message: "I couldn't find the configuration for this business. Please contact support." 
+      });
+    }
 
     // Stop if suspended
-    if (clientRecord.status === 'suspended') {
+    if (clientRecord?.status === 'suspended') {
       return res.status(403).json({ 
         message: 'This service is currently unavailable. Please contact the business through alternative channels.',
         suspended: true 
@@ -101,16 +130,21 @@ router.post('/', async (req, res) => {
       usage = await UsageStats.create({ clientId, month: currentMonth });
     }
 
-    const settings = await Settings.findOne({ clientId });
-    if (!settings) return res.status(500).json({ error: 'Settings not found' });
+    let settings = await Settings.findOne({ clientId });
+    if (!settings && clientId === 'plumber-001') {
+      settings = await Settings.create({
+        clientId: 'plumber-001',
+        businessName: 'PrimeSoft Alliance',
+        aboutText: 'PrimeSoft Alliance is an IT solutions company specializing in platform development.',
+        workingHours: Array.from({ length: 7 }, (_, i) => ({ day: i, isOpen: true, openTime: '08:00', closeTime: '17:00' }))
+      });
+    }
+
+    if (!settings) return res.status(500).json({ error: 'Settings not found', message: "Configuration for this business is incomplete." });
     
     // Get actual limit from Client record
-    let messageLimit = clientRecord.aiMessageLimit || 1000;
-    
-    // Unlimited feature for main client
-    if (clientId === 'plumber-001') {
-      messageLimit = 999999999;
-    }
+    let messageLimit = clientRecord?.aiMessageLimit || 1000;
+    if (clientId === 'plumber-001') messageLimit = 999999999;
 
     if (usage.aiMessagesUsed >= messageLimit) {
       return res.status(403).json({ 

@@ -6,7 +6,7 @@ export default function GlobalStats() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/super-admin/stats')
+    fetch('/v1/super-admin/stats')
       .then(res => {
         if (!res.ok) {
            console.warn('Stats fetch not ok');
@@ -15,8 +15,8 @@ export default function GlobalStats() {
         return res.json();
       })
       .then(data => {
-        if (data) {
-          setStats(data);
+        if (data?.success) {
+          setStats(data.data);
         } else {
           setStats({ totalClients: 0, totalBookings: 0, totalContacts: 0, storageUsed: 0, nearQuota: [] });
         }

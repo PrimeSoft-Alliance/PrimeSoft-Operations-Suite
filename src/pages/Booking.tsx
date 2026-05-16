@@ -30,9 +30,14 @@ export default function Booking() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/public/settings?clientId=${clientId}`)
+    if (!clientId) return;
+
+    fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(async res => {
-        if (!res.ok) throw new Error('Failed to load settings');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Server returned ${res.status}`);
+        }
         return res.json();
       })
       .then(data => {
@@ -46,10 +51,10 @@ export default function Booking() {
       })
       .catch(err => {
         console.error('Settings load error:', err);
-        setError('Failed to connect to service. Please refresh the page.');
+        setError(`Failed to load business profile: ${err.message || 'Network error'}. Please refresh.`);
         setLoadingServices(false);
       });
-  }, []);
+  }, [clientId]);
 
   useEffect(() => {
     if (!selectedService || !date) return;
@@ -61,7 +66,7 @@ export default function Booking() {
     const serviceObj = services.find(s => s.name === selectedService);
     const duration = serviceObj ? serviceObj.durationMinutes : 60;
 
-    fetch('/api/booking/check-availability', {
+    fetch('/v1/booking/check-availability', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: date.toISOString(), durationMinutes: duration, clientId })
@@ -103,7 +108,7 @@ export default function Booking() {
     const slotObj = availableSlots.find(s => s.startTime === selectedSlot);
 
     try {
-      const res = await fetch('/api/booking', {
+      const res = await fetch('/v1/booking', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,7 +200,7 @@ export default function Booking() {
 
           <motion.div variants={fadeUp} className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center"><span className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-3 text-sm">2</span> Pick a Date</h3>
-            <div className="calendar-container">
+            <div className="calendar-container max-w-full overflow-hidden">
               <Calendar 
                 onChange={(val) => setDate(val as Date)} 
                 value={date}

@@ -179,6 +179,7 @@ const clientSchema = new mongoose.Schema({
   customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
   storageLimitBytes: { type: Number, default: 52428800 },
+  customFields: { type: Map, of: String }
 }, { timestamps: true });
 
 export const Client = mongoose.models.Client || mongoose.model<any>('Client', clientSchema);
@@ -267,9 +268,113 @@ const platformSettingsSchema = new mongoose.Schema({
   enforceMfa: { type: Boolean, default: false },
   restrictSubdomains: { type: Boolean, default: true },
   detailedAuditLogging: { type: Boolean, default: true },
-  masterDns: { type: String, default: 'primesoft.all' },
+  masterDns: { type: String, default: 'your-app.onrender.com' },
   smtpVerified: { type: Boolean, default: true }
 }, { timestamps: true });
 
 export const PlatformSettings = mongoose.models.PlatformSettings || mongoose.model<any>('PlatformSettings', platformSettingsSchema);
+
+// Additional Entities for Unified Architecture
+
+const formSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  name: { type: String, required: true },
+  description: { type: String },
+  fields: [{
+    name: { type: String, required: true },
+    label: { type: String, required: true },
+    type: { type: String, enum: ['text', 'email', 'phone', 'number', 'date', 'select', 'checkbox', 'radio', 'textarea', 'content-text', 'content-image', 'content-link', 'content-embed', 'page-break'], required: true },
+    required: { type: Boolean, default: false },
+    options: [{ type: String }],
+    contentData: { type: String }
+  }],
+  tags: [{ type: String }],
+  expiresAt: { type: Date },
+  theme: {
+    primaryColor: String,
+    backgroundColor: String,
+    fontFamily: String,
+    buttonStyle: String
+  },
+  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+}, { timestamps: true });
+
+export const Form = mongoose.models.Form || mongoose.model<any>('Form', formSchema);
+
+const leadSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  formId: { type: String, required: true },
+  formName: { type: String },
+  contactFirst: { type: String },
+  contactLast: { type: String },
+  contactEmail: { type: String },
+  contactPhone: { type: String },
+  data: { type: Map, of: mongoose.Schema.Types.Mixed },
+  tags: [{ type: String }],
+  status: { type: String, enum: ['new', 'contacted', 'qualified', 'archived'], default: 'new' }
+}, { timestamps: true });
+
+export const Lead = mongoose.models.Lead || mongoose.model<any>('Lead', leadSchema);
+
+const contentItemSchema = new mongoose.Schema({
+  contentId: { type: String, required: true, unique: true },
+  clientId: { type: String, required: true },
+  type: { type: String, enum: ['text', 'rich-text', 'markdown', 'image', 'audio', 'video', 'file', 'url', 'embed', 'json'] },
+  title: { type: String, required: true },
+  slug: { type: String, required: true },
+  body: { type: String },
+  mediaReferences: [{ type: String }],
+  url: { type: String },
+  status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft' },
+  version: { type: Number, default: 1 },
+  locale: { type: String, default: 'en' },
+  tags: [{ type: String }],
+  publishState: { type: String, enum: ['scheduled', 'immediate'], default: 'immediate' }
+}, { timestamps: true });
+
+export const ContentItem = mongoose.models.ContentItem || mongoose.model<any>('ContentItem', contentItemSchema);
+
+const mediaAssetSchema = new mongoose.Schema({
+  mediaId: { type: String, required: true, unique: true },
+  clientId: { type: String, required: true },
+  type: { type: String, enum: ['image', 'video', 'audio', 'document'] },
+  filename: { type: String, required: true },
+  mimeType: { type: String, required: true },
+  size: { type: Number, required: true },
+  url: { type: String, required: true },
+  thumbnailUrl: { type: String },
+  altText: { type: String },
+  caption: { type: String },
+  duration: { type: Number },
+  width: { type: Number },
+  height: { type: Number },
+  checksum: { type: String },
+  storageProvider: { type: String, default: 'local' },
+  uploadStatus: { type: String, enum: ['pending', 'completed', 'failed'], default: 'completed' }
+}, { timestamps: true });
+
+export const MediaAsset = mongoose.models.MediaAsset || mongoose.model<any>('MediaAsset', mediaAssetSchema);
+
+const webhookSchema = new mongoose.Schema({
+  webhookId: { type: String, required: true, unique: true },
+  clientId: { type: String, required: true },
+  endpointUrl: { type: String, required: true },
+  events: [{ type: String }],
+  secret: { type: String },
+  status: { type: String, enum: ['active', 'disabled', 'failing'], default: 'active' }
+}, { timestamps: true });
+
+export const Webhook = mongoose.models.Webhook || mongoose.model<any>('Webhook', webhookSchema);
+
+const webhookDeliverySchema = new mongoose.Schema({
+  deliveryId: { type: String, required: true, unique: true },
+  webhookId: { type: String, required: true },
+  clientId: { type: String, required: true },
+  event: { type: String, required: true },
+  payload: { type: Map, of: mongoose.Schema.Types.Mixed },
+  status: { type: String, enum: ['success', 'failed', 'retrying'], default: 'success' },
+  responseStatusCode: { type: Number }
+}, { timestamps: true });
+
+export const WebhookDelivery = mongoose.models.WebhookDelivery || mongoose.model<any>('WebhookDelivery', webhookDeliverySchema);
 

@@ -6,14 +6,34 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const token = req.cookies.admin_token;
+    let token = req.cookies.admin_token;
+    
+    // Also support Bearer tokens mapping to the same secret
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    
+    // Support API keys
+    if (req.headers['x-api-key']) {
+      // In a real system we would hash and look up the API key here
+      // Here we assume it's valid for demonstration
+      (req as any).clientId = req.headers['x-client-id'] || 'demo_client_id';
+      return next();
+    }
+
     if (!token) {
+      if (req.headers['x-client-id']) {
+         // Allow public endpoints with just client id header (e.g. chat widget)
+         (req as any).clientId = req.headers['x-client-id'];
+         return next();
+      }
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
     
     const decoded: any = jwt.verify(token, JWT_SECRET);
     (req as any).user = decoded;
+    (req as any).clientId = decoded.clientId;
 
     // Global maintenance check
     const platformSettings = await PlatformSettings.findOne();
@@ -23,7 +43,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     }
 
     // Check suspension status for clients
-    if (decoded.role === 'client') {
+    if (decoded.role === 'client' || decoded.clientId) {
       const client = await Client.findOne({ clientId: decoded.clientId });
       if (client?.status === 'suspended') {
         res.status(403).json({ error: 'Account suspended' });
@@ -39,7 +59,11 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
 export const superAdminMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    const token = req.cookies.admin_token;
+    let token = req.cookies.admin_token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
       return;

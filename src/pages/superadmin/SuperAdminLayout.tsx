@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode, FileText, MessageSquare, Zap } from 'lucide-react';
+import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
 export default function SuperAdminLayout() {
@@ -14,7 +14,7 @@ export default function SuperAdminLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    fetch('/api/auth/check')
+    fetch('/v1/auth/check')
       .then(res => res.json())
       .then(data => {
         if (!data.authenticated || data.role !== 'superadmin') {
@@ -38,7 +38,7 @@ export default function SuperAdminLayout() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/v1/auth/logout', { method: 'POST' });
     navigate('/login');
   };
 
@@ -46,10 +46,13 @@ export default function SuperAdminLayout() {
   if (error) return <div className="flex items-center justify-center h-screen text-red-600">{error}</div>;
 
   const menuItems = [
+    { icon: Zap, label: 'Mission Control', path: '/superadmin/hub' },
     { icon: LayoutDashboard, label: 'Overview', path: '/superadmin' },
     { icon: Users, label: 'Clients', path: '/superadmin/clients' },
     { icon: UserCheck, label: 'Onboarding', path: '/superadmin/onboarding' },
     { icon: Sparkles, label: 'Prompt Engine', path: '/superadmin/prompts' },
+    { icon: FileText, label: 'Forms', path: '/superadmin/forms' },
+    { icon: MessageSquare, label: 'Leads', path: '/superadmin/leads' },
     { icon: Globe, label: 'Domains', path: '/superadmin/domains' },
     { icon: BarChart3, label: 'Usage & Quotas', path: '/superadmin/usage' },
     { icon: ShieldCheck, label: 'Audit Logs', path: '/superadmin/logs' },
@@ -136,7 +139,9 @@ export default function SuperAdminLayout() {
               {menuItems.find(i => i.path === location.pathname)?.label || 'Super Admin Portal'}
             </h1>
           </div>
-          <div className="flex items-center gap-3 sm:gap-6">
+          <div className="flex items-center gap-6">
+             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors hidden sm:block">Return to Site</Link>
+             <div className="flex items-center gap-3 sm:gap-6 border-l pl-6 border-gray-100">
             <button className="relative text-gray-500 hover:text-indigo-600 transition hidden sm:block">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -150,7 +155,8 @@ export default function SuperAdminLayout() {
               </div>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
         <main className="p-4 sm:p-8 overflow-y-auto">
           <motion.div
@@ -159,6 +165,13 @@ export default function SuperAdminLayout() {
             transition={{ duration: 0.5 }}
             className="max-w-[1600px] mx-auto"
           >
+            <button 
+              onClick={() => navigate(-1)}
+              className="mb-6 text-xs font-black uppercase tracking-[0.2em] text-slate-400 hover:text-indigo-600 transition-all flex items-center gap-2 group"
+            >
+              <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              Return
+            </button>
             <Outlet />
           </motion.div>
         </main>

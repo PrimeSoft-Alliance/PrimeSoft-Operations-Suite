@@ -1,4 +1,5 @@
 import express from 'express';
+import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
@@ -29,19 +30,21 @@ async function notify(title: string, message: string, type: 'info'|'warning'|'er
 
 // Onboarding Requests
 router.get('/onboarding-requests', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const requests = await OnboardingRequest.find().sort({ createdAt: -1 });
-    res.json(requests);
+    envRes.sendSuccess(requests);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    envRes.sendError(500, 'API_ERROR', 'Server error');
   }
 });
 
 router.post('/onboarding-requests/:id/approve', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { id } = req.params;
     const request = await OnboardingRequest.findOneAndUpdate({ requestId: id }, { status: 'approved' }, { new: true });
-    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request) return envRes.sendError(404, 'API_ERROR', 'Request not found');
     
     // Create an invite for the newly approved business
     const clientId = request.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(7);
@@ -69,14 +72,15 @@ router.post('/onboarding-requests/:id/approve', async (req, res) => {
       undefined, 'super-admin-001'
     );
 
-    res.json({ success: true, inviteUrl: fullUrl });
+    envRes.sendSuccess({ inviteUrl: fullUrl  });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to approve' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to approve');
   }
 });
 
 // Health Checks
 router.get('/health', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const dbStatus = mongoose.connection.readyState === 1 ? 'healthy' : 'degraded';
     
@@ -106,42 +110,46 @@ router.get('/health', async (req, res) => {
 
 // Domain Management
 router.get('/domains', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const domains = await Domain.find().sort({ createdAt: -1 });
-    res.json(domains);
+    envRes.sendSuccess(domains);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch domains' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch domains');
   }
 });
 
 router.post('/domains', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { clientId, host, type } = req.body;
     const domain = await Domain.create({ clientId, host, type, status: 'active', verified: true });
     await logAction((req as any).user?.email || 'admin', 'CREATE_DOMAIN', clientId, { host, type });
-    res.json(domain);
+    envRes.sendSuccess(domain);
   } catch (err) {
-    res.status(400).json({ error: 'Domain already exists or invalid data' });
+    envRes.sendError(400, 'API_ERROR', 'Domain already exists or invalid data');
   }
 });
 
 router.delete('/domains/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const d = await Domain.findById(req.params.id);
     await Domain.findByIdAndDelete(req.params.id);
     if (d) await logAction((req as any).user?.email || 'admin', 'DELETE_DOMAIN', d.clientId, { host: d.host });
-    res.json({ success: true });
+    envRes.sendSuccess({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Delete failed' });
+    envRes.sendError(500, 'API_ERROR', 'Delete failed');
   }
 });
 
 router.post('/onboarding-requests/:id/reject', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { id } = req.params;
     const { reason } = req.body;
     const request = await OnboardingRequest.findOneAndUpdate({ requestId: id }, { status: 'rejected', superadminNotes: reason }, { new: true });
-    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request) return envRes.sendError(404, 'API_ERROR', 'Request not found');
 
     await logAction((req as any).user?.email || 'admin', 'REJECT_ONBOARDING', id, { reason });
 
@@ -151,18 +159,19 @@ router.post('/onboarding-requests/:id/reject', async (req, res) => {
       undefined, 'super-admin-001'
     );
 
-    res.json({ success: true });
+    envRes.sendSuccess({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to reject' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to reject');
   }
 });
 
 router.post('/onboarding-requests/:id/info-request', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { id } = req.params;
     const { message } = req.body;
     const request = await OnboardingRequest.findOneAndUpdate({ requestId: id }, { status: 'info_needed', superadminNotes: message }, { new: true });
-    if (!request) return res.status(404).json({ error: 'Request not found' });
+    if (!request) return envRes.sendError(404, 'API_ERROR', 'Request not found');
 
     const { sendEmail } = await import('../email');
     await sendEmail(request.email, 'More Information Needed - PrimeSoft Alliance', 
@@ -170,32 +179,34 @@ router.post('/onboarding-requests/:id/info-request', async (req, res) => {
       undefined, 'super-admin-001'
     );
 
-    res.json({ success: true });
+    envRes.sendSuccess({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send info request' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to send info request');
   }
 });
 
 // Get all clients
 router.get('/clients', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const clients = await Client.find({ role: 'client' }).select('-password').lean();
     const processedClients = clients.map((c: any) => ({
       ...c,
       status: c.status || 'active'
     }));
-    res.json(processedClients);
+    envRes.sendSuccess(processedClients);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    envRes.sendError(500, 'API_ERROR', 'Server error');
   }
 });
 
 // AI Prompt Generator (Moved from ai.ts as requested)
 router.get('/builder-prompt/:clientId', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { clientId } = req.params;
     const settings = await Settings.findOne({ clientId });
-    if (!settings) return res.status(404).json({ error: 'Settings not found' });
+    if (!settings) return envRes.sendError(404, 'API_ERROR', 'Settings not found');
 
     const prompt = `
 Build a modern, high-converting React website for a business called "${settings.businessName}". 
@@ -215,18 +226,19 @@ TECHNICAL REQUIREMENTS:
 6. Use a ${settings.branding?.layoutStyle || 'modern'} aesthetic with ${settings.branding?.primaryColor || '#2563eb'} as primary color.
 `.trim();
 
-    res.json({ prompt });
+    envRes.sendSuccess({ prompt });
   } catch (err) {
-    res.status(500).json({ error: 'Prompt generation failed' });
+    envRes.sendError(500, 'API_ERROR', 'Prompt generation failed');
   }
 });
 
 // Generate Onboarding Link
 router.post('/generate-onboarding-link', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
-    const { clientId, expiryHours = 24 } = req.body;
+    const { clientId, expiryHours = 24, customFields = [] } = req.body;
     
-    if (!clientId) return res.status(400).json({ error: 'Client ID is required' });
+    if (!clientId) return envRes.sendError(400, 'API_ERROR', 'Client ID is required');
 
     // Clean up any existing unused/expired links for this ID
     await Invite.updateMany({ clientId, status: 'pending' }, { status: 'revoked' });
@@ -242,23 +254,31 @@ router.post('/generate-onboarding-link', async (req, res) => {
       clientId,
       token,
       expiresAt,
-      status: 'pending'
+      status: 'pending',
+      customFields
     });
 
     const fullUrl = `${req.headers.origin}/onboarding/${token}`;
-    res.json({ success: true, url: fullUrl, expiresAt });
+    envRes.sendSuccess({ url: fullUrl, expiresAt  });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to generate link' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate link');
   }
 });
 
 // Create new client
 router.post('/clients', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
-    const { clientId, businessName, email, password, aiMessageLimit, storageLimitBytes, customDomain } = req.body;
+    const { 
+      clientId, businessName, businessType, email, password, 
+      aiMessageLimit, storageLimitBytes, customDomain, subdomain, 
+      contactPhone, contactEmail, businessDescription,
+      customFields 
+    } = req.body;
     
-    const existing = await Client.findOne({ $or: [{ clientId }, { email }, { customDomain: customDomain || 'never-match-this' }] });
-    if (existing) return res.status(400).json({ error: 'Client ID, Email, or Domain already exists' });
+    // Check individually to give better errors
+    const existing = await Client.findOne({ $or: [{ clientId }, { email }] });
+    if (existing) return envRes.sendError(400, 'API_ERROR', 'Client ID or Email already exists');
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
@@ -266,19 +286,49 @@ router.post('/clients', async (req, res) => {
     const client = await Client.create({
       clientId,
       businessName,
+      businessType,
       email,
       password: hash,
       aiMessageLimit,
       storageLimitBytes,
       customDomain,
+      subdomain,
+      customFields,
       apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
+    });
+
+    if (customDomain) {
+      await Domain.create({
+        clientId,
+        host: customDomain,
+        type: 'custom',
+        status: 'active'
+      });
+    }
+
+    if (subdomain) {
+      await Domain.create({
+        clientId,
+        host: `${String(subdomain).trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}.client.com`,
+        type: 'subdomain',
+        status: 'active'
+      });
+    }
+
+    await UsageStats.create({
+      clientId,
+      month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+      aiMessageCount: 0,
+      storageUsedBytes: 0,
     });
 
     // Initialize settings
     await Settings.create({
       clientId,
       businessName,
-      contactEmail: email,
+      contactEmail: contactEmail || email,
+      contactPhone: contactPhone || '',
+      aboutText: businessDescription || '',
       workingHours: Array.from({ length: 7 }, (_, i) => ({
         day: i,
         isOpen: i > 0 && i < 6,
@@ -287,34 +337,37 @@ router.post('/clients', async (req, res) => {
       }))
     });
 
-    res.json({ success: true, client: { clientId, businessName, email } });
+    envRes.sendSuccess({ client: { clientId, businessName, email }  });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    envRes.sendError(500, 'API_ERROR', 'Server error');
   }
 });
 
 // Audit Logs
 router.get('/logs', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const logs = await AuditLog.find().sort({ createdAt: -1 }).limit(100);
-    res.json(logs);
+    envRes.sendSuccess(logs);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch logs' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch logs');
   }
 });
 
 // Notifications
 router.get('/notifications', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const notifs = await PlatformNotification.find({ read: false }).sort({ createdAt: -1 });
-    res.json(notifs);
+    envRes.sendSuccess(notifs);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch notifications' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch notifications');
   }
 });
 
 // Admin stats
 router.get('/stats', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const totalClients = await Client.countDocuments({ role: 'client' });
     const activeClients = await Client.countDocuments({ role: 'client', status: { $ne: 'suspended' } });
@@ -342,12 +395,13 @@ router.get('/stats', async (req, res) => {
       nearQuota
     });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    envRes.sendError(500, 'API_ERROR', 'Server error');
   }
 });
 
 // Update client
 router.put('/clients/:clientId', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { clientId } = req.params;
     const allowedFields = ['aiMessageLimit', 'storageLimitBytes', 'status', 'businessName', 'email'];
@@ -360,30 +414,31 @@ router.put('/clients/:clientId', async (req, res) => {
     });
 
     if (Object.keys(update).length === 0) {
-      return res.status(400).json({ error: 'No valid fields provided' });
+      return envRes.sendError(400, 'API_ERROR', 'No valid fields provided');
     }
 
     const updated = await Client.findOneAndUpdate({ clientId }, { $set: update }, { new: true });
     console.log(`Updated client ${clientId}:`, update);
     if (!updated) {
       console.log(`Client ${clientId} not found for update`);
-      return res.status(404).json({ error: 'Client not found' });
+      return envRes.sendError(404, 'API_ERROR', 'Client not found');
     }
     
     await logAction((req as any).user?.email || 'admin', 'UPDATE_CLIENT', clientId, update);
     
-    res.json({ success: true, client: updated });
+    envRes.sendSuccess({ client: updated  });
   } catch (err) {
-    res.status(500).json({ error: 'Update failed' });
+    envRes.sendError(500, 'API_ERROR', 'Update failed');
   }
 });
 
 // Delete client
 router.delete('/clients/:clientId', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const { clientId } = req.params;
     const client = await Client.findOne({ clientId });
-    if (!client) return res.status(404).json({ error: 'Client not found' });
+    if (!client) return envRes.sendError(404, 'API_ERROR', 'Client not found');
 
     await Client.deleteOne({ clientId });
     await Settings.deleteOne({ clientId });
@@ -395,32 +450,34 @@ router.delete('/clients/:clientId', async (req, res) => {
     
     await logAction((req as any).user?.email || 'admin', 'DELETE_CLIENT', clientId, { businessName: client.businessName });
     
-    res.json({ success: true });
+    envRes.sendSuccess({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Delete failed' });
+    envRes.sendError(500, 'API_ERROR', 'Delete failed');
   }
 });
 
 // Platform Global Settings
 router.get('/settings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     let settings = await PlatformSettings.findOne();
     if (!settings) {
       settings = await PlatformSettings.create({});
     }
-    res.json(settings);
+    envRes.sendSuccess(settings);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch settings');
   }
 });
 
 router.put('/settings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
     const settings = await PlatformSettings.findOneAndUpdate({}, req.body, { upsert: true, new: true });
     await logAction((req as any).user?.email || 'admin', 'UPDATE_PLATFORM_SETTINGS', 'platform', req.body);
-    res.json({ success: true, settings });
+    envRes.sendSuccess({ settings  });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update settings' });
+    envRes.sendError(500, 'API_ERROR', 'Failed to update settings');
   }
 });
 

@@ -27,7 +27,7 @@ export function useClientId() {
     }
 
     // Try API resolution for custom domains
-    fetch(`/api/public/tenant/resolve?host=${hostname}`)
+    fetch(`/v1/public/tenant/resolve?host=${hostname}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.clientId) {

@@ -24,7 +24,7 @@ export default function DomainsManager() {
 
   const fetchDomains = async () => {
     try {
-      const res = await fetch('/api/super-admin/domains');
+      const res = await fetch('/v1/super-admin/domains');
       const data = await res.json();
       setDomains(data);
     } catch (err) {
@@ -41,7 +41,7 @@ export default function DomainsManager() {
   const handleAddDomain = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/super-admin/domains', {
+      const res = await fetch('/v1/super-admin/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newDomain)
@@ -67,7 +67,7 @@ export default function DomainsManager() {
       type: 'danger',
       onConfirm: async () => {
         try {
-          await fetch(`/api/super-admin/domains/${id}`, { method: 'DELETE' });
+          await fetch(`/v1/super-admin/domains/${id}`, { method: 'DELETE' });
           fetchDomains();
           setConfirmModal(prev => ({ ...prev, show: false }));
         } catch (err) {

@@ -11,9 +11,9 @@ export default function BookingsManager() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const fetchBookings = () => {
-    fetch('/api/dashboard/bookings')
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setBookings(Array.isArray(data) ? data : []))
+    fetch('/v1/dashboard/bookings')
+      .then(res => res.json())
+      .then(data => setBookings(data?.data && Array.isArray(data.data) ? data.data : []))
       .catch(console.error);
   };
 
@@ -22,7 +22,7 @@ export default function BookingsManager() {
   }, []);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/dashboard/bookings/${id}/status`, {
+    await fetch(`/v1/dashboard/bookings/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
