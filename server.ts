@@ -121,6 +121,12 @@ async function startServer() {
     try {
       await mongoose.connect(mongoUri);
       console.log('Connected to MongoDB');
+      try {
+        await mongoose.connection.db?.collection('clients').dropIndex('apiKey_1');
+        console.log('Dropped legacy apiKey_1 index');
+      } catch (e) {
+        // ignore
+      }
     } catch (err) {
       console.error('Failed to connect to MongoDB:', err);
     }

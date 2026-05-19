@@ -79,10 +79,16 @@ export default function Navbar() {
   ) : (
     <div className="flex items-center gap-4">
       <Link 
-        to="/login" 
+        to="/client/login" 
         className="text-sm font-bold text-gray-600 hover:text-indigo-600 transition-colors"
       >
-        Login
+        Client Login
+      </Link>
+      <Link 
+        to="/admin/login" 
+        className="text-sm font-bold text-gray-600 hover:text-indigo-600 transition-colors"
+      >
+        Admin Login
       </Link>
       <Link 
         to="/get-started" 
@@ -189,7 +195,8 @@ export default function Navbar() {
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="w-full border-2 border-gray-100 py-4 rounded-2xl text-center font-black text-gray-900">Login</Link>
+                  <Link to="/client/login" className="w-full border-2 border-gray-100 py-4 rounded-2xl text-center font-black text-gray-900">Client Login</Link>
+                  <Link to="/admin/login" className="w-full border-2 border-gray-100 py-4 rounded-2xl text-center font-black text-gray-900">Admin Login</Link>
                   <Link to="/get-started" className="w-full bg-indigo-600 text-white py-4 rounded-2xl text-center font-black shadow-xl shadow-indigo-100">Onboarding</Link>
                 </>
               )}

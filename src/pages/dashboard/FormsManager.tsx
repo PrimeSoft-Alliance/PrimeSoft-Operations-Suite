@@ -3,11 +3,12 @@ import { Plus, Edit, Trash2, Link, Save, Check } from 'lucide-react';
 import { useClientId } from '../../lib/useClientId';
 
 export default function FormsManager() {
-  const { clientId } = useClientId();
+  const { clientId: cidHook } = useClientId();
   const [forms, setForms] = useState<any[]>([]);
   const [editingForm, setEditingForm] = useState<any | null>(null);
   const [aiPrompt, setAiPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   useEffect(() => {
     fetchForms();
@@ -16,11 +17,18 @@ export default function FormsManager() {
   const fetchForms = async () => {
     try {
       const res = await fetch('/v1/forms', {
-        headers: { 'x-client-id': clientId }
+        headers: { 'x-client-id': cidHook }
       });
       const data = await res.json();
-      if (data && data.success) setForms(data.data || []);
-    } catch (err) {}
+      if (data && data.success) {
+        setForms(data.data || []);
+        const business = data?.meta?.businessName || 'Business';
+        const cid = data?.meta?.clientId || cidHook || '...';
+        setDebugInfo(`Vault: ${business} | Database: ${cid} | Records: ${(data.data || []).length}`);
+      }
+    } catch (err) {
+      setDebugInfo(`Offline / Error: ${(err as Error).message}`);
+    }
   };
 
   const generateDesign = async (e: React.FormEvent) => {
@@ -30,7 +38,7 @@ export default function FormsManager() {
     try {
       const res = await fetch('/v1/forms/generate-design', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-id': clientId },
+        headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
         body: JSON.stringify({ description: aiPrompt })
       });
       const data = await res.json();
@@ -49,13 +57,13 @@ export default function FormsManager() {
       if (editingForm._id) {
         await fetch(`/v1/forms/${editingForm._id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'x-client-id': clientId },
+          headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
           body: JSON.stringify(editingForm)
         });
       } else {
         await fetch('/v1/forms', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-client-id': clientId },
+          headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
           body: JSON.stringify(editingForm)
         });
       }
@@ -90,7 +98,7 @@ export default function FormsManager() {
     try {
       await fetch(`/v1/forms/${id}`, {
         method: 'DELETE',
-        headers: { 'x-client-id': clientId }
+        headers: { 'x-client-id': cidHook }
       });
       fetchForms();
     } catch (err) {}
@@ -311,6 +319,16 @@ export default function FormsManager() {
               No forms created yet. Get started by creating your first custom form.
             </div>
           )}
+        </div>
+      )}
+      {!editingForm && debugInfo && (
+        <div className="mt-8 flex justify-center">
+          <div className="px-4 py-2 bg-slate-50 border border-slate-100 rounded-full flex items-center gap-3 shadow-inner">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em]">
+              Diagnostic Audit: {debugInfo}
+            </span>
+          </div>
         </div>
       )}
     </div>

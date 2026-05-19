@@ -92,7 +92,7 @@ router.get('/health', async (req, res) => {
       aiStatus = 'down';
     }
 
-    res.json({
+    envRes.sendSuccess({
       status: dbStatus === 'healthy' && aiStatus === 'healthy' ? 'healthy' : 'degraded',
       services: {
         database: { status: dbStatus, latency: '12ms' },
@@ -104,7 +104,7 @@ router.get('/health', async (req, res) => {
       timestamp: new Date()
     });
   } catch (err) {
-    res.status(500).json({ status: 'down', error: err instanceof Error ? err.message : 'Unknown' });
+    envRes.sendError(500, 'HEALTH_ERROR', 'Health check failed', err instanceof Error ? err.message : 'Unknown');
   }
 });
 
@@ -283,7 +283,7 @@ router.post('/clients', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
 
-    const client = await Client.create({
+    const clientPayload: any = {
       clientId,
       businessName,
       businessType,
@@ -291,11 +291,13 @@ router.post('/clients', async (req, res) => {
       password: hash,
       aiMessageLimit,
       storageLimitBytes,
-      customDomain,
-      subdomain,
       customFields,
       apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
-    });
+    };
+    if (customDomain) clientPayload.customDomain = customDomain;
+    if (subdomain) clientPayload.subdomain = subdomain;
+
+    const client = await Client.create(clientPayload);
 
     if (customDomain) {
       await Domain.create({
@@ -318,8 +320,8 @@ router.post('/clients', async (req, res) => {
     await UsageStats.create({
       clientId,
       month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
-      aiMessageCount: 0,
-      storageUsedBytes: 0,
+      aiMessagesUsed: 0,
+      storageBytesUsed: 0,
     });
 
     // Initialize settings
@@ -354,6 +356,40 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+// Get all leads (Platform wide)
+router.get('/leads', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { Lead } = await import('../models');
+    const leads = await Lead.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    envRes.sendSuccess(leads);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform leads');
+  }
+});
+
+// Platform-wide bookings (could filter by clientId='plumber-001' or all)
+router.get('/platform-bookings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const bookings = await Booking.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    envRes.sendSuccess(bookings);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform bookings');
+  }
+});
+
+// Platform-wide contacts/tickets
+router.get('/platform-contacts', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const contacts = await Contact.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    envRes.sendSuccess(contacts);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform contacts');
+  }
+});
+
 // Notifications
 router.get('/notifications', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -383,7 +419,7 @@ router.get('/stats', async (req, res) => {
 
     const nearQuota = await Client.find({ role: 'client' }).limit(5); // In production, would join with UsageStats
     
-    res.json({
+    envRes.sendSuccess({
       totalClients,
       activeClients,
       suspendedClients,
@@ -429,6 +465,22 @@ router.put('/clients/:clientId', async (req, res) => {
     envRes.sendSuccess({ client: updated  });
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Update failed');
+  }
+});
+
+router.put('/clients/:clientId/settings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { clientId } = req.params;
+    const settings = await Settings.findOneAndUpdate(
+      { clientId },
+      { $set: req.body },
+      { new: true, upsert: true }
+    );
+    await logAction((req as any).user?.email || 'admin', 'UPDATE_CLIENT_SETTINGS', clientId, req.body);
+    envRes.sendSuccess({ settings });
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Settings update failed');
   }
 });
 

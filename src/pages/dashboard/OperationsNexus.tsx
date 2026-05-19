@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
+import { useClientId } from '../../lib/useClientId';
 
 export default function OperationsNexus() {
+  const { clientId: cidHook } = useClientId();
   const [activeTab, setActiveTab] = useState<'leads' | 'bookings' | 'engagement'>('leads');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
@@ -32,22 +34,32 @@ export default function OperationsNexus() {
     const fetchData = async () => {
       setLoading(true);
       try {
+        const headers = { 'x-client-id': cidHook };
         const [statsRes, leadsRes, devRes] = await Promise.all([
-          fetch('/v1/dashboard/stats'),
-          fetch('/v1/dashboard/leads'),
-          fetch('/v1/dashboard/bookings')
+          fetch(`/v1/dashboard/stats?t=${Date.now()}`, { headers }),
+          fetch(`/v1/leads?t=${Date.now()}`, { headers }),
+          fetch(`/v1/dashboard/bookings?t=${Date.now()}`, { headers })
         ]);
 
-        const statsData = await statsRes.json();
-        const leadsData = await leadsRes.json();
-        const bookingsData = await devRes.json();
+        const statsEnv = await statsRes.json();
+        const leadsEnv = await leadsRes.json();
+        const bookingsEnv = await devRes.json();
 
-        setStats(statsData?.data || null);
+        // Include meta in stats so we have clientId
+        const mergedStats = {
+          ...(statsEnv?.data || {}),
+          _clientId: statsEnv?.meta?.clientId,
+          _businessName: statsEnv?.meta?.businessName
+        };
+        setStats(mergedStats);
         
-        // Build a combined feed for the "Nexus" feel
+        // Extract arrays safely
+        const leads = leadsEnv?.data || (Array.isArray(leadsEnv) ? leadsEnv : []);
+        const bookings = bookingsEnv?.data || (Array.isArray(bookingsEnv) ? bookingsEnv : []);
+        
         const combined = [
-          ...(leadsData?.data || []).map((l: any) => ({ ...l, type: 'lead', date: new Date(l.createdAt) })),
-          ...(bookingsData?.data || []).map((b: any) => ({ ...b, type: 'booking', date: new Date(b.date) }))
+          ...leads.map((l: any) => ({ ...l, type: 'lead', date: new Date(l.createdAt) })),
+          ...bookings.map((b: any) => ({ ...b, type: 'booking', date: new Date(b.createdAt) }))
         ].sort((a, b) => b.date.getTime() - a.date.getTime());
         
         setFeed(combined);
@@ -73,19 +85,30 @@ export default function OperationsNexus() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8">
         <div className="space-y-4">
-          <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-slate-900 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl"
-          >
-            <Zap className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400" />
-            Operations Command Center
-          </motion.div>
+          <div className="flex flex-col gap-1">
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-slate-900 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-2xl w-fit"
+            >
+              <Zap className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400" />
+              Operations Command Center
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] ml-1 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 flex items-center gap-2"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+              User {stats?._clientId || cidHook || '...'}
+            </motion.div>
+          </div>
           <h1 className="text-5xl font-black text-gray-900 tracking-tighter leading-none">
-            Business <span className="text-indigo-600">Nexus</span>.
+            {stats?._businessName || 'Business'} <span className="text-indigo-600">Nexus</span>.
           </h1>
           <p className="text-gray-400 font-medium text-lg tracking-tight max-w-xl leading-relaxed">
-             Real-time orchestration of your customer acquisition, engagement pipelines, and digital infrastructure.
+             Real-time orchestration for <span className="text-slate-900 font-extrabold">{stats?._businessName || 'your enterprise'}</span>. Monitoring customer acquisition, engagement pipelines, and digital isolation.
           </p>
         </div>
 
@@ -297,6 +320,23 @@ export default function OperationsNexus() {
             </section>
         </div>
       </div>
+      
+      {stats?._clientId && (
+        <div className="flex justify-center pt-8">
+          <div className="px-5 py-2.5 bg-slate-900/5 backdrop-blur-sm border border-slate-900/10 rounded-full flex items-center gap-4 shadow-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+                Direct Connection: <span className="text-slate-900 font-black">{stats._clientId}</span>
+              </span>
+            </div>
+            <div className="h-4 w-[1px] bg-slate-200" />
+            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest whitespace-nowrap">
+               Isolated Database: {stats._clientId}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -76,9 +76,13 @@ router.post('/super-admin/onboard', async (req, res) => {
 router.post('/login', async (req, res) => {
   const envRes = res as any;
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
     
-    const client = await Client.findOne({ email });
+    // Default role query to 'client' if not provided to not break API entirely
+    const targetRole = role || 'client';
+    
+    // Find client with matching email AND role
+    const client = await Client.findOne({ email, role: targetRole });
     if (!client) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -128,7 +132,12 @@ router.post('/login', async (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('admin_token');
+  res.clearCookie('admin_token', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    path: '/'
+  });
   res.json({ success: true });
 });
 

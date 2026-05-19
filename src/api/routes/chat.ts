@@ -1,6 +1,7 @@
 import express from 'express';
 import { Groq } from 'groq-sdk';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings } from '../models';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
@@ -101,7 +102,8 @@ router.post('/', async (req, res) => {
         email: 'hello@your-app.onrender.com',
         password: 'platform-internal-reserved',
         role: 'client',
-        status: 'active'
+        status: 'active',
+        apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
       });
       // Just proceed to create settings if needed
     }

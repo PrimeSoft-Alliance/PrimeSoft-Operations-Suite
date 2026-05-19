@@ -2,17 +2,41 @@ import express from 'express';
 import { Form, Lead, Client } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { GoogleGenAI } from '@google/genai';
+import { authMiddleware } from '../auth';
 
 const router = express.Router();
 
+router.use(authMiddleware);
+
+const getCid = (req: any) => {
+  const userCid = req.user?.clientId;
+  const reqCid = (req as any).clientId;
+  const queryCid = req.query.clientId;
+  const headerCid = req.headers['x-client-id'];
+
+  let cid = 'plumber-001';
+
+  if (req.user?.role === 'superadmin') {
+    cid = queryCid || headerCid || 'plumber-001';
+  } else {
+    cid = userCid || reqCid || 'plumber-001';
+  }
+
+  (req as any).clientId = cid;
+  return cid;
+};
+
 router.get('/', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const clientId = (req as any).clientId;
+  const clientId = getCid(req);
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
-    const forms = await Form.find({ clientId, status: 'active' });
-    envRes.sendSuccess(forms);
+    const [forms, client] = await Promise.all([
+      Form.find({ clientId, status: 'active' }),
+      Client.findOne({ clientId })
+    ]);
+    envRes.sendSuccess(forms, { clientId, businessName: client?.businessName });
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch forms');
   }
@@ -20,7 +44,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const clientId = (req as any).clientId;
+  const clientId = getCid(req);
   const { name, description, fields, tags, theme, expiresAt } = req.body;
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   if (!name) return envRes.sendError(422, 'VALIDATION_FAILED', 'name is required');
@@ -43,7 +67,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const clientId = (req as any).clientId;
+  const clientId = getCid(req);
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
@@ -70,7 +94,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const clientId = (req as any).clientId;
+  const clientId = getCid(req);
   try {
     await Form.findOneAndDelete({ _id: req.params.id, clientId });
     envRes.sendSuccess({ success: true });
@@ -81,7 +105,7 @@ router.delete('/:id', async (req, res) => {
 
 router.post('/generate-design', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const clientId = (req as any).clientId;
+  const clientId = getCid(req);
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {

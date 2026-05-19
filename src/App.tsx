@@ -54,7 +54,8 @@ export default function App() {
           <Route path="get-started" element={<PublicOnboarding />} />
         </Route>
         
-        <Route path="/login" element={<Login />} />
+        <Route path="/client/login" element={<Login loginRole="client" />} />
+        <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
         <Route path="/setup" element={<Setup />} />
         <Route path="/chatbot-mini" element={<ChatbotMini />} />
         <Route path="/onboarding/:token" element={<Onboarding />} />
@@ -78,6 +79,8 @@ export default function App() {
           <Route path="clients" element={<ClientsManager />} />
           <Route path="forms" element={<FormsManager />} />
           <Route path="leads" element={<LeadsManager />} />
+          <Route path="bookings" element={<BookingsManager />} />
+          <Route path="contacts" element={<ContactsManager />} />
           <Route path="onboarding" element={<OnboardingRequests />} />
           <Route path="prompts" element={<PromptGenerator />} />
           <Route path="domains" element={<DomainsManager />} />

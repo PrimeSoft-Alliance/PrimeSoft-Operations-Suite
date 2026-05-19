@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode, FileText, MessageSquare, Zap } from 'lucide-react';
+import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode, FileText, MessageSquare, Zap, Calendar, Contact } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -39,7 +39,7 @@ export default function SuperAdminLayout() {
 
   const handleLogout = async () => {
     await fetch('/v1/auth/logout', { method: 'POST' });
-    navigate('/login');
+    navigate('/admin/login');
   };
 
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -53,6 +53,8 @@ export default function SuperAdminLayout() {
     { icon: Sparkles, label: 'Prompt Engine', path: '/superadmin/prompts' },
     { icon: FileText, label: 'Forms', path: '/superadmin/forms' },
     { icon: MessageSquare, label: 'Leads', path: '/superadmin/leads' },
+    { icon: Calendar, label: 'Bookings', path: '/superadmin/bookings' },
+    { icon: Contact, label: 'Contacts', path: '/superadmin/contacts' },
     { icon: Globe, label: 'Domains', path: '/superadmin/domains' },
     { icon: BarChart3, label: 'Usage & Quotas', path: '/superadmin/usage' },
     { icon: ShieldCheck, label: 'Audit Logs', path: '/superadmin/logs' },
@@ -140,7 +142,7 @@ export default function SuperAdminLayout() {
             </h1>
           </div>
           <div className="flex items-center gap-6">
-             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors hidden sm:block">Return to Site</Link>
+             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors">Go to Homepage</Link>
              <div className="flex items-center gap-3 sm:gap-6 border-l pl-6 border-gray-100">
             <button className="relative text-gray-500 hover:text-indigo-600 transition hidden sm:block">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -30,17 +30,21 @@ export default function SettingsManager() {
 
   useEffect(() => {
     fetchDomains();
-    fetch('/v1/dashboard/settings')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to load settings');
+    fetch(`/v1/dashboard/settings?t=${Date.now()}`)
+      .then(async res => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error?.message || data.error || 'Failed to load settings');
+        }
         return res.json();
       })
       .then(data => {
         setLoading(false);
-        if (data?.success && data.data) {
-          setSettings(data.data);
-          if (data.data.adminEmail) {
-            setSecurityData(prev => ({ ...prev, email: data.data.adminEmail }));
+        const settingsData = data?.success && data.data ? data.data : data;
+        if (settingsData && typeof settingsData === 'object' && Object.keys(settingsData).length > 0) {
+          setSettings(settingsData);
+          if (settingsData.adminEmail) {
+            setSecurityData(prev => ({ ...prev, email: settingsData.adminEmail }));
           }
         } else {
           // Set default settings if none exist
@@ -49,6 +53,7 @@ export default function SettingsManager() {
       })
       .catch(err => {
         console.error('Settings load error:', err);
+        setSettings(null); // Triggers error UI
         setLoading(false);
       });
   }, []);
@@ -70,6 +75,7 @@ export default function SettingsManager() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error(err);
+      alert('Failed to save settings: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setSaving(false);
     }

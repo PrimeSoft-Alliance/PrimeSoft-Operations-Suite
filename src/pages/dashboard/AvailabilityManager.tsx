@@ -8,10 +8,11 @@ export default function AvailabilityManager() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    fetch('/v1/dashboard/settings')
+    fetch(`/v1/dashboard/settings?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
-        if (data?.success) setSettings(data.data);
+        const settingsData = data?.success && data.data ? data.data : data;
+        if (settingsData) setSettings(settingsData);
         setLoading(false);
       });
   }, []);

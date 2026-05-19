@@ -24,7 +24,10 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 
+import { useNavigate } from 'react-router-dom';
+
 export default function MissionControl() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'pipeline' | 'bookings' | 'contacts'>('pipeline');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState({
@@ -39,8 +42,8 @@ export default function MissionControl() {
       try {
         const [leadsRes, bookingsRes, contactsRes] = await Promise.all([
           fetch('/v1/super-admin/leads'),
-          fetch('/v1/super-admin/notifications'),
-          fetch('/v1/super-admin/clients')
+          fetch('/v1/super-admin/platform-bookings'),
+          fetch('/v1/super-admin/platform-contacts')
         ]);
 
         const leads = await leadsRes.json();
@@ -160,21 +163,29 @@ export default function MissionControl() {
                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Encrypting stream...</p>
                   </div>
                 ) : data[activeTab === 'pipeline' ? 'leads' : activeTab].length > 0 ? (
-                  data[activeTab === 'pipeline' ? 'leads' : activeTab].slice(0, 8).map((item: any, idx: number) => (
-                    <motion.div 
-                      key={idx}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between py-8 first:pt-0 last:pb-0 gap-6"
-                    >
+                  data[activeTab === 'pipeline' ? 'leads' : activeTab].slice(0, 8).map((item: any, idx: number) => {
+                    const itemName = item.fullName || item.name || item.customerName || item.title || (item.contactFirst ? `${item.contactFirst} ${item.contactLast}` : null) || 'Enterprise Inquiry';
+                    const itemEmail = item.email || item.contactEmail || item.customerEmail || 'Verified Partner';
+                    return (
+                      <motion.div 
+                        key={idx}
+                        onClick={() => {
+                          if (activeTab === 'bookings') navigate('/superadmin/bookings');
+                          else if (activeTab === 'contacts') navigate('/superadmin/contacts');
+                          else if (activeTab === 'pipeline') navigate('/superadmin/leads');
+                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="group flex flex-col sm:flex-row items-start sm:items-center justify-between py-8 first:pt-0 last:pb-0 gap-6 cursor-pointer"
+                      >
                       <div className="flex items-center gap-6">
                         <div className="w-16 h-16 bg-slate-50 rounded-[1.5rem] flex items-center justify-center text-xl font-black text-slate-300 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                           {item.name?.[0] || 'L'}
+                           {itemName[0]?.toUpperCase() || 'E'}
                         </div>
                         <div>
-                          <div className="font-black text-gray-900 text-lg tracking-tight group-hover:text-indigo-600 transition-colors">{item.name || item.title || 'Enterprise Inquiry'}</div>
+                          <div className="font-black text-gray-900 text-lg tracking-tight group-hover:text-indigo-600 transition-colors">{itemName}</div>
                           <div className="flex items-center gap-3 mt-1">
-                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.email || 'Verified Partner'}</div>
+                             <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{itemEmail}</div>
                              <span className="w-1 h-1 rounded-full bg-slate-200"></span>
                              <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Active</div>
                           </div>
@@ -182,15 +193,15 @@ export default function MissionControl() {
                       </div>
                       <div className="flex items-center gap-8 w-full sm:w-auto justify-between sm:justify-end">
                          <div className="text-right">
-                            <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">Lead Value</div>
-                            <div className="font-bold text-gray-900">$12,500</div>
+                            <div className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">Status</div>
+                            <div className="font-bold text-gray-900 capitalize">{item.status || 'Pending'}</div>
                          </div>
                          <button className="p-4 bg-slate-50 rounded-[1.2rem] text-slate-300 hover:bg-slate-900 hover:text-white transition-all group-hover:shadow-lg group-hover:scale-110">
                             <ChevronRight className="w-5 h-5" />
                          </button>
                       </div>
                     </motion.div>
-                  ))
+                  )})
                 ) : (
                   <div className="flex flex-col items-center justify-center py-32 text-center opacity-40">
                      <AlertCircle className="w-12 h-12 mb-4" />

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const bookingSchema = new mongoose.Schema({
   clientId: { type: String, required: true, default: 'plumber-001' },
@@ -11,6 +12,12 @@ const bookingSchema = new mongoose.Schema({
   preferredEndTime: { type: String, required: true },
   notes: { type: String },
   status: { type: String, enum: ['pending', 'confirmed', 'cancelled', 'completed'], default: 'pending' },
+  location: {
+    city: String,
+    country: String,
+    region: String,
+    ip: String
+  }
 }, { timestamps: true });
 
 export const Booking = mongoose.models.Booking || mongoose.model<any>('Booking', bookingSchema);
@@ -23,7 +30,13 @@ const contactSchema = new mongoose.Schema({
   subject: { type: String },
   message: { type: String, required: true },
   preferredContactMethod: { type: String, enum: ['email', 'phone'], default: 'email' },
-  status: { type: String, enum: ['unread', 'resolved'], default: 'unread' }
+  status: { type: String, enum: ['unread', 'resolved'], default: 'unread' },
+  location: {
+    city: String,
+    country: String,
+    region: String,
+    ip: String
+  }
 }, { timestamps: true });
 
 export const Contact = mongoose.models.Contact || mongoose.model<any>('Contact', contactSchema);
@@ -169,12 +182,12 @@ const clientSchema = new mongoose.Schema({
   clientId: { type: String, required: true, unique: true },
   businessName: { type: String, required: true },
   businessType: { type: String },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, required: true },
   password: { type: String, required: true },
   role: { type: String, enum: ['client', 'superadmin'], default: 'client' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: String, default: 'starter' },
-  apiKey: { type: String, unique: true, sparse: true },
+  apiKey: { type: String, default: () => 'psa_' + crypto.randomUUID() },
   subdomain: { type: String, unique: true, sparse: true },
   customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
@@ -303,15 +316,23 @@ export const Form = mongoose.models.Form || mongoose.model<any>('Form', formSche
 
 const leadSchema = new mongoose.Schema({
   clientId: { type: String, required: true },
-  formId: { type: String, required: true },
+  formId: { type: String },
   formName: { type: String },
+  source: { type: String, enum: ['form', 'booking', 'contact', 'manual'], default: 'form' },
   contactFirst: { type: String },
   contactLast: { type: String },
   contactEmail: { type: String },
   contactPhone: { type: String },
   data: { type: Map, of: mongoose.Schema.Types.Mixed },
   tags: [{ type: String }],
-  status: { type: String, enum: ['new', 'contacted', 'qualified', 'archived'], default: 'new' }
+  status: { type: String, enum: ['new', 'contacted', 'qualified', 'archived', 'very-strong'], default: 'new' },
+  location: {
+    city: String,
+    country: String,
+    region: String,
+    ip: String
+  },
+  lastActivity: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 export const Lead = mongoose.models.Lead || mongoose.model<any>('Lead', leadSchema);

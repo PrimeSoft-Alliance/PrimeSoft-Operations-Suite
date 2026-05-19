@@ -3,11 +3,126 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats } from '../models';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, addMinutes, format } from 'date-fns';
 
 const router = express.Router();
+
+// Helper to fetch geo-location from IP
+async function getGeoLocation(ip: string) {
+  if (!ip || ip === '::1' || ip === '127.0.0.1') return { ip, city: 'Local', country: 'Local', region: 'Local' };
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}`);
+    const data = await res.json();
+    if (data.status === 'success') {
+      return {
+        ip: data.query,
+        city: data.city,
+        country: data.country,
+        region: data.regionName
+      };
+    }
+  } catch (err) {
+    console.warn('[GEO] Failed to fetch location:', err);
+  }
+  return { ip, city: 'Unknown', country: 'Unknown', region: 'Unknown' };
+}
+
+// Helper to upsert a lead with deduplication
+async function upsertLead(params: {
+  clientId: string;
+  email: string;
+  phone: string;
+  name?: string;
+  source: 'form' | 'booking' | 'contact';
+  location: any;
+  data?: any;
+  tags?: string[];
+}) {
+  // Build query criteria for deduplication
+  const criteria: any = { clientId: params.clientId };
+  const or = [];
+  if (params.email && typeof params.email === 'string' && params.email.trim()) {
+    or.push({ contactEmail: params.email.trim() });
+  }
+  if (params.phone && typeof params.phone === 'string' && params.phone.trim()) {
+    or.push({ contactPhone: params.phone.trim() });
+  }
+  
+  let lead = null;
+  if (or.length > 0) {
+    lead = await Lead.findOne({ ...criteria, $or: or });
+  }
+
+  const [first, ...lastParts] = (params.name || '').split(' ');
+  const contactFirst = first || '';
+  const contactLast = lastParts.join(' ') || '';
+
+  // Extract form info if present in data
+  const formId = params.data?.formId;
+  const formName = params.data?.formName;
+
+  if (lead) {
+    // Update existing lead
+    lead.lastActivity = new Date();
+    // Append tags
+    const newTags = new Set([...(lead.tags || []), ...(params.tags || [])]);
+    if (params.source === 'booking') newTags.add('from booking');
+    if (params.source === 'contact') newTags.add('from contact');
+    
+    lead.tags = Array.from(newTags);
+    
+    // If it's a booking, it's very strong
+    if (params.source === 'booking') lead.status = 'very-strong';
+    
+    // Update location if it was unknown
+    if (lead.location?.city === 'Unknown' || !lead.location?.city) {
+      lead.location = params.location;
+    }
+    
+    // Update name if missing
+    if (!lead.contactFirst) lead.contactFirst = contactFirst;
+    if (!lead.contactLast) lead.contactLast = contactLast;
+
+    // Update form info if not set
+    if (formId && !lead.formId) lead.formId = formId;
+    if (formName && !lead.formName) lead.formName = formName;
+    
+    // Merge data
+    if (params.data) {
+      const existingData = lead.data instanceof Map ? Object.fromEntries(lead.data) : (lead.data || {});
+      lead.data = { ...existingData, ...params.data };
+    }
+    
+    await lead.save();
+    return lead;
+  } else {
+    // Create new lead
+    const tags = params.tags || [];
+    if (params.source === 'booking') tags.push('from booking');
+    if (params.source === 'contact') tags.push('from contact');
+
+    const status = params.source === 'booking' ? 'very-strong' : 'new';
+
+    return await Lead.create({
+      clientId: params.clientId,
+      formId,
+      formName,
+      contactFirst,
+      contactLast,
+      contactEmail: params.email,
+      contactPhone: params.phone,
+      source: params.source,
+      location: params.location,
+      tags,
+      status,
+      data: params.data || {},
+      lastActivity: new Date()
+    });
+  }
+}
+
 
 // Helper to resolve client identity from various signals
 async function resolveClientId(req: express.Request): Promise<string> {
@@ -287,7 +402,7 @@ router.post('/onboarding/:token', async (req, res) => {
         clientId: link.clientId,
         businessName,
         businessType,
-        subdomain,
+        ...(subdomain ? { subdomain } : {}),
         email,
         password: hash,
         customFields,
@@ -296,7 +411,7 @@ router.post('/onboarding/:token', async (req, res) => {
     } else {
       client.businessName = businessName || client.businessName;
       client.businessType = businessType || client.businessType;
-      client.subdomain = subdomain || client.subdomain;
+      if (subdomain) client.subdomain = subdomain;
       client.password = hash;
       client.customFields = { ...client.customFields, ...customFields };
       if (email) client.email = email;
@@ -322,8 +437,8 @@ router.post('/onboarding/:token', async (req, res) => {
       await UsageStats.create({
         clientId: link.clientId,
         month: currentMonth,
-        aiMessageCount: 0,
-        storageUsedBytes: 0,
+        aiMessagesUsed: 0,
+        storageBytesUsed: 0,
       });
     }
 
@@ -471,12 +586,33 @@ router.post('/booking', async (req, res) => {
     const endTimeDate = addMinutes(startDate, duration);
     const preferredEndTime = format(endTimeDate, 'HH:mm');
 
+    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+    const location = await getGeoLocation(ip.split(',')[0].trim());
+
     const booking = await Booking.create({
       clientId,
       fullName, phoneNumber, email, serviceSelection,
       preferredDate: startOfDay(startDate),
       preferredStartTime, preferredEndTime, notes,
-      status: 'pending'
+      status: 'pending',
+      location
+    });
+
+    // Sync to Leads with higher priority
+    await upsertLead({
+      clientId,
+      email,
+      phone: phoneNumber,
+      name: fullName,
+      source: 'booking',
+      location,
+      data: { 
+        lastServiceRequested: serviceSelection,
+        bookingId: booking._id,
+        preferredDate,
+        preferredStartTime
+      },
+      tags: ['high-intent', 'booking-submission']
     });
 
     sendEmail(settings.contactEmail, 'External Booking Received', `New booking: ${fullName}\nService: ${serviceSelection}`);
@@ -497,13 +633,33 @@ router.post('/contact', async (req, res) => {
     if (!client || client.status === 'suspended') {
       return envRes.sendError(403, 'API_ERROR', 'This business is currently not accepting messages.');
     }
-    const { name, email, phone, message, preferredContactMethod } = req.body;
+    const { name, email, phone, message, preferredContactMethod, subject } = req.body;
 
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Client not found');
 
+    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+    const location = await getGeoLocation(ip.split(',')[0].trim());
+
     const contact = await Contact.create({
-      clientId, name, email, phone, message, preferredContactMethod
+      clientId, name, email, phone, message, preferredContactMethod, subject,
+      location
+    });
+
+    // Sync to Leads
+    await upsertLead({
+      clientId,
+      email,
+      phone,
+      name,
+      source: 'contact',
+      location,
+      data: {
+        lastMessage: message,
+        subject: subject || 'No subject',
+        contactId: contact._id
+      },
+      tags: ['contact-submission']
     });
 
     sendEmail(settings.contactEmail, 'New Website Message', `From: ${name} (${email})\n\n${message}`);
@@ -514,6 +670,7 @@ router.post('/contact', async (req, res) => {
     envRes.sendError(500, 'API_ERROR', 'Message failed' + ': ' + err.message);
   }
 });
+
 
 // Public Form Fetching
 router.get('/forms/:formId', async (req, res) => {
@@ -559,16 +716,23 @@ router.post('/forms/:formId/submit', async (req, res) => {
     const contactEmail = data.email || data.emailAddress || '';
     const contactPhone = data.phone || data.phoneNumber || '';
 
-    const lead = await mongoose.models.Lead.create({
+    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+    const location = await getGeoLocation(ip.split(',')[0].trim());
+
+    // Upsert Lead with deduplication
+    const lead = await upsertLead({
       clientId: form.clientId,
-      formId: form._id,
-      formName: form.name,
-      contactFirst,
-      contactLast,
-      contactEmail,
-      contactPhone,
-      data,
-      tags: form.tags || []
+      email: contactEmail,
+      phone: contactPhone,
+      name: `${contactFirst} ${contactLast}`.trim(),
+      source: 'form',
+      location,
+      tags: [...(form.tags || []), 'form-submission'],
+      data: {
+        ...data,
+        formId: form._id,
+        formName: form.name
+      }
     });
 
     const settings = await Settings.findOne({ clientId: form.clientId });
@@ -638,7 +802,7 @@ router.post('/ai/chat', async (req, res) => {
     const currentMonth = format(new Date(), 'yyyy-MM');
     await UsageStats.updateOne(
       { clientId, month: currentMonth },
-      { $inc: { aiMessageCount: 1 } },
+      { $inc: { aiMessagesUsed: 1 } },
       { upsert: true }
     );
 

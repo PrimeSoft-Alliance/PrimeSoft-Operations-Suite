@@ -36,7 +36,7 @@ export default function Booking() {
       .then(async res => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || `Server returned ${res.status}`);
+          throw new Error(data.error?.message || data.error || `Server returned ${res.status}`);
         }
         return res.json();
       })
@@ -76,7 +76,7 @@ export default function Booking() {
         const text = await res.text();
         try {
           const json = JSON.parse(text);
-          throw new Error(json.error || 'Failed to check availability');
+          throw new Error(json.error?.message || json.error || 'Failed to check availability');
         } catch {
           throw new Error('Failed to check availability (Server Error)');
         }

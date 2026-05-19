@@ -1,7 +1,7 @@
 import express from 'express';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
-import { Booking, Contact, Settings, UsageStats, AILog, Client } from '../models';
+import { Booking, Contact, Settings, UsageStats, AILog, Client, Lead } from '../models';
 import { authMiddleware } from '../auth';
 import { sendEmail } from '../email';
 
@@ -66,7 +66,25 @@ router.post('/upload-image', async (req, res) => {
 });
 
 // Helper to get clientId
-const getCid = (req: any) => req.user.clientId;
+const getCid = (req: any) => {
+  const userCid = req.user?.clientId;
+  const reqCid = (req as any).clientId;
+  const queryCid = req.query.clientId;
+  const headerCid = req.headers['x-client-id'];
+
+  let cid = 'plumber-001';
+
+  // If user is superadmin, prioritize query/header or fallback to plumber-001
+  if (req.user?.role === 'superadmin') {
+    cid = queryCid || headerCid || 'plumber-001';
+  } else {
+    // Prefer authenticated user CID, then request CID, then finally fallback
+    cid = userCid || reqCid || 'plumber-001';
+  }
+
+  (req as any).clientId = cid;
+  return cid;
+};
 
 // Test SMTP
 router.post('/test-email', async (req, res) => {
@@ -88,7 +106,7 @@ router.post('/test-email', async (req, res) => {
     if (result.success) {
       envRes.sendSuccess({ message: 'Test email sent. Please check your inbox (and spam folder).'  });
     } else {
-      res.status(500).json({ success: false, error: 'SMTP Authentication Failed', details: result.error });
+      envRes.sendError(500, 'SMTP_FAILED', 'SMTP Authentication Failed', result.error);
     }
   } catch (error) {
     console.error('SMTP Test Error:', error);
@@ -102,29 +120,43 @@ router.get('/stats', async (req, res) => {
   try {
     const clientId = getCid(req);
     const client = await Client.findOne({ clientId });
-    const totalBookings = await Booking.countDocuments({ clientId });
-    const pendingBookings = await Booking.countDocuments({ clientId, status: 'pending' });
-    const totalContacts = await Contact.countDocuments({ clientId });
-    const unreadContacts = await Contact.countDocuments({ clientId, status: 'unread' });
+    
+    // Fetch data points for overview
+    const [totalBookings, pendingBookings, totalContacts, unreadContacts, totalLeads] = await Promise.all([
+      Booking.countDocuments({ clientId }),
+      Booking.countDocuments({ clientId, status: 'pending' }),
+      Contact.countDocuments({ clientId }),
+      Contact.countDocuments({ clientId, status: 'unread' }),
+      Lead.countDocuments({ clientId })
+    ]);
     
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let usage = await UsageStats.findOne({ clientId, month: currentMonth });
+    
+    console.log(`[STATS] Usage for ${clientId}:`, usage);
 
-    res.json({
+    const statsData = {
+      businessName: client?.businessName || 'Business',
       totalBookings,
       pendingBookings,
       totalContacts,
       unreadContacts,
+      totalLeads,
       usage: {
-        aiMessagesUsed: usage?.aiMessagesUsed || 0,
-        aiMessagesLimit: clientId === 'plumber-001' ? 999999999 : (client?.aiMessageLimit || 1000),
-        storageBytesUsed: usage?.storageBytesUsed || 0,
-        storageBytesLimit: clientId === 'plumber-001' ? 999999999999 : (client?.storageLimitBytes || 52428800)
+        aiMessagesUsed: usage?.aiMessagesUsed ?? 0,
+        aiMessagesLimit: clientId === 'plumber-001' ? 999999999 : (client?.aiMessageLimit ?? 1000),
+        storageBytesUsed: usage?.storageBytesUsed ?? 0,
+        storageBytesLimit: clientId === 'plumber-001' ? 999999999999 : (client?.storageLimitBytes ?? 52428800)
       }
-    });
+    };
+    
+    console.log(`[STATS] StatsData:`, statsData);
+
+    envRes.sendSuccess(statsData, { clientId, businessName: client?.businessName });
   } catch (error) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to load stats');
+    console.error('[DASHBOARD STATS] Error:', error);
+    envRes.sendError(500, 'API_ERROR', 'Failed to load dashboard statistics');
   }
 });
 
@@ -166,10 +198,12 @@ router.delete('/domains/:id', async (req, res) => {
 router.get('/bookings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    console.log('Fetching bookings for CID:', getCid(req));
-    const bookings = await Booking.find({ clientId: getCid(req) }).sort({ createdAt: -1 });
-    console.log('Bookings found:', bookings.length);
-    envRes.sendSuccess(bookings);
+    const cid = getCid(req);
+    const [bookings, client] = await Promise.all([
+      Booking.find({ clientId: cid }).sort({ createdAt: -1 }),
+      Client.findOne({ clientId: cid })
+    ]);
+    envRes.sendSuccess(bookings, { clientId: cid, businessName: client?.businessName });
   } catch (error) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
@@ -186,8 +220,12 @@ router.patch('/bookings/:id/status', async (req, res) => {
 router.get('/contacts', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const contacts = await Contact.find({ clientId: getCid(req) }).sort({ createdAt: -1 });
-    envRes.sendSuccess(contacts);
+    const cid = getCid(req);
+    const [contacts, client] = await Promise.all([
+      Contact.find({ clientId: cid }).sort({ createdAt: -1 }),
+      Client.findOne({ clientId: cid })
+    ]);
+    envRes.sendSuccess(contacts, { clientId: cid, businessName: client?.businessName });
   } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 

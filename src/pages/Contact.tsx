@@ -80,10 +80,13 @@ export default function Contact() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...formData, clientId })
       });
-      if (!res.ok) throw new Error('Submission failed');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error?.message || data.error || 'Submission failed');
+      }
       setSuccess(true);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || String(err));
     } finally {
       setSubmitting(false);
     }

@@ -43,5 +43,5 @@ export function useClientId() {
       });
   }, []);
 
-  return clientId;
+  return { clientId };
 }

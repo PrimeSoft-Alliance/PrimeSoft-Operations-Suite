@@ -27,6 +27,11 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
          (req as any).clientId = req.headers['x-client-id'];
          return next();
       }
+      
+      const envRes = res as any;
+      if (typeof envRes.sendError === 'function') {
+        return envRes.sendError(401, 'UNAUTHORIZED', 'Authentication token missing');
+      }
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -38,6 +43,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     // Global maintenance check
     const platformSettings = await PlatformSettings.findOne();
     if (platformSettings?.maintenanceMode && decoded.role !== 'superadmin') {
+      const envRes = res as any;
+      if (typeof envRes.sendError === 'function') {
+        return envRes.sendError(503, 'MAINTENANCE', 'System is under maintenance');
+      }
       res.status(503).json({ error: 'System is under maintenance' });
       return;
     }
@@ -46,6 +55,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     if (decoded.role === 'client' || decoded.clientId) {
       const client = await Client.findOne({ clientId: decoded.clientId });
       if (client?.status === 'suspended') {
+        const envRes = res as any;
+        if (typeof envRes.sendError === 'function') {
+          return envRes.sendError(403, 'SUSPENDED', 'Account suspended');
+        }
         res.status(403).json({ error: 'Account suspended' });
         return;
       }
@@ -53,6 +66,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
+    const envRes = res as any;
+    if (typeof envRes.sendError === 'function') {
+      return envRes.sendError(401, 'INVALID_TOKEN', 'Session expired or invalid token');
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 };

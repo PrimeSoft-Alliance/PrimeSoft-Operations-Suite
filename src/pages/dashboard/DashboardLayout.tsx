@@ -14,12 +14,12 @@ export default function DashboardLayout() {
     fetch('/v1/auth/check')
       .then(res => res.json())
       .then(data => {
-        if (!data.authenticated) navigate('/login');
+        if (!data.authenticated) navigate('/client/login');
         else setLoading(false);
       })
       .catch((err) => {
         console.error('Auth check failed:', err);
-        navigate('/login');
+        navigate('/client/login');
       });
 
     // Also fetch public settings for branding (favicon)
@@ -47,7 +47,7 @@ export default function DashboardLayout() {
 
   const handleLogout = async () => {
     await fetch('/v1/auth/logout', { method: 'POST' });
-    navigate('/login');
+    navigate('/client/login');
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -146,7 +146,7 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors hidden sm:block">Return to Site</Link>
+             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors">Go to Homepage</Link>
              <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 transition-colors lg:hidden"><LogOut className="w-5 h-5" /></button>
           </div>
         </header>
