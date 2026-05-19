@@ -9,7 +9,13 @@ router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
     const { name, email, phone, subject, message, preferredContactMethod, clientId: bodyClientId } = req.body;
-    const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+
+    // Fix: Ensure clientId is a string if it was passed as an object
+    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
+      clientId = (clientId as any).clientId;
+    }
+    clientId = String(clientId);
 
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
 
@@ -33,11 +39,6 @@ router.post('/', async (req, res) => {
     const clientRecord = await Client.findOne({ clientId });
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
 
-    // Unlimited for super admin
-    if (clientId === 'plumber-001') {
-      storageLimit = 999999999999;
-    }
-
     if (usage.storageBytesUsed >= storageLimit) {
       return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new messages right now.');
     }
@@ -60,10 +61,11 @@ router.post('/', async (req, res) => {
       );
     }
 
+    const businessName = settings?.businessName || 'our team';
     sendEmail(
       email,
-      'We received your message',
-      `Hello ${name},\n\nWe received your message and will get back to you shortly.\n\nThank you.`,
+      `Message Received - ${businessName}`,
+      `Hello ${name},\n\nWe received your message and will get back to you shortly.\n\nThank you,\n${businessName}`,
       undefined,
       clientId
     );

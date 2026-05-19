@@ -57,7 +57,7 @@ router.post('/upload-url', async (req, res) => {
     // In a real system, we generate AWS S3 Signed URL here. 
     // Mocking it:
     // Use dynamic domain from request
-    const domain = req.get('host') || 'your-app.onrender.com';
+    const domain = req.get('host') || 'your-platform.com';
     const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
     const baseUrl = `${protocol}://${domain}`;
 

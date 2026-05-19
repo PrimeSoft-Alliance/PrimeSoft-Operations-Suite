@@ -12,7 +12,7 @@ import BackButton from './BackButton';
 
 export default function Layout() {
   const { pathname } = useLocation();
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     fetch(`/v1/public/settings?clientId=${clientId}`)

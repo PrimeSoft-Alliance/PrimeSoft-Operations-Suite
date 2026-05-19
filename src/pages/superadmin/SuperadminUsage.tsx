@@ -57,8 +57,8 @@ export default function SuperadminUsage() {
   };
 
   const filteredClients = clients.filter(c => 
-    c.clientId.toLowerCase().includes(search.toLowerCase()) || 
-    c.businessName.toLowerCase().includes(search.toLowerCase())
+    (c.clientId || '').toLowerCase().includes((search || '').toLowerCase()) || 
+    (c.businessName || '').toLowerCase().includes((search || '').toLowerCase())
   );
 
   if (loading && clients.length === 0) return <div className="p-8 font-bold text-indigo-600 animate-pulse">Syncing usage metrics...</div>;
@@ -313,7 +313,7 @@ export default function SuperadminUsage() {
               <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
                 <div>
                    <h3 className="text-2xl font-black">Platform Quota Policy</h3>
-                   <p className="text-indigo-100 text-sm font-bold mt-1 tracking-tight">PrimeSoft Alliance Architecture v1.4</p>
+                   <p className="text-indigo-100 text-sm font-bold mt-1 tracking-tight">Platform Architecture v1.4</p>
                 </div>
                 <button 
                   onClick={() => setShowPolicyModal(false)}

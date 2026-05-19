@@ -9,7 +9,7 @@ import { useClientId } from '../lib/useClientId';
 export default function Booking() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const clientId = useClientId();
+  const { clientId } = useClientId();
   const [services, setServices] = useState<any[]>([]);
   const [selectedService, setSelectedService] = useState(searchParams.get('service') || '');
   const [date, setDate] = useState<Date>(new Date());

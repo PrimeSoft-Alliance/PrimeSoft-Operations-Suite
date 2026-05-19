@@ -6,24 +6,20 @@ import { useClientId } from '../lib/useClientId';
 
 export default function Services() {
   const [services, setServices] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
         const payload = data?.success ? data.data : data;
+        setSettings(payload);
         if (payload?.services) {
           setServices(payload.services);
         } else {
-          // Robust defaults if empty
-          setServices([
-            { name: 'Custom AI Solutions', description: 'Deploying state-of-the-art Gemini models to automate your operations and gain predictive insights.', price: 5000, durationMinutes: 120 },
-            { name: 'Enterprise Platforms', description: 'Robust, scalable backend architectures built with industry-standard security and high availability.', price: 3500, durationMinutes: 240 },
-            { name: 'Digital Ecosystems', description: 'Seamlessly integrated web and mobile experiences that connect your business with your users.', price: 2500, durationMinutes: 120 },
-            { name: 'Strategy & Consulting', description: 'Expert technical roadmap planning to navigate your digital transformation journey with confidence.', price: 1500, durationMinutes: 60 },
-          ]);
+          setServices([]);
         }
         setLoading(false);
       })
@@ -51,9 +47,9 @@ export default function Services() {
           animate={{ opacity: 1, y: 0 }}
           className="max-w-3xl mb-16 mx-auto text-center"
         >
-          <span className="inline-block py-1 px-3 rounded-md bg-blue-100 text-blue-700 text-sm font-semibold tracking-wider mb-4">OUR SOLUTIONS</span>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">Software & IT Services</h1>
-          <p className="text-lg text-gray-500 font-light">End-to-end digital services tailored for your growth and transformation.</p>
+          <span className="inline-block py-1 px-3 rounded-md bg-blue-100 text-blue-700 text-sm font-semibold tracking-wider mb-4">{settings?.servicesBadge || 'OUR SOLUTIONS'}</span>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight mb-4">{settings?.servicesTitle || 'Software & IT Services'}</h1>
+          <p className="text-lg text-gray-500 font-light">{settings?.servicesSubtitle || 'End-to-end digital services tailored for your growth and transformation.'}</p>
         </motion.div>
 
         {loading ? (

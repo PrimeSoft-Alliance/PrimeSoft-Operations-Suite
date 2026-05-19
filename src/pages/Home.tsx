@@ -8,11 +8,10 @@ import { useClientId } from '../lib/useClientId';
 
 export default function Home() {
   const [settings, setSettings] = useState<any>(null);
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     // For the main company site, we prioritize the Platform Admin profile.
-    // If not resolving specifically via clientId from URL/Domain, we check 'plumber-001' or similar defaults.
     fetch(`/v1/public/settings?clientId=${clientId}`)
       .then(res => res.json())
       .then(data => {
@@ -22,16 +21,11 @@ export default function Home() {
       .catch(console.error);
   }, [clientId]);
 
-  const businessName = settings?.businessName || 'PrimeSoft Alliance';
-  const heroTitle = settings?.heroTitle || 'Architecting the Future of Enterprise Software';
-  const heroSubtitle = settings?.heroSubtitle || `At ${businessName}, we specialize in building high-performance digital ecosystems. From AI-driven automation to custom enterprise platforms, we turn complex visions into robust reality.`;
+  const businessName = settings?.businessName || '';
+  const heroTitle = settings?.heroTitle || 'Architecting Tomorrow';
+  const heroSubtitle = settings?.heroSubtitle || 'We build high-performance software for visionary companies.';
 
-  const services = settings?.services?.length > 0 ? settings.services : [
-    { name: 'Custom AI Solutions', description: 'Deploying state-of-the-art Gemini models to automate your operations and gain predictive insights.', icon: Zap },
-    { name: 'Enterprise Platforms', description: 'Robust, scalable backend architectures built with industry-standard security and high availability.', icon: Shield },
-    { name: 'Digital Ecosystems', description: 'Seamlessly integrated web and mobile experiences that connect your business with your users.', icon: Globe },
-    { name: 'Strategy & Consulting', description: 'Expert technical roadmap planning to navigate your digital transformation journey with confidence.', icon: Database },
-  ];
+  const services = settings?.services || [];
 
   const fadeUpVariant = {
     hidden: { opacity: 0, y: 30 },
@@ -66,7 +60,7 @@ export default function Home() {
           >
             <motion.div variants={fadeUpVariant} className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] mb-10 shadow-sm">
               <span className="flex w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
-              Engineering Excellence
+              {settings?.heroBadge || 'Engineering Excellence'}
             </motion.div>
 
             <motion.h1 variants={fadeUpVariant} className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 tracking-tight leading-[0.9] mb-10">
@@ -91,23 +85,22 @@ export default function Home() {
               </Link>
             </motion.div>
             
-            <motion.div variants={fadeUpVariant} className="mt-24 grid grid-cols-2 md:grid-cols-3 gap-12 sm:gap-20 border-t border-gray-50 pt-16 w-full">
-              {(settings?.clientStats?.length > 0 ? settings.clientStats : [
-                { label: "AI Deployments", value: "450+" },
-                { label: "Cloud Uptime", value: "99.99%" },
-                { label: "ROI Driven", value: "$12M+" }
-              ]).map((stat: any, idx: number) => (
-                <div key={idx} className={cn("text-center", idx === 2 ? "hidden md:block" : "")}>
-                  <div className="text-4xl font-black text-gray-900 mb-2 tracking-tighter">{stat.value}</div>
-                  <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">{stat.label}</div>
-                </div>
-              ))}
-            </motion.div>
+            {settings?.clientStats?.length > 0 && (
+                <motion.div variants={fadeUpVariant} className="mt-24 grid grid-cols-2 md:grid-cols-3 gap-12 sm:gap-20 border-t border-gray-50 pt-16 w-full">
+                {settings.clientStats.map((stat: any, idx: number) => (
+                    <div key={idx} className={cn("text-center", idx === 2 ? "hidden md:block" : "")}>
+                    <div className="text-4xl font-black text-gray-900 mb-2 tracking-tighter">{stat.value}</div>
+                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">{stat.label}</div>
+                    </div>
+                ))}
+                </motion.div>
+            )}
           </motion.div>
         </div>
       </section>
 
       {/* Services Preview */}
+      {services.length > 0 && (
       <section className="py-24 bg-slate-50 relative overflow-hidden">
         <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -118,8 +111,8 @@ export default function Home() {
             variants={fadeUpVariant}
             className="text-center mb-16"
           >
-            <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3 text-shadow-sm">Our Expertise</h2>
-            <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">Comprehensive Services</h2>
+            <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3 text-shadow-sm">{settings?.servicesBadge || 'OUR SOLUTIONS'}</h2>
+            <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">{settings?.servicesTitle || 'Software & IT Services'}</h2>
           </motion.div>
           
           <motion.div 
@@ -160,6 +153,7 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+      )}
 
       {/* Portfolio Section */}
       {settings?.portfolioProjects?.length > 0 && (
@@ -172,8 +166,8 @@ export default function Home() {
               variants={fadeUpVariant}
               className="text-center mb-16"
             >
-              <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3">Portfolio</h2>
-              <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">Recent Projects</h2>
+              <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3">{settings?.portfolioBadge || 'Portfolio'}</h2>
+              <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">{settings?.portfolioTitle || 'Recent Projects'}</h2>
             </motion.div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -219,7 +213,7 @@ export default function Home() {
             >
               <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-blue-50 transform translate-x-4 translate-y-4 rounded-[2.5rem] -z-10"></div>
               <img 
-                src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&q=80" 
+                src={settings?.trustImage || "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&q=80"} 
                 alt="Tech Team Collaboration" 
                 className="w-full h-full object-cover rounded-[2rem] shadow-xl border border-white"
               />
@@ -228,8 +222,8 @@ export default function Home() {
                   <Shield className="w-6 h-6" />
                 </div>
                 <div>
-                  <div className="font-bold text-gray-900">Secure & Robust</div>
-                  <div className="text-sm text-gray-500">Enterprise-grade security</div>
+                  <div className="font-bold text-gray-900">{settings?.trustCardTitle || 'Enterprise Ready'}</div>
+                  <div className="text-sm text-gray-500">{settings?.trustCardSubtitle || 'Security Verified'}</div>
                 </div>
               </div>
             </motion.div>
@@ -239,17 +233,17 @@ export default function Home() {
               viewport={{ once: true }}
               variants={staggerContainer}
             >
-              <motion.h2 variants={fadeUpVariant} className="text-4xl font-extrabold text-gray-900 tracking-tight mb-6">Built on Trust and Reliability</motion.h2>
+              <motion.h2 variants={fadeUpVariant} className="text-4xl font-extrabold text-gray-900 tracking-tight mb-6">{settings?.trustTitle || 'Built on Trust'}</motion.h2>
               <motion.p variants={fadeUpVariant} className="text-lg text-gray-600 mb-8 leading-relaxed">
-                We believe in doing things right the first time. Our team is equipped with the best tools and training to ensure your digital infrastructure works perfectly.
+                {settings?.trustDescription || 'We deliver software that powers mission-critical operations worldwide.'}
               </motion.p>
               <motion.ul variants={staggerContainer} className="space-y-4">
-                {[
-              "Modern tech stack selection",
-              "Agile development methodology",
-              "Post-deployment support & maintenance",
-              "Enterprise-ready scalability"
-                ].map((item, idx) => (
+                {(settings?.trustPoints || [
+                  "Modern tech stack selection",
+                  "Agile development methodology",
+                  "Post-deployment support & maintenance",
+                  "Enterprise-ready scalability"
+                ]).map((item: string, idx: number) => (
                   <motion.li variants={fadeUpVariant} key={idx} className="flex items-center text-gray-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <CheckCircle className="w-6 h-6 text-emerald-500 mr-3 flex-shrink-0" />
                     {item}
@@ -272,7 +266,7 @@ export default function Home() {
             variants={fadeUpVariant}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">What Our Clients Say</h2>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">{settings?.testimonialsTitle || 'Client Success'}</h2>
           </motion.div>
           <motion.div 
             initial="hidden"
@@ -281,11 +275,11 @@ export default function Home() {
             variants={staggerContainer}
             className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
-            {[
-              { text: "PrimeSoft Alliance transformed our legacy systems into a modern cloud platform. Their speed and precision are unmatched.", name: "Sarah Jenkins", role: "CTO, TechFlow", initials: "SJ" },
-              { text: "The cross-platform mobile app they built for us has doubled our user engagement. Professional and visionary.", name: "Michael Ross", role: "CEO, Streamline", initials: "MR" },
-              { text: "Best IT consulting we've ever had. They actually understand business goals, not just code.", name: "David Thompson", role: "Director, Global Ops", initials: "DT", hideMobile: true }
-            ].map((t, i) => (
+            {(settings?.testimonials || [
+              { text: "This platform transformed our legacy systems into a modern cloud environment. Their speed and precision are unmatched.", name: "Sarah Jenkins", role: "CTO", initials: "SJ" },
+              { text: "The solution they built for us has doubled our user engagement. Professional and visionary team.", name: "Michael Ross", role: "CEO", initials: "MR" },
+              { text: "Best consulting we've ever had. They actually understand business goals, not just code.", name: "David Thompson", role: "Director", initials: "DT", hideMobile: true }
+            ]).map((t: any, i: number) => (
               <motion.div 
                 key={i}
                 variants={fadeUpVariant}
@@ -297,7 +291,7 @@ export default function Home() {
                 </div>
                 <p className="text-slate-300 mb-8 font-medium italic leading-relaxed">"{t.text}"</p>
                 <div className="flex items-center space-x-4 mt-auto">
-                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-lg font-bold text-white shadow-inner">{t.initials}</div>
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-lg font-bold text-white shadow-inner">{t.initials || (t.name ? t.name[0] : 'U')}</div>
                   <div>
                     <p className="font-bold text-white">{t.name}</p>
                     <p className="text-sm opacity-80">{t.role}</p>
@@ -321,14 +315,14 @@ export default function Home() {
           variants={fadeUpVariant}
           className="relative max-w-4xl mx-auto px-4 text-center z-10"
         >
-          <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">Ready to build your digital future?</h2>
-          <p className="text-xl text-white opacity-90 mb-10 font-light">Our solution architects are ready to discuss your next big project.</p>
+          <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">{settings?.ctaTitle || 'Ready to Scale?'}</h2>
+          <p className="text-xl text-white opacity-90 mb-10 font-light">{settings?.ctaSubtitle || 'Our architects are ready to build your next generation platform.'}</p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link to="/booking" className="inline-flex justify-center items-center px-8 py-4 bg-white text-primary font-bold rounded-xl shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 hover:-translate-y-1 transition-all group">
-              Start Project <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              {settings?.ctaPrimaryBtn || 'Start Project'} <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link to="/contact" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
-              <PhoneCall className="mr-2 w-5 h-5" /> Contact Us
+              <PhoneCall className="mr-2 w-5 h-5" /> {settings?.ctaSecondaryBtn || 'Contact Sales'}
             </Link>
           </div>
         </motion.div>

@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export default function DashboardLayout() {
@@ -12,14 +12,18 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     fetch('/v1/auth/check')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         if (!data.authenticated) navigate('/client/login');
         else setLoading(false);
       })
       .catch((err) => {
         console.error('Auth check failed:', err);
-        navigate('/client/login');
+        // Do not navigate immediately, let the user see the error or stay on the page for debugging
+        // navigate('/client/login');
       });
 
     // Also fetch public settings for branding (favicon)
@@ -59,7 +63,9 @@ export default function DashboardLayout() {
     { name: 'Contacts', path: '/dashboard/contacts', icon: MessageSquare },
     { name: 'Forms', path: '/dashboard/forms', icon: FileText },
     { name: 'Leads', path: '/dashboard/leads', icon: Users },
+    { name: 'Support Tickets', path: '/dashboard/tickets', icon: MessageSquare },
     { name: 'Headless API', path: '/dashboard/developer', icon: Cpu },
+    { name: 'Website Manager', path: '/dashboard/website', icon: Globe },
     { name: 'Availability', path: '/dashboard/availability', icon: CalendarDays },
     { name: 'Email Config', path: '/dashboard/email-templates', icon: MessageSquare },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },
@@ -86,7 +92,7 @@ export default function DashboardLayout() {
             <div className="bg-indigo-600 p-1.5 rounded-lg text-white shrink-0">
               <Cpu className="w-5 h-5" />
             </div>
-            {(!isSidebarCollapsed || isMobileMenuOpen) && <span className="font-bold text-lg text-white tracking-tight truncate">PrimeSoft Alliance</span>}
+            {(!isSidebarCollapsed || isMobileMenuOpen) && <span className="font-bold text-lg text-white tracking-tight truncate">Nexus Platform</span>}
           </div>
           <button 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}

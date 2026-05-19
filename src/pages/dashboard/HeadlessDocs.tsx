@@ -52,7 +52,7 @@ export default function HeadlessDocs() {
           </div>
           <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Platform Integration</h1>
           <p className="text-gray-500 text-lg max-w-2xl">
-            PrimeSoft Alliance is a hybrid platform. Use our dashboard for management while serving your brand via Headless APIs or our intelligent Client SDK.
+            Our platform is a hybrid architecture. Use our dashboard for management while serving your brand via Headless APIs or our intelligent Client SDK.
           </p>
         </div>
         <div className="flex gap-3">
@@ -189,7 +189,7 @@ fetch('${window.location.origin}/v1/public/content?clientId=${clientId}')
           </div>
           <div className="shrink-0 flex flex-col sm:flex-row gap-4">
             <button className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2 justify-center">
-              Partner with PSA Engineers
+              Partner with our Engineers
             </button>
             <button className="bg-white/10 text-white border border-white/20 backdrop-blur-md px-8 py-4 rounded-2xl font-bold hover:bg-white/20 transition-all flex items-center gap-2 justify-center">
               Review API Docs v1.2

@@ -159,7 +159,7 @@ export default function Onboarding() {
                 <input
                   required
                   type="text"
-                  placeholder="e.g. PrimeSoft Alliance"
+                  placeholder="e.g. Acme Corp"
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary outline-none transition-all"
                   value={formData.businessName}
                   onChange={e => setFormData({...formData, businessName: e.target.value})}

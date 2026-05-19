@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Phone, MapPin, Send, Loader2, CheckCircle2, MessageSquare, Globe, ArrowRight } from 'lucide-react';
 import { useClientId } from '../lib/useClientId';
 import { cn } from '../lib/utils';
+import MapComponent from '../components/Map';
 
 export default function Contact() {
-  const clientId = useClientId();
+  const { clientId } = useClientId();
+  const [settings, setSettings] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -20,6 +22,21 @@ export default function Contact() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch(`/v1/public/settings?clientId=${clientId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data?.success) setSettings(data.data);
+        else setSettings(data);
+      })
+      .catch(console.error);
+  }, [clientId]);
+
+  const businessName = settings?.businessName || 'Business Hub';
+  const businessEmail = settings?.email || 'admin@example.com';
+  const businessPhone = settings?.phone || '+1 (555) 000-0000';
+  const businessAddress = settings?.address || 'Global Hub';
 
   const validateField = (name: string, value: string) => {
     switch (name) {
@@ -137,19 +154,19 @@ export default function Contact() {
                   Connect With Us
                </span>
                <h1 className="text-6xl sm:text-7xl font-black text-gray-900 tracking-tight leading-[0.9]">
-                  Let's Build <br /><span className="text-indigo-600">Together</span>.
+                  {settings?.contactTitle || "Let's Build"} <br /><span className="text-indigo-600">{settings?.contactHighlight || "Together"}</span>.
                </h1>
                <p className="text-xl text-gray-400 font-medium tracking-tight max-w-xl leading-relaxed">
-                  Ready to deploy something extraordinary? Our technical team is standing by to roadmap your transformation.
+                  {settings?.contactSubtitle || "Ready to deploy something extraordinary? Our technical team is standing by to roadmap your transformation."}
                </p>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-8">
                {[
-                 { icon: Mail, label: 'Email Support', val: 'concierge@primesoft.com', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                 { icon: Phone, label: 'Voice Link', val: '+1 (555) PLATFORM', color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                 { icon: MapPin, label: 'Tech Hub', val: 'Silicon Quarter, DXB', color: 'text-amber-600', bg: 'bg-amber-50' },
-                 { icon: Globe, label: 'Regional Focus', val: 'Active in 12 Zones', color: 'text-rose-600', bg: 'bg-rose-50' },
+                 { icon: Mail, label: 'Email Support', val: businessEmail, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+                 { icon: Phone, label: 'Voice Link', val: businessPhone, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                 { icon: MapPin, label: 'Tech Hub', val: businessAddress, color: 'text-amber-600', bg: 'bg-amber-50' },
+                 { icon: Globe, label: 'Regional Focus', val: settings?.regionalFocus || 'Active in 12 Zones', color: 'text-rose-600', bg: 'bg-rose-50' },
                ].map((item, i) => (
                  <div key={i} className="flex items-start gap-4 p-6 bg-slate-50/50 rounded-[2rem] border border-slate-50 group hover:bg-white hover:shadow-xl hover:shadow-indigo-500/5 transition-all">
                     <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 group-hover:rotate-6 transition-transform", item.bg)}>
@@ -161,6 +178,10 @@ export default function Contact() {
                     </div>
                  </div>
                ))}
+            </div>
+            {/* Map */}
+            <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-xl">
+                 <MapComponent address={businessAddress} />
             </div>
           </motion.div>
 

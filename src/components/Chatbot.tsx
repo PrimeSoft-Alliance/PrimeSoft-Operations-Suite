@@ -21,7 +21,7 @@ export default function Chatbot() {
   const location = useLocation();
   const [showPopup, setShowPopup] = useState(false);
   const [settings, setSettings] = useState<any>(null);
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     fetch(`/v1/public/settings?clientId=${clientId}`)

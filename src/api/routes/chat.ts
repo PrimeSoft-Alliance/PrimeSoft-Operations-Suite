@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings } from '../models';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
+import { incrementAiUsage } from '../../lib/usage';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
@@ -68,8 +69,18 @@ router.get('/widget.js', (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { message, sessionId, history = [], clientId: bodyClientId, pageContext } = req.body;
-    const clientId = bodyClientId || req.headers['x-client-id'] || 'plumber-001';
+    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
     
+    // Fix: Ensure clientId is a string if it was passed as an object
+    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
+      clientId = (clientId as any).clientId;
+    }
+    clientId = clientId ? String(clientId) : null;
+    
+    if (!clientId) {
+      return res.status(401).json({ error: 'ClientId missing', message: 'Tenant context is required.' });
+    }
+
     // Check for auth token in cookies
     let userRole = 'visitor';
     let userEmail = null;
@@ -93,22 +104,8 @@ router.post('/', async (req, res) => {
     }
 
     const clientRecord = await Client.findOne({ clientId });
-    
-    // Auto-create default plumber-001 client if it doesn't exist to ensure landing page chatbot always works
-    if (!clientRecord && clientId === 'plumber-001') {
-      await Client.create({
-        clientId: 'plumber-001',
-        businessName: 'PrimeSoft Alliance',
-        email: 'hello@your-app.onrender.com',
-        password: 'platform-internal-reserved',
-        role: 'client',
-        status: 'active',
-        apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
-      });
-      // Just proceed to create settings if needed
-    }
 
-    if (!clientRecord && clientId !== 'plumber-001') {
+    if (!clientRecord) {
       return res.status(404).json({ 
         error: 'Client not found', 
         message: "I couldn't find the configuration for this business. Please contact support." 
@@ -133,20 +130,11 @@ router.post('/', async (req, res) => {
     }
 
     let settings = await Settings.findOne({ clientId });
-    if (!settings && clientId === 'plumber-001') {
-      settings = await Settings.create({
-        clientId: 'plumber-001',
-        businessName: 'PrimeSoft Alliance',
-        aboutText: 'PrimeSoft Alliance is an IT solutions company specializing in platform development.',
-        workingHours: Array.from({ length: 7 }, (_, i) => ({ day: i, isOpen: true, openTime: '08:00', closeTime: '17:00' }))
-      });
-    }
 
     if (!settings) return res.status(500).json({ error: 'Settings not found', message: "Configuration for this business is incomplete." });
     
     // Get actual limit from Client record
     let messageLimit = clientRecord?.aiMessageLimit || 1000;
-    if (clientId === 'plumber-001') messageLimit = 999999999;
 
     if (usage.aiMessagesUsed >= messageLimit) {
       return res.status(403).json({ 
@@ -154,6 +142,22 @@ router.post('/', async (req, res) => {
         limitReached: true 
       });
     }
+
+    // ... handle onboarding email notifications ...
+    const notifySuperadmin = async (requestId: string, businessName: string, email: string) => {
+        const superAdmin = await Client.findOne({ role: 'superadmin' });
+        if (superAdmin) {
+          sendEmail(superAdmin.email, 'New Onboarding Request Received', 
+            `A new onboarding request has been submitted by ${businessName} (${email}).\nView it in the superadmin dashboard.`,
+            undefined, clientId
+          );
+        }
+        // Send Confirmation to User
+        sendEmail(email, 'Application Received', 
+          `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
+          undefined, clientId
+        );
+    };
 
     await AILog.create({
       clientId,
@@ -163,17 +167,17 @@ router.post('/', async (req, res) => {
     });
 
     const systemPrompt = `
-      # SYSTEM INSTRUCTIONS — PRIME SOFT ALLIANCE AI ASSISTANT
+      # SYSTEM INSTRUCTIONS — ${clientRecord.businessName} AI ASSISTANT
 
-      You are the official AI assistant for PrimeSoft Alliance.
-      You assist website visitors, clients, and administrators across a multi-tenant platform.
+      You are the official AI assistant for ${clientRecord.businessName}.
+      You assist website visitors, clients, and administrators.
 
       ## THE "RAG" PRINCIPLE (Retrieval-Augmented Generation)
       - ALWAYS lookup information before answering.
       - NEVER guess services, prices, or business details.
       - Your knowledge is STRICTLY limited to the "CONTEXT AWARENESS" section below and tool outputs.
       - If a user asks about your business, check the "CONTEXT AWARENESS" section first.
-      - If the answer is not in "CONTEXT AWARENESS" AND "External Knowledge Source" is ENABLED, you MUST call 'query_external_db'.
+      - If the answer is not in "CONTEXT AWARENESS" AND "External Knowledge Source" is ENABLED, use the "query_external_db" tool to search for the answer.
       - If information is missing from both, say: "I don't have those specific details right now, but I can have a team member contact you." NEVER make things up.
 
       ## BOOKING PROTOCOL (STRICT SEQUENTIAL GATHERING)
@@ -277,7 +281,7 @@ router.post('/', async (req, res) => {
         type: "function",
         function: {
           name: "submit_onboarding_request",
-          description: "Onboard a new business to PrimeSoft Alliance. Only use if serving the PrimeSoft Alliance client.",
+          description: "Onboard a new business. Only use if serving the main platform client.",
           parameters: {
             type: "object",
             properties: {
@@ -305,6 +309,23 @@ router.post('/', async (req, res) => {
             required: ["type", "email"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "transfer_to_human",
+          description: "Transfer the conversation to a human support agent and create a ticket. Use when the user requests a human, has a complex issue, or when you don't have the answer.",
+          parameters: {
+            type: "object",
+            properties: {
+              customerName: { type: "string" },
+              customerEmail: { type: "string" },
+              subject: { type: "string" },
+              reason: { type: "string", description: "Reason for transfer" }
+            },
+            required: ["customerName", "customerEmail", "subject", "reason"]
+          }
+        }
       }
     ];
 
@@ -329,7 +350,7 @@ router.post('/', async (req, res) => {
             model: CHAT_MODEL,
             tools: tools as any,
             tool_choice: "auto",
-            temperature: 0.1, // Small temperature for better natural flow
+            temperature: 0, 
           });
 
           const responseMessage = chatCompletion.choices[0]?.message;
@@ -486,9 +507,9 @@ router.post('/', async (req, res) => {
                   }
 
                   // Send Confirmation to User
-                  sendEmail(email, 'Application Received - PrimeSoft Alliance', 
-                    `Hello ${businessName},\n\nWe have received your application to join PrimeSoft Alliance. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
-                    undefined, 'super-admin-001'
+                  sendEmail(email, 'Application Received', 
+                    `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
+                    undefined, clientId
                   );
 
                   functionResult = JSON.stringify({ success: true, requestId, status: 'pending', nextStep: 'Wait for superadmin review' });
@@ -527,13 +548,54 @@ router.post('/', async (req, res) => {
                      functionResult = JSON.stringify({ error: "External database connection is not enabled by the admin." });
                   } else {
                      // Mocked secure connector layer
-                     // In a real app, this would use a connection pool and execute queries safely
                      functionResult = JSON.stringify({ 
                        success: true, 
                        message: `Mocked Query Result: Successfully retrieved information related to "${query}" from the ${settings.externalDbConfig.dbType} instance at ${settings.externalDbConfig.host}.`,
-                       data: [] // Placeholder for real records
+                       data: [] 
                      });
                   }
+                } else if (toolCall.function.name === 'transfer_to_human') {
+                  const { customerName, customerEmail, subject, reason } = args;
+                  
+                  // Instead of making an internal fetch which might fail due to auth or not existing, let's just create it here:
+                  const { Ticket, TicketMessage } = await import('../models');
+                  
+                  const ticket = await Ticket.create({
+                    clientId,
+                    customerName,
+                    customerEmail,
+                    subject,
+                    source: 'chat'
+                  });
+
+                  await TicketMessage.create({
+                    ticketId: ticket._id,
+                    senderRole: 'system',
+                    senderName: 'System',
+                    content: `Chat Transferred by AI. Reason: ${reason}`
+                  });
+
+                  // Send email to human (business)
+                  if (settings.contactEmail) {
+                    await sendEmail(
+                      settings.contactEmail,
+                      `New Support Ticket: ${subject}`,
+                      `A chat has been transferred to human support.\n\nCustomer: ${customerName}\nEmail: ${customerEmail}\nReason: ${reason}\nTicket ID: ${ticket._id}\n\nPlease check the dashboard to reply.`,
+                      `<p>A chat has been transferred to human support.</p><p><strong>Customer:</strong> ${customerName}<br/><strong>Email:</strong> ${customerEmail}<br/><strong>Reason:</strong> ${reason}</p><p><a href="http://127.0.0.1:3000/dashboard/tickets">View Ticket</a></p>`,
+                      clientId
+                    );
+                  }
+
+                  // Send email to customer (acknowledgement)
+                  await sendEmail(
+                    customerEmail,
+                    `We've received your request - ${settings.businessName}`,
+                    `Hello ${customerName},\n\nOur AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.\n\nSubject: ${subject}\n\nBest,\nThe ${settings.businessName} Team`,
+                    `<p>Hello ${customerName},</p><p>Our AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.</p><p><strong>Topic:</strong> ${subject}</p><p>Best,<br/>The ${settings.businessName} Team</p>`,
+                    clientId
+                  );
+
+                  functionResult = JSON.stringify({ success: true, message: "Ticket created and transferred successfully. Let the user know an agent will contact them soon." });
                 }
               } catch (e) {
                 console.error("Tool execution error:", e);
@@ -583,15 +645,7 @@ router.post('/', async (req, res) => {
       aiResponse = "AI is not configured right now. Please contact us directly.";
     }
 
-    await AILog.create({
-      clientId,
-      sessionId,
-      role: 'assistant',
-      content: aiResponse
-    });
-
-    usage.aiMessagesUsed += 1;
-    await usage.save();
+    await incrementAiUsage(clientId, sessionId, 'assistant', aiResponse);
 
     res.json({ message: aiResponse });
 

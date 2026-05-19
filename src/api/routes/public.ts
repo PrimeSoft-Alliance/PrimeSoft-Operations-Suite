@@ -74,7 +74,10 @@ async function upsertLead(params: {
     lead.tags = Array.from(newTags);
     
     // If it's a booking, it's very strong
-    if (params.source === 'booking') lead.status = 'very-strong';
+    if (params.source === 'booking') {
+      lead.stage = 'Qualified';
+      lead.score = Math.min(100, (lead.score || 0) + 20);
+    }
     
     // Update location if it was unknown
     if (lead.location?.city === 'Unknown' || !lead.location?.city) {
@@ -94,6 +97,14 @@ async function upsertLead(params: {
       const existingData = lead.data instanceof Map ? Object.fromEntries(lead.data) : (lead.data || {});
       lead.data = { ...existingData, ...params.data };
     }
+
+    // Add activity
+    lead.activities.push({
+      type: 'system',
+      description: `Lead updated from ${params.source}`,
+      date: new Date(),
+      metadata: { source: params.source }
+    });
     
     await lead.save();
     return lead;
@@ -103,7 +114,8 @@ async function upsertLead(params: {
     if (params.source === 'booking') tags.push('from booking');
     if (params.source === 'contact') tags.push('from contact');
 
-    const status = params.source === 'booking' ? 'very-strong' : 'new';
+    const stage = params.source === 'booking' ? 'Qualified' : 'New';
+    const score = params.source === 'booking' ? 80 : 20;
 
     return await Lead.create({
       clientId: params.clientId,
@@ -116,27 +128,39 @@ async function upsertLead(params: {
       source: params.source,
       location: params.location,
       tags,
-      status,
+      stage,
+      score,
       data: params.data || {},
-      lastActivity: new Date()
+      lastActivity: new Date(),
+      activities: [{
+        type: 'system',
+        description: `Lead initialized via ${params.source}`,
+        date: new Date(),
+        metadata: { source: params.source }
+      }]
     });
   }
 }
 
 
 // Helper to resolve client identity from various signals
-async function resolveClientId(req: express.Request): Promise<string> {
+async function resolveClientId(req: express.Request): Promise<string | null> {
   const apiKey = req.headers['x-api-key'] || req.query.apiKey;
-  const headerId = req.headers['x-client-id'];
-  const queryId = req.query.clientId;
-  const bodyId = req.body?.clientId;
+  let headerId = req.headers['x-client-id'];
+  let queryId = req.query.clientId;
+  let bodyId = req.body?.clientId;
+
+  if (typeof headerId === 'object' && headerId !== null && 'clientId' in headerId) headerId = (headerId as any).clientId;
+  if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
+  if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
 
   if (apiKey) {
     const client = await Client.findOne({ apiKey });
     if (client) return client.clientId;
   }
 
-  return (headerId || queryId || bodyId || 'plumber-001').toString();
+  const cid = headerId || queryId || bodyId;
+  return cid ? String(cid) : null;
 }
 
 // Domain Resolution & Headless Config
@@ -406,7 +430,7 @@ router.post('/onboarding/:token', async (req, res) => {
         email,
         password: hash,
         customFields,
-        apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
+        apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
       });
     } else {
       client.businessName = businessName || client.businessName;
@@ -483,79 +507,57 @@ router.get('/settings', async (req, res) => {
   try {
     const clientId = await resolveClientId(req);
     let settings = await Settings.findOne({ clientId });
-    if (!settings && clientId === 'plumber-001') {
-      // Create defaults for PrimeSoft Alliance
-      settings = await Settings.create({
-        clientId: 'plumber-001',
-        businessName: 'PrimeSoft Alliance',
-        heroTitle: 'Empowering Digital Transformation',
-        heroSubtitle: 'At PrimeSoft Alliance, we develop, deploy, and manage cutting-edge software solutions.',
-        aboutText: 'PrimeSoft Alliance is an information technology solutions company engaged in the development, deployment, and management of software applications, enterprise systems, and digital platforms.',
-        services: [
-          { id: '1', name: 'Custom Software Development', description: 'Tailored applications built to solve your unique challenges.', price: 2000, durationMinutes: 120 },
-          { id: '2', name: 'Cloud Integration', description: 'Modernizing infrastructure for maximum agility and speed.', price: 1500, durationMinutes: 90 }
-        ],
-        workingHours: Array.from({ length: 7 }, (_, i) => ({
-          day: i, isOpen: i > 0 && i < 6, openTime: '08:00', closeTime: '17:00'
-        }))
-      });
-    }
-
-    // Auto-clean if dummy data exists in existing settings
-    if (settings && clientId === 'plumber-001') {
-      let needsUpdate = false;
-      const lowerBusiness = settings.businessName?.toLowerCase() || '';
-      const lowerAbout = settings.aboutText?.toLowerCase() || '';
-      
-      if (lowerBusiness.includes('plumber') || lowerBusiness.includes('plumbing') || lowerBusiness.includes('us plumber')) {
-        settings.businessName = 'PrimeSoft Alliance';
-        needsUpdate = true;
-      }
-      
-      const hasPlumbingService = settings.services.some((s: any) => 
-        s.name?.toLowerCase().includes('plumbing') || 
-        s.name?.toLowerCase().includes('plumber') ||
-        s.name?.toLowerCase().includes('water heater') ||
-        s.name?.toLowerCase().includes('drain')
-      );
-
-      if (hasPlumbingService || settings.services.length === 0) {
-        settings.services = [
-          { id: '1', name: 'Custom Software Development', description: 'Tailored applications built to solve your unique challenges.', price: 2000, durationMinutes: 120 },
-          { id: '2', name: 'Cloud Integration', description: 'Modernizing infrastructure for maximum agility and speed.', price: 1500, durationMinutes: 90 },
-          { id: '3', name: 'Mobile App Solutions', description: 'Transforming ideas into high-performance mobile applications.', price: 2500, durationMinutes: 150 },
-          { id: '4', name: 'AI & Data Strategy', description: 'Leveraging data to drive intelligent business decisions.', price: 3000, durationMinutes: 120 }
-        ];
-        needsUpdate = true;
-      }
-
-      if (settings.heroTitle?.toLowerCase().includes('plumbing') || settings.heroTitle?.toLowerCase().includes('plumber')) {
-        settings.heroTitle = 'Empowering Digital Transformation';
-        needsUpdate = true;
-      }
-
-      if (lowerAbout.includes('plumbing') || lowerAbout.includes('plumber')) {
-        settings.aboutText = 'PrimeSoft Alliance is an information technology solutions company engaged in the development, deployment, and management of software applications, enterprise systems, and digital platforms.';
-        needsUpdate = true;
-      }
-      
-      if (needsUpdate) {
-        console.log(`[Auto-Clean] Pruned plumbing remnants from clientId: ${clientId}`);
-        await settings.save();
-      }
-    }
+    
     if (!settings) {
-      return envRes.sendError(404, 'API_ERROR', 'Client not found');
+      return envRes.sendError(404, 'API_ERROR', 'Client settings not found');
     }
-    res.json({
-      ...settings.toObject(),
+
+    const settingsObj = settings.toObject();
+
+    // Ensure all CMS fields exist
+    const defaults = {
+        heroBadge: 'Engineering Excellence',
+        servicesBadge: 'OUR SOLUTIONS',
+        servicesTitle: 'Software & IT Services',
+        servicesSubtitle: 'End-to-end digital services tailored for your growth and transformation.',
+        trustTitle: 'Built on Trust',
+        trustDescription: 'We deliver software that powers mission-critical operations worldwide.',
+        trustCardTitle: 'Secure & Robust',
+        trustCardSubtitle: 'Enterprise-grade security',
+        portfolioBadge: 'Portfolio',
+        portfolioTitle: 'Recent Projects',
+        ctaTitle: 'Ready to Scale?',
+        ctaSubtitle: 'Our architects are ready to build your next generation platform.',
+        ctaPrimaryBtn: 'Start Project',
+        ctaSecondaryBtn: 'Contact Sales',
+        aboutBadge: 'Our Story',
+        aboutHeroTitle: 'Building the',
+        aboutHeroHighlight: 'Digital Future',
+        aboutHeroSubtitle: 'Discover how we help companies navigate the complexities of modern software.',
+        aboutSectionTitle: 'Our Philosophy',
+        aboutSectionHighlight: 'Commitment',
+        contactTitle: 'Let\'s Build',
+        contactHighlight: 'Together',
+        contactSubtitle: 'Ready to deploy something extraordinary? Our technical team is standing by to roadmap your transformation.',
+        regionalFocus: 'Active in 12 Zones',
+        footerDescription: 'Empowering the next generation of digital transformation through precision engineering and visionary software solutions.',
+        footerContactTitle: 'Contact Us',
+        email: 'concierge@platform.com',
+        phone: '+1 (555) PLATFORM',
+        address: 'Silicon Quarter, DXB'
+    };
+
+    const finalSettings = { ...defaults, ...settingsObj };
+
+    envRes.sendSuccess({
+      ...finalSettings,
       // Flatten common branding fields for SDK simplicity
-      heroTitle: settings.heroTitle || settings.branding?.heroTitle,
-      heroSubtitle: settings.heroSubtitle || settings.branding?.heroSubtitle,
-      aboutText: settings.aboutText || settings.branding?.aboutText,
-      primaryColor: settings.primaryColor || settings.branding?.primaryColor,
-      fontFamily: settings.fontFamily || settings.branding?.fontFamily,
-      heroImage: settings.branding?.heroImage
+      heroTitle: finalSettings.heroTitle || finalSettings.branding?.heroTitle,
+      heroSubtitle: finalSettings.heroSubtitle || finalSettings.branding?.heroSubtitle,
+      aboutText: finalSettings.aboutText || finalSettings.branding?.aboutText,
+      primaryColor: finalSettings.primaryColor || finalSettings.branding?.primaryColor,
+      fontFamily: finalSettings.fontFamily || finalSettings.branding?.fontFamily,
+      heroImage: finalSettings.branding?.heroImage
     });
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch settings');
@@ -751,6 +753,8 @@ router.post('/ai/chat', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+
     const { message, history } = req.body;
 
     const [client, settings] = await Promise.all([
@@ -762,15 +766,12 @@ router.post('/ai/chat', async (req, res) => {
       return envRes.sendError(403, 'API_ERROR', 'AI Assistant is currently unavailable for this account.');
     }
 
-    const { GoogleGenAI } = await import('@google/genai');
-    const ai = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY!,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
+    const { Groq } = await import('groq-sdk');
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'dummy' });
 
     const businessContext = `
       You are the AI Assistant for ${client.businessName}.
-      Business Type: ${client.businessType}
+      Business Type: ${client.businessType || 'General'}
       About: ${settings?.aboutText || ''}
       Services offered: ${settings?.services?.map((s: any) => `${s.name}: ${s.description}`).join(', ') || ''}
       Working Hours: ${settings?.workingHours?.filter((h: any) => h.isOpen).map((h: any) => `${h.day}: ${h.openTime}-${h.closeTime}`).join(', ') || ''}
@@ -783,20 +784,19 @@ router.post('/ai/chat', async (req, res) => {
       - Only answer based on the provided business context. If you don't know, ask them to contact the business directly.
     `.trim();
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [
-        { role: 'user', parts: [{ text: `CONTEXT: ${businessContext}` }] },
-        { role: 'model', parts: [{ text: 'Understood. I will act as the business assistant.' }] },
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: 'system', content: businessContext },
         ...(history || []).map((h: any) => ({
-          role: h.role === 'user' ? 'user' : 'model',
-          parts: [{ text: h.content || h.text || '' }]
+          role: h.role === 'user' ? 'user' : 'assistant',
+          content: h.content || h.text || ''
         })),
-        { role: 'user', parts: [{ text: message }] }
-      ]
+        { role: 'user', content: message }
+      ],
+      model: 'llama-3.3-70b-versatile'
     });
 
-    const text = response.text || '';
+    const text = completion.choices[0].message.content || '';
     
     // Log AI usage
     const currentMonth = format(new Date(), 'yyyy-MM');
@@ -808,6 +808,7 @@ router.post('/ai/chat', async (req, res) => {
 
     envRes.sendSuccess({ text });
   } catch (err: any) {
+    console.error('AI Chat Error:', err);
     envRes.sendError(500, 'API_ERROR', 'AI Chat failed: ' + err.message);
   }
 });

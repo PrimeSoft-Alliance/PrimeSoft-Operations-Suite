@@ -97,7 +97,7 @@ export default function Setup() {
               <input
                 required
                 type="email"
-                placeholder="admin@primesoft.com"
+                placeholder="admin@platform.com"
                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium"
                 value={formData.email}
                 onChange={e => setFormData({...formData, email: e.target.value})}
@@ -133,7 +133,7 @@ export default function Setup() {
                 onChange={e => setFormData({...formData, secret: e.target.value})}
               />
             </div>
-            <p className="text-[10px] text-gray-400 italic px-1">Defaults to <b>primesoft_init_2024</b> if not set.</p>
+            <p className="text-[10px] text-gray-400 italic px-1">Defaults to <b>platform_init_secret</b> if not set.</p>
           </div>
 
           <button

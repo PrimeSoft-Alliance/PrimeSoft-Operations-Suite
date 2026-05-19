@@ -67,7 +67,7 @@ router.post('/onboarding-requests/:id/approve', async (req, res) => {
     // Send Approval Email
     const fullUrl = `${req.headers.origin}/onboarding/${token}`;
     const { sendEmail } = await import('../email');
-    await sendEmail(request.email, 'Approved - PrimeSoft Alliance', 
+    await sendEmail(request.email, 'Approved - Business Platform', 
       `Congratulations ${request.businessName}!\n\nYour onboarding request has been approved. Please follow the link below to set up your account:\n\n${fullUrl}\n\nThis link expires in 7 days.`,
       undefined, 'super-admin-001'
     );
@@ -154,8 +154,8 @@ router.post('/onboarding-requests/:id/reject', async (req, res) => {
     await logAction((req as any).user?.email || 'admin', 'REJECT_ONBOARDING', id, { reason });
 
     const { sendEmail } = await import('../email');
-    await sendEmail(request.email, 'Application Status - PrimeSoft Alliance', 
-      `Hello ${request.businessName},\n\nThank you for your interest in PrimeSoft Alliance. Unfortunately, we cannot proceed with your application at this time.\n\nReason: ${reason || 'N/A'}`,
+    await sendEmail(request.email, 'Application Status', 
+      `Hello ${request.businessName},\n\nThank you for your interest in our platform. Unfortunately, we cannot proceed with your application at this time.\n\nReason: ${reason || 'N/A'}`,
       undefined, 'super-admin-001'
     );
 
@@ -174,7 +174,7 @@ router.post('/onboarding-requests/:id/info-request', async (req, res) => {
     if (!request) return envRes.sendError(404, 'API_ERROR', 'Request not found');
 
     const { sendEmail } = await import('../email');
-    await sendEmail(request.email, 'More Information Needed - PrimeSoft Alliance', 
+    await sendEmail(request.email, 'More Information Needed', 
       `Hello ${request.businessName},\n\nWe need a few more details to process your application:\n\n${message}\n\nPlease reply to this email or chat with our AI assistant to provide the information.`,
       undefined, 'super-admin-001'
     );
@@ -218,11 +218,11 @@ ${settings.services.length > 0 ? settings.services.map((s: any) => `- ${s.name}:
 
 TECHNICAL REQUIREMENTS:
 1. Add this HEADLESS SDK script tag in your index.html/head: <script src="${req.headers.origin || ('https://' + req.get('host'))}/sdk.js" data-client-id="${clientId}" data-features="chat,booking,contact,content" data-auto-detect="true" async></script>
-2. CMS SYNC: Wrap editable text, image URLs, and CTA links with data-psa-content attributes.
-   Example: <h1 data-psa-content="heroTitle">...</h1>, <img data-psa-content="heroImage" src="..." />, <p data-psa-content="aboutText">...</p>
+2. CMS SYNC: Wrap editable text, image URLs, and CTA links with data-platform-content attributes.
+   Example: <h1 data-platform-content="heroTitle">...</h1>, <img data-platform-content="heroImage" src="..." />, <p data-platform-content="aboutText">...</p>
 3. The SDK will automatically inject the AI Chatbot and handle Form submissions if they use standard data attributes.
-4. For Booking Form (manual injection): Add data-psa-form="booking" to your form. Fields: fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, notes.
-5. For Contact Form (manual injection): Add data-psa-form="contact" to your form. Fields: name, email, phone, message, preferredContactMethod.
+4. For Booking Form (manual injection): Add data-platform-form="booking" to your form. Fields: fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, notes.
+5. For Contact Form (manual injection): Add data-platform-form="contact" to your form. Fields: name, email, phone, message, preferredContactMethod.
 6. Use a ${settings.branding?.layoutStyle || 'modern'} aesthetic with ${settings.branding?.primaryColor || '#2563eb'} as primary color.
 `.trim();
 
@@ -292,7 +292,7 @@ router.post('/clients', async (req, res) => {
       aiMessageLimit,
       storageLimitBytes,
       customFields,
-      apiKey: 'psa_live_' + crypto.randomBytes(16).toString('hex')
+      apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
     };
     if (customDomain) clientPayload.customDomain = customDomain;
     if (subdomain) clientPayload.subdomain = subdomain;
@@ -361,18 +361,18 @@ router.get('/leads', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const { Lead } = await import('../models');
-    const leads = await Lead.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    const leads = await Lead.find().sort({ createdAt: -1 }).limit(50).lean();
     envRes.sendSuccess(leads);
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform leads');
   }
 });
 
-// Platform-wide bookings (could filter by clientId='plumber-001' or all)
+// Platform-wide bookings
 router.get('/platform-bookings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const bookings = await Booking.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    const bookings = await Booking.find().sort({ createdAt: -1 }).limit(50).lean();
     envRes.sendSuccess(bookings);
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform bookings');
@@ -383,7 +383,7 @@ router.get('/platform-bookings', async (req, res) => {
 router.get('/platform-contacts', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const contacts = await Contact.find({ clientId: 'plumber-001' }).sort({ createdAt: -1 }).limit(50).lean();
+    const contacts = await Contact.find().sort({ createdAt: -1 }).limit(50).lean();
     envRes.sendSuccess(contacts);
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform contacts');

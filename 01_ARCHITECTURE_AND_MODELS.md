@@ -1,7 +1,7 @@
-# PrimeSoft Alliance - Phase 1: Architecture & Models
+# Phase 1: Architecture & Models
 
 ## 1. Unified Platform Architecture
-The PrimeSoft Alliance system operates as a single unified backend powering multiple interfaces. It enforces strict separation of concerns into four distinct layers.
+The SaaS platform system operates as a single unified backend powering multiple interfaces. It enforces strict separation of concerns into four distinct layers.
 
 ### Layer 1: Core API
 - **Nature**: Stateless, horizontally scalable RESTful API built to handle requests from any HTTP client.
@@ -32,7 +32,7 @@ Every entity (except Superadmins and Platform Defaults) is tightly coupled to a 
 1. **Implicit Scoping**: Middleware automatically extracts `clientId` from the authenticated Token or API Key.
 2. **Database Level**: Every query MUST include `clientId: req.tenant.clientId` (unless executed by a Superadmin role).
 3. **Storage Scoping**: Object Storage (S3) partitions media into `/{clientId}/media/...`.
-4. **Subdomain Routing**: Optional. `tenant.your-app.onrender.com` directly resolves to `clientId`.
+4. **Subdomain Routing**: Optional. `tenant.your-platform.com` directly resolves to `clientId`.
 
 ---
 

@@ -74,10 +74,10 @@ export default function OperationsNexus() {
   }, []);
 
   const kpis = stats ? [
-    { label: 'Revenue Pipeline', value: `$${(stats.totalBookings * 1250).toLocaleString()}`, trend: '+12%', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Acquisition Rate', value: `${((stats.totalLeads / (stats.usage?.aiMessagesUsed || 1)) * 100).toFixed(1)}%`, trend: '-2%', icon: Target, color: 'text-emerald-600', bg: 'bg-emerald-50', negative: true },
-    { label: 'Active Contacts', value: stats.totalContacts, trend: '+5', icon: Users, color: 'text-amber-600', bg: 'bg-amber-50' },
-    { label: 'Platform Load', value: `${(stats.usage?.storageBytesUsed / (1024 * 1024)).toFixed(1)}MB`, trend: 'Stable', icon: Activity, color: 'text-rose-600', bg: 'bg-rose-50' },
+    { label: 'Revenue Pipeline', value: `$${((stats.totalBookings || 0) * 1250).toLocaleString()}`, trend: '+12%', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+    { label: 'Acquisition Rate', value: `${(((stats.totalLeads || 0) / (stats.usage?.aiMessagesUsed || 1)) * 100).toFixed(1)}%`, trend: '-2%', icon: Target, color: 'text-emerald-600', bg: 'bg-emerald-50', negative: true },
+    { label: 'Active Contacts', value: stats.totalContacts || 0, trend: '+5', icon: Users, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'Platform Load', value: `${((stats.usage?.storageBytesUsed || 0) / (1024 * 1024)).toFixed(1)}MB`, trend: 'Stable', icon: Activity, color: 'text-rose-600', bg: 'bg-rose-50' },
   ] : [];
 
   return (

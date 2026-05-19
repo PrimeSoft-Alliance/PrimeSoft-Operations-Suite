@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "Form": {
+      "title": "Form Definition",
+      "description": "Structure and configuration for interactive data funnels",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "description": "Unique identifier for the business owner" },
+        "name": { "type": "string", "description": "Title of the form funnel" },
+        "description": { "type": "string", "description": "Purpose and strategy of the funnel" },
+        "fields": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Dynamic nodes defining the conversion path"
+        },
+        "theme": { "type": "object", "description": "Visual aesthetics and layout configuration" },
+        "status": { "type": "string", "enum": ["active", "inactive", "draft"] },
+        "settings": { "type": "object", "description": "Submission and notification settings" },
+        "stats": { "type": "object", "description": "Engagement and conversion metrics" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "name", "fields"]
+    },
+    "Lead": {
+      "title": "Consolidated Lead",
+      "description": "Unified record of an ingestion entity across all channels",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string", "description": "Business identifier" },
+        "formId": { "type": "string", "description": "Reference to the originating form node" },
+        "formName": { "type": "string" },
+        "source": { "type": "string", "enum": ["form", "booking", "contact", "manual", "api"] },
+        "contactFirst": { "type": "string" },
+        "contactLast": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "company": { "type": "string" },
+        "jobTitle": { "type": "string" },
+        "data": { "type": "object", "description": "Extracted payload from submission" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "stage": { "type": "string", "enum": ["New", "Contacted", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] },
+        "score": { "type": "number", "description": "Calculated propensity score" },
+        "value": { "type": "number", "description": "Estimated economic value" },
+        "location": { "type": "object" },
+        "activities": { "type": "array", "items": { "type": "object" } },
+        "lastActivity": { "type": "string", "format": "date-time" },
+        "assignedTo": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "source"]
+    },
+    "Booking": {
+      "title": "Service Booking",
+      "description": "Appointment request derived from the scheduling engine",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "serviceSelection": { "type": "string" },
+        "preferredDate": { "type": "string", "format": "date-time" },
+        "preferredStartTime": { "type": "string" },
+        "preferredEndTime": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled", "completed"] },
+        "location": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "email", "preferredDate"]
+    }
+  },
+  "firestore": {
+    "/clients/{clientId}/forms/{formId}": {
+      "schema": { "$ref": "#/entities/Form" },
+      "description": "Dynamic funnels belonging to a client"
+    },
+    "/clients/{clientId}/leads/{leadId}": {
+      "schema": { "$ref": "#/entities/Lead" },
+      "description": "Unified intelligence records"
+    },
+    "/clients/{clientId}/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Appointment records"
+    }
+  }
+}

@@ -1,7 +1,7 @@
-# PrimeSoft Alliance - Complete Platform Specification
+# SaaS Platform - Complete Platform Specification
 
 ## 1. Architecture Overview
-PrimeSoft Alliance is a multi-tenant, API-first SaaS platform built on an asynchronous, horizontally scalable architecture.
+The SaaS platform is a multi-tenant, API-first SaaS platform built on an asynchronous, horizontally scalable architecture.
 - **API Gateway Layer**: Handles TLS termination, Rate Limiting (Redis-backed), and Routing.
 - **Core API Service**: A stateless Node.js/Go/Java application acting as the primary orchestrator for CRUD operations, tenant isolation, and RBAC. 
 - **AI & Stream Engine**: A specialized microservice (or internal worker pool) handling Server-Sent Events (SSE) and large language model (LLM) orchestration for chat.
@@ -76,16 +76,16 @@ A multi-tenant approach using **Pool Data Isolation** where every table contains
 - **Registration**: Clients register HTTPS endpoints via `/v1/webhooks`.
 - **Trigger**: When an event occurs (e.g., Lead Created), an event payload is pushed to an internal queue.
 - **Delivery Worker**: Pops the event, computes a cryptographically secure HMAC SHA-256 signature using the client's `webhook_secret` and the raw payload.
-- **Headers**: Injects `X-PrimeSoft-Signature` into the request.
+- **Headers**: Injects `X-Platform-Signature` into the request.
 - **Reliability**: If destination returns non-2xx, worker re-queues the message with Exponential Backoff (up to 5 retries over 24 hours).
 
 ## 7. Media Upload Design
 To avoid bloating the API server memory limits and network I/O:
 1. Client calls `POST /v1/content/media` requesting an upload with `mime_type` and `size`.
-2. PrimeSoft API validates quotas and file types, then uses AWS/S3 SDK to generate a **Presigned Upload URL** (valid for 15 mins).
+2. Platform API validates quotas and file types, then uses AWS/S3 SDK to generate a **Presigned Upload URL** (valid for 15 mins).
 3. API returns the URL and a new pending `media_id` to the client.
 4. Client uploads bytes directly to the object storage using the URL.
-5. Storage Provider fires a notification hook back to PrimeSoft, transitioning `upload_status` from `pending` -> `completed`.
+5. Storage Provider fires a notification hook back to SaaS platform, transitioning `upload_status` from `pending` -> `completed`.
 
 ## 8. Content Management Design
 - **Versioning**: `PATCH /v1/content/items/{id}` updates the draft and increments the internal `version`.

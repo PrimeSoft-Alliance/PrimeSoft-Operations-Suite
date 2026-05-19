@@ -26,7 +26,7 @@ export default function Privacy() {
               Privacy <span className="text-indigo-600">Policy</span>
             </h1>
             <p className="text-lg text-gray-500 font-medium max-w-2xl mx-auto">
-              How we handle and protect your data at PrimeSoft Alliance.
+              How we handle and protect your data.
             </p>
           </div>
 

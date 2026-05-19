@@ -26,7 +26,7 @@ export default function Terms() {
               Terms & <span className="text-indigo-600">Conditions</span>
             </h1>
             <p className="text-lg text-gray-500 font-medium max-w-2xl mx-auto">
-              The rules and guidelines for using PrimeSoft Alliance services.
+              The rules and guidelines for using our services.
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export default function Terms() {
                 2. Use of License
               </h2>
               <p className="text-gray-600 leading-relaxed">
-                Permission is granted to temporarily download one copy of the materials (information or software) on PrimeSoft Alliance's website for personal, non-commercial transitory viewing only.
+                Permission is granted to temporarily download one copy of the materials (information or software) on our website for personal, non-commercial transitory viewing only.
               </p>
             </section>
 
@@ -57,7 +57,7 @@ export default function Terms() {
                 3. Disclaimer
               </h2>
               <p className="text-gray-600 leading-relaxed">
-                The materials on PrimeSoft Alliance's website are provided on an 'as is' basis. PrimeSoft Alliance makes no warranties, expressed or implied, and hereby disclaims and negates all other warranties including, without limitation, implied warranties of merchantability.
+                The materials on this website are provided on an 'as is' basis. We make no warranties, expressed or implied, and hereby disclaim and negate all other warranties including, without limitation, implied warranties of merchantability.
               </p>
             </section>
 
@@ -67,7 +67,7 @@ export default function Terms() {
                 4. Limitations
               </h2>
               <p className="text-gray-600 leading-relaxed">
-                In no event shall PrimeSoft Alliance or its suppliers be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the materials on PrimeSoft Alliance's website.
+                In no event shall we or our suppliers be liable for any damages (including, without limitation, damages for loss of data or profit, or due to business interruption) arising out of the use or inability to use the materials on this website.
               </p>
             </section>
           </div>

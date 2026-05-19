@@ -63,7 +63,7 @@ export default function Login({ loginRole = 'client' }: { loginRole?: 'client' |
       >
         <div className="text-center mb-8">
           <Link to="/" className="inline-block text-2xl font-bold text-indigo-600 mb-2 hover:text-indigo-700 transition">
-            PrimeSoft<span className="text-gray-900">.</span>
+            Nexus Platform<span className="text-gray-900">.</span>
           </Link>
           <h1 className="text-xl font-bold text-gray-900">
             {loginRole === 'superadmin' ? 'Admin Portal' : 'Client Portal'}

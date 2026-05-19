@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: PrimeSoft Alliance Unified API
+  title: SaaS Platform Unified API
   version: 1.0.0
   description: >
     Production-grade, API-first SaaS platform for AI chatbots, bookings, contacts, forms,

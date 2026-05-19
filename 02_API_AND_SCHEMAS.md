@@ -1,7 +1,7 @@
-# PrimeSoft Alliance - Phase 2: API & Schemas
+# Phase 2: API & Schemas
 
 ## 1. Standard API Conventions
-- **Base URL:** `https://your-app.onrender.com/v1` (replace with your actual domain)
+- **Base URL:** `https://your-platform.com/v1` (replace with your actual domain)
 - **Content-Type:** `application/json`
 - **Authentication:** `Authorization: Bearer <Token>`
 - **Headers:** 
@@ -126,7 +126,7 @@
 ### 4.5 Webhooks
 - **Event Catalog**: `chat.message.received`, `booking.created`, `lead.created`, `content.published`.
 - **Signature Security**:
-  All webhook POSTs include `X-PrimeSoft-Signature: t={timestamp},v1={hmac-sha256}`.
+  All webhook POSTs include `X-Platform-Signature: t={timestamp},v1={hmac-sha256}`.
   Generated via `HMAC(secret, payload)`.
 - **Schema (`WebhookDelivery`)**:
   ```json

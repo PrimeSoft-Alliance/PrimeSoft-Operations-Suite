@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 
 const bookingSchema = new mongoose.Schema({
-  clientId: { type: String, required: true, default: 'plumber-001' },
+  clientId: { type: String, required: true },
   fullName: { type: String, required: true },
   phoneNumber: { type: String, required: true },
   email: { type: String, required: true },
@@ -23,7 +23,7 @@ const bookingSchema = new mongoose.Schema({
 export const Booking = mongoose.models.Booking || mongoose.model<any>('Booking', bookingSchema);
 
 const contactSchema = new mongoose.Schema({
-  clientId: { type: String, required: true, default: 'plumber-001' },
+  clientId: { type: String, required: true },
   name: { type: String, required: true },
   email: { type: String, required: true },
   phone: { type: String, required: true },
@@ -42,7 +42,7 @@ const contactSchema = new mongoose.Schema({
 export const Contact = mongoose.models.Contact || mongoose.model<any>('Contact', contactSchema);
 
 const aiLogSchema = new mongoose.Schema({
-  clientId: { type: String, required: true, default: 'plumber-001' },
+  clientId: { type: String, required: true },
   sessionId: { type: String, required: true },
   role: { type: String, enum: ['user', 'assistant', 'system'], required: true },
   content: { type: String, required: true }
@@ -87,9 +87,69 @@ const settingsSchema = new mongoose.Schema({
   clientId: { type: String, required: true, unique: true },
   businessName: { type: String, default: 'My Business' },
   // CMS Fields
-  heroTitle: { type: String, default: 'Fast & Reliable Services' },
-  heroSubtitle: { type: String, default: 'Book instantly or chat with our AI assistant' },
+  heroBadge: { type: String, default: 'Engineering Excellence' },
+  heroTitle: { type: String, default: 'Architecting the Future of Enterprise Software' },
+  heroSubtitle: { type: String, default: 'We build high-performance software for visionary companies.' },
   heroImage: { type: String },
+  
+  servicesBadge: { type: String, default: 'OUR SOLUTIONS' },
+  servicesTitle: { type: String, default: 'Software & IT Services' },
+  servicesSubtitle: { type: String, default: 'End-to-end digital services tailored for your growth and transformation.' },
+
+  trustTitle: { type: String, default: 'Built on Trust' },
+  trustDescription: { type: String, default: 'We deliver software that powers mission-critical operations worldwide.' },
+  trustImage: { type: String },
+  trustCardTitle: { type: String, default: 'Secure & Robust' },
+  trustCardSubtitle: { type: String, default: 'Enterprise-grade security' },
+  trustPoints: [{ type: String, default: ['Modern tech stack selection', 'Agile development methodology', 'Post-deployment support & maintenance', 'Enterprise-ready scalability'] }],
+
+  testimonialsTitle: { type: String, default: 'Client Success' },
+  testimonials: [{
+    text: String,
+    name: String,
+    role: String,
+    initials: String
+  }],
+
+  portfolioBadge: { type: String, default: 'Portfolio' },
+  portfolioTitle: { type: String, default: 'Recent Projects' },
+
+  ctaTitle: { type: String, default: 'Ready to Scale?' },
+  ctaSubtitle: { type: String, default: 'Our architects are ready to build your next generation platform.' },
+  ctaPrimaryBtn: { type: String, default: 'Start Project' },
+  ctaSecondaryBtn: { type: String, default: 'Contact Sales' },
+
+  aboutBadge: { type: String, default: 'Our Story' },
+  aboutHeroTitle: { type: String, default: 'Building the' },
+  aboutHeroHighlight: { type: String, default: 'Digital Future' },
+  aboutHeroSubtitle: { type: String, default: 'Discover how we help companies navigate the complexities of modern software.' },
+  aboutSectionTitle: { type: String, default: 'Our Philosophy' },
+  aboutSectionHighlight: { type: String, default: 'Commitment' },
+  aboutTags: [{ type: String }],
+  aboutFeatures: [{
+    icon: String,
+    title: String,
+    desc: String,
+    color: String,
+    bg: String
+  }],
+  aboutStats: [{
+    label: String,
+    value: String
+  }],
+
+  contactTitle: { type: String, default: 'Let\'s Build' },
+  contactHighlight: { type: String, default: 'Together' },
+  contactSubtitle: { type: String, default: 'Ready to deploy something extraordinary? Our technical team is standing by to roadmap your transformation.' },
+  regionalFocus: { type: String, default: 'Active in 12 Zones' },
+
+  footerDescription: { type: String, default: 'Empowering the next generation of digital transformation through precision engineering and visionary software solutions.' },
+  footerContactTitle: { type: String, default: 'Contact Us' },
+
+  email: { type: String, default: 'admin@example.com' },
+  phone: { type: String, default: '+1 (555) 000-0000' },
+  address: { type: String, default: 'Global HQ' },
+
   aboutText: { type: String, default: 'We are experienced professionals dedicated to quality.' },
   aboutImage: { type: String },
   footerText: { type: String, default: '© 2024 All rights reserved.' },
@@ -174,7 +234,7 @@ const settingsSchema = new mongoose.Schema({
     },
     allowedDomains: [{ type: String }]
   }
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
 
 export const Settings = mongoose.models.Settings || mongoose.model<any>('Settings', settingsSchema);
 
@@ -187,7 +247,7 @@ const clientSchema = new mongoose.Schema({
   role: { type: String, enum: ['client', 'superadmin'], default: 'client' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: String, default: 'starter' },
-  apiKey: { type: String, default: () => 'psa_' + crypto.randomUUID() },
+  apiKey: { type: String, default: () => 'api_' + crypto.randomUUID() },
   subdomain: { type: String, unique: true, sparse: true },
   customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
@@ -272,8 +332,8 @@ const promptHistorySchema = new mongoose.Schema({
 export const PromptHistory = mongoose.models.PromptHistory || mongoose.model<any>('PromptHistory', promptHistorySchema);
 
 const platformSettingsSchema = new mongoose.Schema({
-  platformName: { type: String, default: 'PrimeSoft Alliance' },
-  supportEmail: { type: String, default: 'support@primesoft.com' },
+  platformName: { type: String, default: 'System Platform' },
+  supportEmail: { type: String, default: 'admin@platform.com' },
   maintenanceMode: { type: Boolean, default: false },
   defaultAiLimit: { type: Number, default: 1000 },
   defaultStorageMB: { type: Number, default: 50 },
@@ -281,7 +341,7 @@ const platformSettingsSchema = new mongoose.Schema({
   enforceMfa: { type: Boolean, default: false },
   restrictSubdomains: { type: Boolean, default: true },
   detailedAuditLogging: { type: Boolean, default: true },
-  masterDns: { type: String, default: 'your-app.onrender.com' },
+  masterDns: { type: String, default: 'your-platform.com' },
   smtpVerified: { type: Boolean, default: true }
 }, { timestamps: true });
 
@@ -294,22 +354,49 @@ const formSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
   fields: [{
+    id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
     name: { type: String, required: true },
     label: { type: String, required: true },
-    type: { type: String, enum: ['text', 'email', 'phone', 'number', 'date', 'select', 'checkbox', 'radio', 'textarea', 'content-text', 'content-image', 'content-link', 'content-embed', 'page-break'], required: true },
+    type: { type: String, enum: ['text', 'email', 'phone', 'number', 'date', 'select', 'checkbox', 'radio', 'textarea', 'heading', 'content-text', 'page-break', 'file', 'rating', 'signature'], required: true },
     required: { type: Boolean, default: false },
     options: [{ type: String }],
+    placeholder: { type: String },
+    helpText: { type: String },
+    logic: {
+       action: { type: String, enum: ['show', 'hide'] },
+       condition: { type: String, enum: ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'any'] },
+       dependentFieldId: { type: String },
+       value: { type: String }
+    },
+    validation: {
+        min: Number,
+        max: Number,
+        pattern: String,
+        customErrorMessage: String
+    },
     contentData: { type: String }
   }],
   tags: [{ type: String }],
   expiresAt: { type: Date },
-  theme: {
-    primaryColor: String,
-    backgroundColor: String,
-    fontFamily: String,
-    buttonStyle: String
+  settings: {
+     submitText: { type: String, default: 'Submit' },
+     successMessage: { type: String, default: 'Thank you for your submission.' },
+     redirectUrl: { type: String },
+     notifyEmails: [{ type: String }],
+     webhookUrl: { type: String }
   },
-  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+  theme: {
+    primaryColor: { type: String, default: '#4f46e5' },
+    backgroundColor: { type: String, default: '#f8fafc' },
+    fontFamily: { type: String, default: 'Inter' },
+    buttonStyle: { type: String, default: 'rounded-xl' },
+    layout: { type: String, enum: ['classic', 'modern', 'minimal'], default: 'modern' }
+  },
+  status: { type: String, enum: ['active', 'inactive', 'draft'], default: 'active' },
+  stats: {
+     views: { type: Number, default: 0 },
+     submissions: { type: Number, default: 0 }
+  }
 }, { timestamps: true });
 
 export const Form = mongoose.models.Form || mongoose.model<any>('Form', formSchema);
@@ -318,21 +405,32 @@ const leadSchema = new mongoose.Schema({
   clientId: { type: String, required: true },
   formId: { type: String },
   formName: { type: String },
-  source: { type: String, enum: ['form', 'booking', 'contact', 'manual'], default: 'form' },
+  source: { type: String, enum: ['form', 'booking', 'contact', 'manual', 'api'], default: 'form' },
   contactFirst: { type: String },
   contactLast: { type: String },
   contactEmail: { type: String },
   contactPhone: { type: String },
+  company: { type: String },
+  jobTitle: { type: String },
   data: { type: Map, of: mongoose.Schema.Types.Mixed },
   tags: [{ type: String }],
-  status: { type: String, enum: ['new', 'contacted', 'qualified', 'archived', 'very-strong'], default: 'new' },
+  stage: { type: String, enum: ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'], default: 'New' },
+  score: { type: Number, default: 0 },
+  value: { type: Number, default: 0 },
   location: {
     city: String,
     country: String,
     region: String,
     ip: String
   },
-  lastActivity: { type: Date, default: Date.now }
+  activities: [{
+     type: { type: String, enum: ['note', 'email', 'call', 'meeting', 'system', 'status_change'] },
+     description: { type: String },
+     date: { type: Date, default: Date.now },
+     metadata: { type: Map, of: mongoose.Schema.Types.Mixed }
+  }],
+  lastActivity: { type: Date, default: Date.now },
+  assignedTo: { type: String }
 }, { timestamps: true });
 
 export const Lead = mongoose.models.Lead || mongoose.model<any>('Lead', leadSchema);
@@ -398,4 +496,28 @@ const webhookDeliverySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const WebhookDelivery = mongoose.models.WebhookDelivery || mongoose.model<any>('WebhookDelivery', webhookDeliverySchema);
+
+const ticketSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  customerName: { type: String, required: true },
+  customerEmail: { type: String, required: true },
+  subject: { type: String, required: true },
+  status: { type: String, enum: ['open', 'in_progress', 'resolved', 'closed'], default: 'open' },
+  priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'low' },
+  assignedTo: { type: String }, // support agent email or ID
+  source: { type: String, default: 'chat' } // chat, email, web
+}, { timestamps: true });
+
+export const Ticket = mongoose.models.Ticket || mongoose.model<any>('Ticket', ticketSchema);
+
+const ticketMessageSchema = new mongoose.Schema({
+  ticketId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ticket', required: true },
+  senderRole: { type: String, enum: ['customer', 'agent', 'system', 'ai'], required: true },
+  senderName: { type: String },
+  content: { type: String, required: true },
+  isInternal: { type: Boolean, default: false }
+}, { timestamps: true });
+
+export const TicketMessage = mongoose.models.TicketMessage || mongoose.model<any>('TicketMessage', ticketMessageSchema);
+
 

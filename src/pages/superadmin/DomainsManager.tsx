@@ -78,8 +78,8 @@ export default function DomainsManager() {
   };
 
   const filteredDomains = domains.filter(d => 
-    d.host.toLowerCase().includes(search.toLowerCase()) || 
-    d.clientId.toLowerCase().includes(search.toLowerCase())
+    (d.host || '').toLowerCase().includes((search || '').toLowerCase()) || 
+    (d.clientId || '').toLowerCase().includes((search || '').toLowerCase())
   );
 
   return (
@@ -204,7 +204,7 @@ export default function DomainsManager() {
                   <label className="block text-sm font-bold text-gray-700 mb-1">Hostname</label>
                   <input 
                     required
-                    placeholder="e.g. business.primesoft.com"
+                    placeholder="e.g. business.platform.com"
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDomain.host}
                     onChange={e => setNewDomain({...newDomain, host: e.target.value})}
@@ -214,7 +214,7 @@ export default function DomainsManager() {
                   <label className="block text-sm font-bold text-gray-700 mb-1">Target Client ID</label>
                   <input 
                     required
-                    placeholder="plumber-001"
+                    placeholder="smith-001"
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
                     value={newDomain.clientId}
                     onChange={e => setNewDomain({...newDomain, clientId: e.target.value})}

@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 
 export default function About() {
   const [settings, setSettings] = useState<any>(null);
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     fetch(`/v1/public/settings?clientId=${clientId}`)
@@ -18,15 +18,15 @@ export default function About() {
       .catch(console.error);
   }, [clientId]);
 
-  const businessName = settings?.businessName || 'PrimeSoft Alliance';
-  const aboutText = settings?.aboutText || 'PrimeSoft Alliance is an information technology solutions company engaged in the development, deployment, and management of software applications, enterprise systems, and digital platforms.';
+  const businessName = settings?.businessName || 'Business Hub';
+  const aboutText = settings?.aboutText || 'We are a technology-first solution provider focused on bridging the gap between imagination and implementation.';
 
   const slideUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } }
   };
 
-  const stats = [
+  const stats = settings?.aboutStats || [
     { label: 'Founded', value: '2018' },
     { label: 'Engineers', value: '50+' },
     { label: 'Success Rate', value: '99%' },
@@ -52,13 +52,13 @@ export default function About() {
           >
             <span className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] shadow-sm">
               <Zap className="w-4 h-4 text-indigo-600" />
-              Our Legacy & Future
+              {settings?.aboutBadge || 'Our Story'}
             </span>
             <h1 className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 tracking-tight leading-[0.9] max-w-4xl">
-              Architecting <span className="text-indigo-600">Tomorrow</span>.
+              {settings?.aboutHeroTitle || 'Building the'} <span className="text-indigo-600">{settings?.aboutHeroHighlight || 'Digital Future'}</span>.
             </h1>
             <p className="text-xl sm:text-2xl text-gray-400 font-medium tracking-tight max-w-2xl leading-relaxed">
-              We don't just build software. We engineer the digital infrastructure that empowers your global vision.
+              {settings?.aboutHeroSubtitle || 'Discover how we help companies navigate the complexities of modern software.'}
             </p>
           </motion.div>
 
@@ -88,47 +88,46 @@ export default function About() {
             className="space-y-10"
           >
             <h2 className="text-4xl sm:text-5xl font-black text-gray-900 tracking-tight leading-tight">
-              Software Synergy <br />& <span className="text-indigo-600">Visionary</span> Leadership.
+              {settings?.aboutSectionTitle || 'Our Philosophy'} <br />& <span className="text-indigo-600">{settings?.aboutSectionHighlight || 'Commitment'}</span>.
             </h2>
             <div className="prose prose-lg text-gray-500 font-medium leading-relaxed max-w-xl">
               <p className="whitespace-pre-wrap">
                 {aboutText}
               </p>
-              {!settings?.aboutText && (
-                <p>
-                  Our multi-disciplinary team combines deep architectural knowledge with cutting-edge AI implementation to deliver systems that scale effortlessly.
-                </p>
-              )}
             </div>
             <div className="flex flex-wrap gap-4">
-               {['Agile Dev', 'Cloud Native', 'AI First', 'Scalable'].map(tag => (
+               {(settings?.aboutTags || ['Agile Dev', 'Cloud Native', 'AI First', 'Scalable']).map((tag: string) => (
                  <span key={tag} className="px-4 py-2 bg-white rounded-xl border border-slate-100 text-[10px] font-black uppercase tracking-widest text-slate-400">{tag}</span>
                ))}
             </div>
           </motion.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {[
+            {(settings?.aboutFeatures || [
               { icon: Award, title: "Technical Mastery", desc: "Industry-standard stacks and zero-compromise code quality.", color: "text-indigo-600", bg: "bg-indigo-50" },
               { icon: Target, title: "Precision Delivery", desc: "Rigorous planning and milestones to ensure zero-delay launches.", color: "text-emerald-600", bg: "bg-emerald-50" },
               { icon: Users, title: "Global Network", desc: "Trusted partners for startups and Fortune 500 enterprises alike.", color: "text-amber-600", bg: "bg-amber-50" },
               { icon: Shield, title: "Secure by Design", desc: "Deeply embedded security protocols for mission-critical data.", color: "text-rose-600", bg: "bg-rose-50" },
-            ].map((feature, i) => (
-              <motion.div 
-                key={i}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1 }}
-                className="group p-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/5 transition-all"
-              >
-                <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:rotate-6 transition-transform", feature.bg)}>
-                  <feature.icon className={cn("w-7 h-7", feature.color)} />
-                </div>
-                <h3 className="font-bold text-gray-900 mb-3">{feature.title}</h3>
-                <p className="text-sm text-gray-500 font-medium leading-relaxed">{feature.desc}</p>
-              </motion.div>
-            ))}
+            ]).map((feature: any, i: number) => {
+              const icons: Record<string, any> = { Award, Target, Users, Shield };
+              const Icon = typeof feature.icon === 'string' ? (icons[feature.icon] || Zap) : (feature.icon || Zap);
+              return (
+                <motion.div 
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  className="group p-10 bg-white rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/5 transition-all"
+                >
+                  <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mb-6 group-hover:rotate-6 transition-transform", feature.bg)}>
+                    <Icon className={cn("w-7 h-7", feature.color)} />
+                  </div>
+                  <h3 className="font-bold text-gray-900 mb-3">{feature.title}</h3>
+                  <p className="text-sm text-gray-500 font-medium leading-relaxed">{feature.desc}</p>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
       </section>

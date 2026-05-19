@@ -5,8 +5,8 @@ import { cn } from '../../lib/utils';
 
 export default function PlatformSettings() {
   const [config, setConfig] = useState({
-    platformName: 'PrimeSoft Alliance',
-    supportEmail: 'support@primesoft.com',
+    platformName: 'System Platform',
+    supportEmail: 'admin@platform.com',
     maintenanceMode: false,
     defaultAiLimit: 1000,
     defaultStorageMB: 50,
@@ -38,7 +38,7 @@ export default function PlatformSettings() {
 
   const fetchPortfolioSettings = async () => {
     try {
-      const res = await fetch('/v1/public/settings?clientId=plumber-001');
+      const res = await fetch('/v1/public/settings?clientId=platform-main');
       if (res.ok) {
         const data = await res.json();
         const payload = data?.success ? data.data : data;
@@ -59,7 +59,7 @@ export default function PlatformSettings() {
     setMessage(null);
     try {
       // Assuming superadmin has permission to update any client settings via this endpoint or similar
-      const res = await fetch('/v1/super-admin/clients/plumber-001/settings', {
+      const res = await fetch('/v1/super-admin/clients/platform-main/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(portfolioSettings)

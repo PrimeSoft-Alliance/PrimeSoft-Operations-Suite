@@ -50,7 +50,7 @@ export default function SuperadminTemplates() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Platform Blueprint & Templates</h1>
-          <p className="text-gray-500">Define the global DNA of the PrimeSoft Alliance platform.</p>
+          <p className="text-gray-500">Define the global DNA of the business platform.</p>
         </div>
         <button className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition">
            <Plus className="w-4 h-4" /> New Template

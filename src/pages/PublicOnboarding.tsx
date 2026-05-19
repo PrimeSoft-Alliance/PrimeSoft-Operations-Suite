@@ -50,7 +50,7 @@ export default function PublicOnboarding() {
               Start Your Journey
             </span>
             <h1 className="text-5xl sm:text-6xl font-black text-gray-900 tracking-tight leading-tight">
-              Scale Your <span className="text-indigo-600 italic">Vision</span> with PrimeSoft.
+              Scale Your <span className="text-indigo-600 italic">Vision</span> with Us.
             </h1>
             <p className="mt-6 text-xl text-gray-500 font-medium leading-relaxed max-w-xl">
               Join the future of business management. We provide the tools you need to automate, track, and grow your digital presence.

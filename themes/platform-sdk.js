@@ -9,7 +9,7 @@
     const currentScript = document.currentScript || document.querySelector('script[src*="platform-sdk.js"]');
     
     let baseUrl = '';
-    let clientId = window.location.hostname.includes('localhost') ? 'plumber-001' : null;
+    let clientId = null;
     let autoDetect = false;
 
     if (currentScript) {
@@ -34,8 +34,8 @@
 
         // 2. Host site CSS variable override
         const bodyStyle = window.getComputedStyle(document.documentElement);
-        const cssVar = bodyStyle.getPropertyValue('--psa-primary').trim();
-        if (cssVar) return cssVar;
+        const cssVar = bodyStyle.getPropertyValue('--platform-primary') || bodyStyle.getPropertyValue('--psa-primary');
+        if (cssVar && cssVar.trim()) return cssVar.trim();
 
         // 3. Auto-detect from host site's dominant buttons or headings
         try {
@@ -62,7 +62,7 @@
 
         // Create Chat Bubble
         const bubble = document.createElement('div');
-        bubble.id = 'psa-ai-bubble';
+        bubble.id = 'platform-ai-bubble';
         bubble.style.cssText = `
             position: fixed;
             bottom: 30px;
@@ -85,9 +85,9 @@
         bubble.onmouseleave = () => bubble.style.transform = 'scale(1)';
 
         // Create Chat Window
-        const window = document.createElement('div');
-        window.id = 'psa-ai-window';
-        window.style.cssText = `
+        const windowElem = document.createElement('div');
+        windowElem.id = 'platform-ai-window';
+        windowElem.style.cssText = `
             position: fixed;
             bottom: 100px;
             right: 30px;
@@ -103,18 +103,18 @@
             font-family: sans-serif;
         `;
 
-        window.innerHTML = `
+        windowElem.innerHTML = `
             <div style="background: ${primaryColor}; padding: 15px; color: white; display: flex; justify-content: space-between; align-items: center;">
                 <span style="font-weight: 600;">${title}</span>
-                <span id="psa-chat-close" style="cursor: pointer; opacity: 0.8;">&times;</span>
+                <span id="platform-chat-close" style="cursor: pointer; opacity: 0.8;">&times;</span>
             </div>
-            <div id="psa-chat-messages" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f9fafb;">
+            <div id="platform-chat-messages" style="flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #f9fafb;">
                 <div style="background: white; padding: 8px 12px; border-radius: 8px; font-size: 14px; border: 1px solid #e5e7eb; align-self: flex-start; max-width: 85%;">
                     ${aiConfig.greeting || 'Hello! How can I help you today?'}
                 </div>
             </div>
-            <form id="psa-chat-form" style="padding: 15px; border-top: 1px solid #eee; display: flex; gap: 8px;">
-                <input type="text" id="psa-chat-input" placeholder="Type a message..." style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 14px;">
+            <form id="platform-chat-form" style="padding: 15px; border-top: 1px solid #eee; display: flex; gap: 8px;">
+                <input type="text" id="platform-chat-input" placeholder="Type a message..." style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 14px;">
                 <button type="submit" style="background: ${primaryColor}; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
@@ -122,20 +122,20 @@
         `;
 
         document.body.appendChild(bubble);
-        document.body.appendChild(window);
+        document.body.appendChild(windowElem);
 
         // Open/Close logic
         bubble.onclick = () => {
-            window.style.display = window.style.display === 'none' ? 'flex' : 'none';
+            windowElem.style.display = windowElem.style.display === 'none' ? 'flex' : 'none';
         };
-        const closeBtn = window.querySelector('#psa-chat-close');
+        const closeBtn = windowElem.querySelector('#platform-chat-close');
         if (closeBtn) {
-           closeBtn.onclick = () => window.style.display = 'none';
+           closeBtn.onclick = () => windowElem.style.display = 'none';
         }
 
-        const msgContainer = window.querySelector('#psa-chat-messages');
-        const chatForm = window.querySelector('#psa-chat-form');
-        const chatInput = window.querySelector('#psa-chat-input');
+        const msgContainer = windowElem.querySelector('#platform-chat-messages');
+        const chatForm = windowElem.querySelector('#platform-chat-form');
+        const chatInput = windowElem.querySelector('#platform-chat-input');
         let history = [];
 
         function appendMessage(role, text) {
@@ -191,7 +191,7 @@
     // 2. Sync Content from Dashboard
     async function syncContent() {
         try {
-            const res = await fetch(`${baseUrl}/v1/public/settings?clientId=${clientId || 'plumber-001'}`);
+            const res = await fetch(`${baseUrl}/v1/public/settings?clientId=${clientId}`);
             const payload = await res.json();
             const settings = payload.data || payload;
             if (!settings) return;
@@ -206,8 +206,8 @@
             }
 
             // Sync Text Fields
-            document.querySelectorAll('[data-platform-field], [data-psa-content]').forEach(el => {
-                const field = el.getAttribute('data-platform-field') || el.getAttribute('data-psa-content');
+            document.querySelectorAll('[data-platform-field], [data-platform-content], [data-psa-content]').forEach(el => {
+                const field = el.getAttribute('data-platform-field') || el.getAttribute('data-platform-content') || el.getAttribute('data-psa-content');
                 if (settings[field]) {
                     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
                         el.value = settings[field];
@@ -285,7 +285,7 @@
 
     // 4. Inject Dynamic Forms
     function initDynamicForms() {
-        const embeds = document.querySelectorAll('.psa-form-embed');
+        const embeds = document.querySelectorAll('.platform-form-embed, .psa-form-embed');
         embeds.forEach(async el => {
             const formId = el.getAttribute('data-form-id');
             if (!formId) return;
@@ -297,7 +297,7 @@
                 if (!formDef || formDef.error) return;
 
                 const formHtml = document.createElement('form');
-                formHtml.className = 'psa-injected-form';
+                formHtml.className = 'platform-injected-form';
                 
                 // Construct styling based on theme
                 const theme = formDef.theme || {};

@@ -15,11 +15,13 @@ import BookingsManager from './pages/dashboard/BookingsManager';
 import ContactsManager from './pages/dashboard/ContactsManager';
 import FormsManager from './pages/dashboard/FormsManager';
 import LeadsManager from './pages/dashboard/LeadsManager';
+import TicketingNexus from './pages/dashboard/TicketingNexus';
 import OperationsNexus from './pages/dashboard/OperationsNexus';
 import SettingsManager from './pages/dashboard/SettingsManager';
 import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
+import WebsiteManager from './pages/dashboard/WebsiteManager';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Privacy from './pages/Privacy';
@@ -67,10 +69,12 @@ export default function App() {
           <Route path="contacts" element={<ContactsManager />} />
           <Route path="forms" element={<FormsManager />} />
           <Route path="leads" element={<LeadsManager />} />
+          <Route path="tickets" element={<TicketingNexus />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />
           <Route path="developer" element={<HeadlessDocs />} />
           <Route path="settings" element={<SettingsManager />} />
+          <Route path="website" element={<WebsiteManager />} />
         </Route>
 
         <Route path="/superadmin" element={<SuperAdminLayout />}>

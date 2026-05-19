@@ -21,6 +21,7 @@ import leadsRoutes from './src/api/routes/leads';
 import contentRoutes from './src/api/routes/content';
 import mediaRoutes from './src/api/routes/media';
 import webhookRoutes from './src/api/routes/webhooks';
+import ticketsRoutes from './src/api/routes/tickets';
 import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
 import { requestEnvelopeMiddleware } from './src/api/middlewares/envelope';
@@ -153,6 +154,7 @@ async function startServer() {
   app.use('/v1/content', contentRoutes);
   app.use('/v1/media', mediaRoutes);
   app.use('/v1/webhooks', webhookRoutes);
+  app.use('/v1/tickets', ticketsRoutes);
 
   // Catch unmatched API routes before serving the SPA
   app.use('/v1/*', (req, res) => {

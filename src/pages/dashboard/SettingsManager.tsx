@@ -524,7 +524,7 @@ export default function SettingsManager() {
                 className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none leading-relaxed font-mono" 
                 value={settings.aiBehaviorInstructions || ''} 
                 onChange={e => updateField('aiBehaviorInstructions', e.target.value)}
-                placeholder="Example: PrimeSoft Alliance is a leader in digital transformation. We established in 2010... Our core values are... Our project managers are... We prefer email for follow-ups..."
+                placeholder="Example: Our company is a leader in digital transformation. We established in 2010... Our core values are... Our project managers are... We prefer email for follow-ups..."
               />
 
               <div className="pt-6 mt-6 border-t border-gray-100">
@@ -908,7 +908,7 @@ export default function SettingsManager() {
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
            </div>
-           <p className="text-sm text-gray-500 mb-6">Enable specific PrimeSoft Alliance features on your external website (e.g. Lovable, v0, Wix, WordPress) using our lightweight SDK.</p>
+           <p className="text-sm text-gray-500 mb-6">Enable specific platform features on your external website (e.g. Lovable, v0, Wix, WordPress) using our lightweight SDK.</p>
 
            {settings.headlessConfig?.enabled && (
              <div className="space-y-6">

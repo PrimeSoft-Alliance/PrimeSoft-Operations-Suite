@@ -107,7 +107,13 @@ router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
     const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes, clientId: bodyClientId } = req.body;
-    const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+
+    // Fix: Ensure clientId is a string if it was passed as an object
+    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
+      clientId = (clientId as any).clientId;
+    }
+    clientId = String(clientId);
 
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
 
@@ -129,11 +135,6 @@ router.post('/', async (req, res) => {
 
     const clientRecord = await Client.findOne({ clientId });
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
-
-    // Unlimited for super admin
-    if (clientId === 'plumber-001') {
-      storageLimit = 999999999999;
-    }
 
     if (usage.storageBytesUsed >= storageLimit) {
       return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new bookings right now.');
@@ -183,10 +184,11 @@ router.post('/', async (req, res) => {
     }
     
     // Notify Customer
+    const businessName = settings?.businessName || 'our business';
     sendEmail(
       email,
-      'Booking Confirmation - PrimeSoft Alliance',
-      `Hello ${fullName}, \n\nThank you for choosing PrimeSoft Alliance. We have received your booking for ${serviceSelection} on ${preferredDate} at ${preferredStartTime}.\n\nOur team will review the request and get back to you shortly.\n\nBest regards,\nPrimeSoft Alliance Team`,
+      `Booking Confirmation - ${businessName}`,
+      `Hello ${fullName}, \n\nThank you for choosing ${businessName}. We have received your booking for ${serviceSelection} on ${preferredDate} at ${preferredStartTime}.\n\nOur team will review the request and get back to you shortly.\n\nBest regards,\n${businessName} Team`,
       undefined,
       clientId
     );

@@ -23,9 +23,9 @@ export default function SuperadminLogs() {
   }, []);
 
   const filteredLogs = logs.filter(log => 
-    log.action.toLowerCase().includes(search.toLowerCase()) || 
-    log.actor.toLowerCase().includes(search.toLowerCase()) ||
-    (log.target && log.target.toLowerCase().includes(search.toLowerCase()))
+    (log.action || '').toLowerCase().includes((search || '').toLowerCase()) || 
+    (log.actor || '').toLowerCase().includes((search || '').toLowerCase()) ||
+    (log.target && log.target.toLowerCase().includes((search || '').toLowerCase()))
   );
 
   const getActionColor = (action: string) => {

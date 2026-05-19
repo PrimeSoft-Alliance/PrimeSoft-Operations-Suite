@@ -17,7 +17,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     if (req.headers['x-api-key']) {
       // In a real system we would hash and look up the API key here
       // Here we assume it's valid for demonstration
-      (req as any).clientId = req.headers['x-client-id'] || 'demo_client_id';
+      (req as any).clientId = req.headers['x-client-id'];
       return next();
     }
 

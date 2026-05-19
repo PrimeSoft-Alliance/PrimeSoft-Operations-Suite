@@ -16,11 +16,11 @@ const seedSuperAdmin = async () => {
     await Client.create({
       clientId: 'super-admin-001',
       businessName: 'System admin',
-      email: 'admin@system.com',
+      email: 'admin@platform.com',
       password: hash,
       role: 'superadmin',
       status: 'active',
-      apiKey: 'psa_sa_' + Math.random().toString(36).substring(7)
+      apiKey: 'api_sa_' + Math.random().toString(36).substring(7)
     });
   }
 };
@@ -40,7 +40,7 @@ router.post('/super-admin/onboard', async (req, res) => {
     const { email, password, secret } = req.body;
     
     // In dev, we can allow based on a secret in env
-    const SUPERADMIN_SECRET = process.env.SUPERADMIN_SETUP_SECRET || 'primesoft_init_2024';
+    const SUPERADMIN_SECRET = process.env.SUPERADMIN_SETUP_SECRET || 'platform_init_secret';
     
     if (secret !== SUPERADMIN_SECRET) {
       return res.status(403).json({ error: 'Unauthorized manual onboarding' });
@@ -64,7 +64,7 @@ router.post('/super-admin/onboard', async (req, res) => {
       password: hash,
       role: 'superadmin',
       status: 'active',
-      apiKey: 'psa_sa_' + crypto.randomBytes(16).toString('hex')
+      apiKey: 'api_sa_' + crypto.randomBytes(16).toString('hex')
     });
 
     res.json({ success: true, clientId: sa.clientId });

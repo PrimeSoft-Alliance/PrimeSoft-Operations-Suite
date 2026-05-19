@@ -9,10 +9,10 @@ export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [businessName, setBusinessName] = useState('PrimeSoft Alliance');
+  const [businessName, setBusinessName] = useState('Nexus Platform');
   const location = useLocation();
   const navigate = useNavigate();
-  const clientId = useClientId();
+  const { clientId } = useClientId();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);

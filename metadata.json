@@ -1,6 +1,6 @@
 {
-  "name": "PrimeSoft Alliance - Business & AI Platform",
-  "description": "Comprehensive IT solutions platform for PrimeSoft Alliance. Features an AI receptionist, unified booking system, and administrative control center.",
+  "name": "Unified Business Platform",
+  "description": "Comprehensive IT solutions platform. Features an AI receptionist, unified booking system, and administrative control center.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 export function useClientId() {
-  const [clientId, setClientId] = useState<string>('plumber-001');
+  const [clientId, setClientId] = useState<string>('');
 
   useEffect(() => {
     // 1. Try to get from URL

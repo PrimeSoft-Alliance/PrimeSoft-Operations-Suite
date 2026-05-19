@@ -72,18 +72,16 @@ const getCid = (req: any) => {
   const queryCid = req.query.clientId;
   const headerCid = req.headers['x-client-id'];
 
-  let cid = 'plumber-001';
+  let cid = userCid || reqCid || headerCid || queryCid;
 
-  // If user is superadmin, prioritize query/header or fallback to plumber-001
-  if (req.user?.role === 'superadmin') {
-    cid = queryCid || headerCid || 'plumber-001';
-  } else {
-    // Prefer authenticated user CID, then request CID, then finally fallback
-    cid = userCid || reqCid || 'plumber-001';
+  if (req.user?.role === 'superadmin' && (queryCid || headerCid)) {
+    cid = queryCid || headerCid;
   }
 
-  (req as any).clientId = cid;
-  return cid;
+  if (!cid) return null;
+
+  (req as any).clientId = String(cid);
+  return String(cid);
 };
 
 // Test SMTP
@@ -145,9 +143,9 @@ router.get('/stats', async (req, res) => {
       totalLeads,
       usage: {
         aiMessagesUsed: usage?.aiMessagesUsed ?? 0,
-        aiMessagesLimit: clientId === 'plumber-001' ? 999999999 : (client?.aiMessageLimit ?? 1000),
+        aiMessagesLimit: client?.aiMessageLimit ?? 1000,
         storageBytesUsed: usage?.storageBytesUsed ?? 0,
-        storageBytesLimit: clientId === 'plumber-001' ? 999999999999 : (client?.storageLimitBytes ?? 52428800)
+        storageBytesLimit: client?.storageLimitBytes ?? 52428800
       }
     };
     

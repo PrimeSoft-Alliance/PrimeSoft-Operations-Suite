@@ -435,7 +435,7 @@ export default function ClientsManager() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unique Client ID</label>
                 <input
                   required
-                  placeholder="e.g., plumber-001"
+                  placeholder="e.g. smith-001"
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                   value={newClient.clientId}
                   onChange={e => setNewClient({...newClient, clientId: e.target.value})}
@@ -807,7 +807,7 @@ export default function ClientsManager() {
                   </button>
                   <button 
                     onClick={() => {
-                      const code = `<div data-psa-content="heroTitle"></div>\n<div data-psa-content="heroSubtitle"></div>`;
+                      const code = `<div data-platform-content="heroTitle"></div>\n<div data-platform-content="heroSubtitle"></div>`;
                       navigator.clipboard.writeText(code);
                       alert('Content tags copied!');
                     }}
@@ -821,7 +821,7 @@ export default function ClientsManager() {
                 <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl">
                    <p className="text-[10px] text-amber-800 font-medium leading-relaxed">
                       <strong>Step 1:</strong> Paste the script tag in the {`<head>`} or at the end of {`<body>`}.<br/>
-                      <strong>Step 2:</strong> Add HTML elements with <code>data-psa-content="key"</code> to enable headless editing.
+                      <strong>Step 2:</strong> Add HTML elements with <code>data-platform-content="key"</code> to enable headless editing.
                    </p>
                 </div>
               </div>

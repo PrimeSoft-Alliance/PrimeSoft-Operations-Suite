@@ -1,8 +1,8 @@
-# PrimeSoft Alliance - SaaS Platform Architecture
+# SaaS Platform Architecture
 
 ## 1. Executive Summary
 
-The PrimeSoft Alliance SaaS is a multi-tenant, API-first platform designed to provide a unified backend for AI chatbots, bookings, contacts, forms, content management, and analytics. It is built to serve any client—from embedded browser widgets to server-to-server integrations and native mobile apps—across multiple programming languages. 
+The SaaS platform is a multi-tenant, API-first platform designed to provide a unified backend for AI chatbots, bookings, contacts, forms, content management, and analytics. It is built to serve any client—from embedded browser widgets to server-to-server integrations and native mobile apps—across multiple programming languages. 
 
 The architecture strictly enforcing tenant isolation via `clientId`, utilizes asynchronous event-driven queues for background tasks, and provides horizontal scalability for high availability.
 
@@ -144,7 +144,7 @@ Every table/collection MUST have a `clientId`. Queries without `clientId` (excep
 
 ## 9. Webhooks & Analytics
 
-- **Webhook Security**: All webhook payloads are signed using HMAC SHA-256 with a tenant-specific `webhook_secret`. Clients verify `X-PrimeSoft-Signature`.
+- **Webhook Security**: All webhook payloads are signed using HMAC SHA-256 with a tenant-specific `webhook_secret`. Clients verify `X-Platform-Signature`.
 - **Analytics Pipeline**: High-volume events (API calls, usage) are written to a fast ingestion layer (e.g., Redis append-only or Kafka), then flushed in batches to OLAP storage (Clickhouse) or structured time-series DB for dashboard rendering. 
 
 ## 10. Security & Authorization

@@ -37,7 +37,7 @@ export default function PromptGenerator() {
       setGeneratedPrompts({
         website: basePrompt,
         ai: `AI RECEPTIONIST SETUP for ${selectedClient?.businessName}:\n\nSystem Instructions:\n${basePrompt.split('TECHNICAL REQUIREMENTS')[0]}\n\nBehavioral Rules:\n- Be professional\n- Use only business data\n- Encourage booking`,
-        backend: `BACKEND INTEGRATION for ${clientId}:\n\n- Endpoint: /api/bookings\n- Requirements: fullName, email, phone, date, time\n- SDK: data-psa-form="booking"`,
+        backend: `BACKEND INTEGRATION for ${clientId}:\n\n- Endpoint: /api/bookings\n- Requirements: fullName, email, phone, date, time\n- SDK: data-platform-form="booking"`,
         onboarding: `ONBOARDING SUMMARY for ${selectedClient?.businessName}:\n\nBusiness is ${selectedClient?.businessType}. Setup with 1000 AI messages limit.`
       });
     } catch (err) {
@@ -53,8 +53,8 @@ export default function PromptGenerator() {
   };
 
   const filteredClients = clients.filter(c => 
-    c.businessName.toLowerCase().includes(search.toLowerCase()) || 
-    c.clientId.toLowerCase().includes(search.toLowerCase())
+    (c.businessName || '').toLowerCase().includes((search || '').toLowerCase()) || 
+    (c.clientId || '').toLowerCase().includes((search || '').toLowerCase())
   );
 
   return (
