@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Save, Globe, Layout, Image as ImageIcon, MessageSquare, Phone, Info, Zap, Shield, Target, Award, Users, Trash2, Plus, ArrowRight } from 'lucide-react';
+import { Save, Globe, Layout, Image as ImageIcon, MessageSquare, Phone, Info, Zap, Shield, Target, Award, Users, Trash2, Plus, ArrowRight, Sparkles, Loader, RefreshCw, Copy, Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export default function WebsiteManager() {
@@ -8,6 +8,9 @@ export default function WebsiteManager() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState('landing');
+  const [aiGenerating, setAiGenerating] = useState<string | null>(null);
+  const [aiTone, setAiTone] = useState<'professional' | 'casual' | 'creative' | 'technical'>('professional');
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/v1/dashboard/settings?t=${Date.now()}`)
@@ -54,27 +57,47 @@ export default function WebsiteManager() {
     setSettings((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const handleGenerate = async (section: string) => {
-      try {
-          const res = await fetch('/api/ai/generate-website-section', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  section,
-                  businessName: settings.businessName || 'My Business',
-                  services: settings.services || 'Professional Services'
-              })
-          });
-          const data = await res.json();
-          if (data?.success) {
-              setSettings((prev: any) => ({ ...prev, ...data.result }));
-          } else {
-              alert('Generation failed: ' + (data.message || 'Unknown error'));
+  const handleGenerate = async (section: string, fieldKey?: string) => {
+    setAiGenerating(fieldKey || section);
+    try {
+      const res = await fetch('/v1/dashboard/ai/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section,
+          fieldKey,
+          businessName: settings.businessName || 'My Business',
+          services: settings.services || 'Professional Services',
+          tone: aiTone,
+          currentContent: fieldKey ? settings[fieldKey] : undefined,
+          context: {
+            industry: settings.industry || 'Technology',
+            tagline: settings.tagline || 'Your business tagline'
           }
-      } catch (err) {
-          console.error(err);
-          alert('Failed to generate content');
+        })
+      });
+      const data = await res.json();
+      if (data?.success) {
+        if (fieldKey) {
+          updateField(fieldKey, data.data.content);
+        } else {
+          setSettings((prev: any) => ({ ...prev, ...data.data }));
+        }
+      } else {
+        alert('Generation failed: ' + (data.message || 'Unknown error'));
       }
+    } catch (err) {
+      console.error('[v0] AI generation error:', err);
+      alert('Failed to generate content');
+    } finally {
+      setAiGenerating(null);
+    }
+  };
+
+  const copyToClipboard = (text: string, fieldKey: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldKey);
+    setTimeout(() => setCopiedField(null), 2000);
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Loading website configuration...</div>;
@@ -90,8 +113,46 @@ export default function WebsiteManager() {
   return (
     <div className="max-w-6xl space-y-8 pb-20">
       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Website Manager</h1>
-        <p className="text-sm font-medium text-slate-500 mt-1">Configure all text, labels, and imagery across your site.</p>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Website Manager</h1>
+            <p className="text-sm font-medium text-slate-500 mt-1">Configure all text, labels, and imagery across your site.</p>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 rounded-lg">
+            <Sparkles className="w-4 h-4 text-indigo-600" />
+            <span className="text-xs font-bold text-indigo-600">AI Enhanced</span>
+          </div>
+        </div>
+        
+        {/* AI Control Panel */}
+        <div className="mt-6 pt-6 border-t border-slate-100">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">AI Content Assistant</p>
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="flex gap-2">
+              {(['professional', 'casual', 'creative', 'technical'] as const).map(tone => (
+                <button
+                  key={tone}
+                  onClick={() => setAiTone(tone)}
+                  className={cn(
+                    "px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
+                    aiTone === tone
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  )}
+                >
+                  {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-slate-400">|</span>
+            <span className="text-xs text-slate-500">
+              {aiTone === 'professional' && "Formal, corporate tone"}
+              {aiTone === 'casual' && "Friendly, conversational tone"}
+              {aiTone === 'creative' && "Imaginative, engaging tone"}
+              {aiTone === 'technical' && "Expert, detailed tone"}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="flex border-b border-gray-200 gap-8 overflow-x-auto scrollbar-hide">
@@ -116,10 +177,10 @@ export default function WebsiteManager() {
             {/* Hero Section */}
             <Section title="Hero Section" description="The first thing visitors see. Make it count." onGenerate={() => handleGenerate('landing-hero')}>
               <div className="grid md:grid-cols-2 gap-6">
-                <Field label="Hero Badge" value={settings.heroBadge} onChange={v => updateField('heroBadge', v)} placeholder="Engineering Excellence" />
-                <Field label="Hero Title" value={settings.heroTitle} onChange={v => updateField('heroTitle', v)} placeholder="Architecting the Future" />
+                <Field label="Hero Badge" value={settings.heroBadge} onChange={v => updateField('heroBadge', v)} placeholder="Engineering Excellence" fieldKey="heroBadge" onAiGenerate={handleGenerate} isGenerating={aiGenerating} />
+                <Field label="Hero Title" value={settings.heroTitle} onChange={v => updateField('heroTitle', v)} placeholder="Architecting the Future" fieldKey="heroTitle" onAiGenerate={handleGenerate} isGenerating={aiGenerating} />
                 <div className="md:col-span-2">
-                  <Field label="Hero Subtitle" value={settings.heroSubtitle} onChange={v => updateField('heroSubtitle', v)} textarea placeholder="Describe your core value proposition..." />
+                  <Field label="Hero Subtitle" value={settings.heroSubtitle} onChange={v => updateField('heroSubtitle', v)} textarea placeholder="Describe your core value proposition..." fieldKey="heroSubtitle" onAiGenerate={handleGenerate} isGenerating={aiGenerating} />
                 </div>
               </div>
             </Section>
@@ -313,10 +374,49 @@ function Section({ title, description, children, onGenerate }: { title: string, 
   );
 }
 
-function Field({ label, value, onChange, textarea, rows = 3, placeholder, className }: any) {
+function Field({ label, value, onChange, textarea, rows = 3, placeholder, className, fieldKey, onAiGenerate, isGenerating, copied }: any) {
   return (
     <div className={className}>
-      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1">{label}</label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">{label}</label>
+        {fieldKey && (
+          <div className="flex gap-1">
+            {value && (
+              <button
+                onClick={() => {
+                  if (copied === fieldKey) {
+                    navigator.clipboard.writeText(value);
+                    copied(fieldKey);
+                    setTimeout(() => copied(null), 2000);
+                  }
+                }}
+                className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Copy to clipboard"
+              >
+                {copied === fieldKey ? (
+                  <Check className="w-3.5 h-3.5 text-green-600" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+            {onAiGenerate && (
+              <button
+                onClick={() => onAiGenerate(fieldKey)}
+                disabled={isGenerating === fieldKey}
+                className="px-2 py-1.5 rounded text-indigo-600 hover:bg-indigo-50 transition-colors disabled:opacity-50 flex items-center gap-1"
+                title="Generate with AI"
+              >
+                {isGenerating === fieldKey ? (
+                  <Loader className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {textarea ? (
         <textarea 
           rows={rows}

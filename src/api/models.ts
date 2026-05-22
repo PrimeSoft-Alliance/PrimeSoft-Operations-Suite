@@ -248,6 +248,7 @@ const clientSchema = new mongoose.Schema({
   role: { type: String, enum: ['client', 'superadmin'], default: 'client' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: String, default: 'starter' },
+  tier: { type: String, enum: ['starter', 'professional', 'enterprise'], default: 'starter' },
   apiKey: { type: String, default: () => 'api_' + crypto.randomUUID() },
   activationToken: { type: String },
   isActivated: { type: Boolean, default: false },
@@ -255,7 +256,13 @@ const clientSchema = new mongoose.Schema({
   customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
   storageLimitBytes: { type: Number, default: 52428800 },
-  customFields: { type: Map, of: String }
+  customFields: { type: Map, of: String },
+  // Telegram and WhatsApp integration details
+  telegramBotToken: { type: String },
+  telegramChatIds: [{ type: String }], // Linked chat IDs
+  whatsappPhoneNumber: { type: String },
+  whatsappBusinessAccountId: { type: String },
+  whatsappAccessToken: { type: String }
 }, { timestamps: true });
 
 export const Client = mongoose.models.Client || mongoose.model<any>('Client', clientSchema);
@@ -524,4 +531,75 @@ const ticketMessageSchema = new mongoose.Schema({
 
 export const TicketMessage = mongoose.models.TicketMessage || mongoose.model<any>('TicketMessage', ticketMessageSchema);
 
+// AI Usage Logging - track all AI usage per client
+const aiUsageLogSchema = new mongoose.Schema({
+  clientId: { type: String, required: true, index: true },
+  feature: { type: String, required: true }, // 'branding-gen', 'form-gen', 'website-gen', 'chat', 'telegram', 'whatsapp'
+  source: { type: String, required: true }, // 'api', 'website', 'embed', 'telegram', 'whatsapp', 'dashboard'
+  platform: { type: String, default: 'web' }, // 'web', 'telegram', 'whatsapp', etc
+  tokensUsed: { type: Number, default: 1 },
+  inputTokens: { type: Number, default: 0 },
+  outputTokens: { type: Number, default: 0 },
+  promptText: { type: String }, // truncated prompt for debugging
+  responseLength: { type: Number, default: 0 },
+  status: { type: String, enum: ['success', 'failed', 'quota_exceeded'], default: 'success' },
+  ipAddress: { type: String },
+  userEmail: { type: String },
+  metadata: { type: Object }
+}, { timestamps: true, index: { clientId: 1, createdAt: 1 } });
+
+export const AIUsageLog = mongoose.models.AIUsageLog || mongoose.model<any>('AIUsageLog', aiUsageLogSchema);
+
+// Quotas per client - defines limits for each tier
+const quotaSchema = new mongoose.Schema({
+  clientId: { type: String, required: true, unique: true, index: true },
+  tier: { type: String, enum: ['starter', 'professional', 'enterprise'], default: 'starter' },
+  // AI Token quotas (monthly)
+  aiTokensLimit: { type: Number, default: 10000 }, // Starter: 10K, Professional: 100K, Enterprise: unlimited
+  aiTokensUsed: { type: Number, default: 0 },
+  // Chat message quotas (monthly)
+  chatMessagesLimit: { type: Number, default: 1000 }, // messages per month
+  chatMessagesUsed: { type: Number, default: 0 },
+  // Storage quota
+  storageLimit: { type: Number, default: 1073741824 }, // 1GB in bytes for starter
+  storageUsed: { type: Number, default: 0 },
+  // Integrations enabled by tier
+  enabledFeatures: {
+    webChat: { type: Boolean, default: true },
+    telegram: { type: Boolean, default: false },
+    whatsapp: { type: Boolean, default: false },
+    aiAssistant: { type: Boolean, default: true }
+  },
+  // Reset date for monthly quotas (typically 1st of month)
+  quotaResetDate: { type: Date, default: () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  }},
+  // Status
+  status: { type: String, enum: ['active', 'paused', 'exceeded'], default: 'active' }
+}, { timestamps: true });
+
+export const Quota = mongoose.models.Quota || mongoose.model<any>('Quota', quotaSchema);
+
+// Tier definitions - system-wide configurations
+const tierDefinitionSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true }, // 'starter', 'professional', 'enterprise'
+  displayName: { type: String, required: true }, // 'Starter Plan', etc
+  description: { type: String },
+  monthlyPrice: { type: Number, default: 0 },
+  features: {
+    webChat: { type: Boolean, default: true },
+    telegram: { type: Boolean, default: false },
+    whatsapp: { type: Boolean, default: false },
+    aiAssistant: { type: Boolean, default: true },
+    customBranding: { type: Boolean, default: true }
+  },
+  limits: {
+    aiTokensPerMonth: { type: Number, required: true },
+    chatMessagesPerMonth: { type: Number, required: true },
+    storageGB: { type: Number, required: true }
+  }
+}, { timestamps: true });
+
+export const TierDefinition = mongoose.models.TierDefinition || mongoose.model<any>('TierDefinition', tierDefinitionSchema);
 

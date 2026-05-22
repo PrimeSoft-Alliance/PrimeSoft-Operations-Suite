@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
+import { resolveClientId as resolveClientUtil } from '../utils/resolveClient';
 import { startOfDay, addMinutes, format } from 'date-fns';
 
 const router = express.Router();
@@ -46,95 +47,6 @@ async function getGeoLocation(ip: string) {
     console.warn('[GEO] Failed to fetch location:', err);
   }
   return { ip, city: 'Unknown', country: 'Unknown', region: 'Unknown' };
-}
-
-// Helper to resolve client identity from various signals
-async function resolveClientId(req: express.Request): Promise<string | null> {
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
-  let headerId = req.headers['x-client-id'];
-  let queryId = req.query.clientId;
-  let bodyId = req.body?.clientId;
-
-  if (typeof headerId === 'object' && headerId !== null && 'clientId' in headerId) headerId = (headerId as any).clientId;
-  if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
-  if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
-
-  console.log(`[RESOLVE] Attempting to resolve client for host: ${req.hostname}. Signals - APIKey: ${!!apiKey}, HeaderID: ${headerId}, QueryID: ${queryId}, BodyID: ${bodyId}`);
-
-  if (apiKey) {
-    const client = await Client.findOne({ apiKey });
-    if (client) {
-      console.log(`[RESOLVE] Resolved via API Key: ${client.clientId}`);
-      return client.clientId;
-    }
-  }
-
-  const cid = headerId || queryId || bodyId;
-  if (cid) {
-    console.log(`[RESOLVE] Resolved via ID signal: ${cid}`);
-    return String(cid);
-  }
-
-  // Fallback for Platform Main Site
-  const host = req.hostname;
-  
-  // Fetch Platform Settings for homepageClientId fallback
-  let pSettings = null;
-  try {
-    pSettings = await PlatformSettings.findOne();
-  } catch (e) {
-    console.error('[RESOLVE] Error fetching PlatformSettings:', e);
-  }
-
-  const homepageId = pSettings?.homepageClientId || 'platform-prime';
-
-  if (host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0' || host.includes('127.0.0.1')) {
-    console.log(`[RESOLVE] Platform domain detected (${host}), defaulting to ${homepageId}`);
-    
-    // Auto-provision default client if it doesn't exist
-    let client = await Client.findOne({ clientId: homepageId });
-    if (!client) {
-      client = await Client.create({
-        clientId: homepageId,
-        businessName: 'Platform Central',
-        email: 'central@platform.com',
-        password: 'platform_prime_placeholder',
-        role: 'superadmin',
-        status: 'active'
-      });
-      console.log(`[RESOLVE] Provisioned default client: ${homepageId}`);
-    }
-
-    // Ensure Settings exist for the client to avoid 404s
-    const settings = await Settings.findOne({ clientId: homepageId });
-    if (!settings) {
-      await Settings.create({ 
-        clientId: homepageId,
-        businessName: client.businessName,
-        email: client.email,
-        aboutText: 'Global platform hub for all integrated services.'
-      });
-      console.log(`[RESOLVE] Provisioned default settings for: ${homepageId}`);
-    }
-
-    return homepageId;
-  }
-
-  // Check database for domain mapping match
-  const domainMapping = await Domain.findOne({ host, status: 'active' });
-  if (domainMapping) {
-    console.log(`[RESOLVE] Resolved via Domain mapping: ${domainMapping.clientId}`);
-    return domainMapping.clientId;
-  }
-
-  const customClient = await Client.findOne({ customDomain: host });
-  if (customClient) {
-    console.log(`[RESOLVE] Resolved via customDomain field: ${customClient.clientId}`);
-    return customClient.clientId;
-  }
-
-  console.warn(`[RESOLVE] Failed to resolve client for host: ${host}`);
-  return null;
 }
 
 // Domain Resolution & Headless Config
@@ -214,7 +126,7 @@ router.get('/headless/config', async (req, res) => {
 router.get('/content', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Settings not found');
 
@@ -243,7 +155,7 @@ router.get('/content', async (req, res) => {
 router.get('/content/items', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     const query: any = { clientId, status: 'published' };
     if (req.query.type) query.type = req.query.type;
     if (req.query.tag) query.tags = req.query.tag;
@@ -259,7 +171,7 @@ router.get('/content/items', async (req, res) => {
 router.get('/content/config', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Client settings not found');
 
@@ -295,7 +207,7 @@ router.get('/content/config', async (req, res) => {
 router.get('/content/items/:slug', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     const item = await mongoose.models.ContentItem.findOne({ 
       clientId, 
       slug: req.params.slug,
@@ -522,7 +434,7 @@ router.post('/onboarding/:token', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     let settings = await Settings.findOne({ clientId });
     
     const settingsObj = settings ? settings.toObject() : {};
@@ -581,7 +493,7 @@ router.get('/settings', async (req, res) => {
 router.post('/booking', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     
     // Ensure client exists and is active
     let client = await Client.findOne({ clientId });
@@ -670,7 +582,7 @@ router.post('/contact', async (req, res) => {
        // For now just logging or we could enforce auth if needed
     }
 
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     
     // Ensure client exists
     let client = await Client.findOne({ clientId });
@@ -805,7 +717,7 @@ router.post('/forms/:formId/submit', async (req, res) => {
 router.post('/ai/chat', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
 
     const { message, history, userName, userEmail } = req.body;
@@ -899,7 +811,7 @@ router.post('/ai/chat', async (req, res) => {
 router.post('/ai/chat/identify', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientId(req);
+    const clientId = await resolveClientUtil(req);
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
 
     const { name, email, phone } = req.body;
