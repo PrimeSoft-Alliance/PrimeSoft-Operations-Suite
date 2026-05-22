@@ -17,11 +17,15 @@ export function useClientId() {
     // 2. Resolve via domain mapped endpoint
     const hostname = window.location.hostname;
     
-    // Skip if running local preview mostly
-    if (hostname.includes('run.app') || hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+    // Default to platform-prime for the main platform domains
+    const isPlatformDomain = hostname.includes('run.app') || hostname.includes('localhost') || hostname === '0.0.0.0';
+    
+    if (isPlatformDomain) {
       const storedClientId = localStorage.getItem('ps_client_id');
       if (storedClientId) {
         setClientId(storedClientId);
+      } else {
+        setClientId('platform-prime');
       }
       return;
     }

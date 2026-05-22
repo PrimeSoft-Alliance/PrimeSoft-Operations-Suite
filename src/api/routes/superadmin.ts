@@ -13,6 +13,12 @@ router.use(superAdminMiddleware);
 // Helper for audit logging
 async function logAction(actor: string, action: string, target?: string, metadata?: any, ip?: string) {
   try {
+    const pSettings = await PlatformSettings.findOne();
+    if (pSettings?.detailedAuditLogging === false) {
+      // If detailed logging is off, we only log critical actions
+      const criticalActions = ['UPDATE_PLATFORM_SETTINGS', 'DELETE_CLIENT', 'APPROVE_ONBOARDING', 'UPDATE_CLIENT'];
+      if (!criticalActions.includes(action)) return;
+    }
     await AuditLog.create({ actor, action, target, metadata, ip });
   } catch (err) {
     console.error('Audit Log Error:', err);
@@ -26,6 +32,31 @@ async function notify(title: string, message: string, type: 'info'|'warning'|'er
   } catch (err) {
     console.error('Notification Error:', err);
   }
+}
+
+// Generate unique, duplicate-free Client ID helper
+async function generateUniqueClientId(businessName: string): Promise<string> {
+  const base = String(businessName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  
+  const baseSlug = base || 'client';
+  let clientId = `${baseSlug}-${Math.random().toString(36).substring(7)}`;
+  let attempt = 0;
+  
+  while (attempt < 20) {
+    const existingClient = await Client.findOne({ clientId });
+    const existingInvite = await Invite.findOne({ clientId });
+    if (!existingClient && !existingInvite) {
+      return clientId;
+    }
+    clientId = `${baseSlug}-${Math.floor(1000 + Math.random() * 9000)}`;
+    attempt++;
+  }
+  return `${baseSlug}-${crypto.randomUUID().substring(0, 8)}`;
 }
 
 // Onboarding Requests
@@ -46,9 +77,10 @@ router.post('/onboarding-requests/:id/approve', async (req, res) => {
     const request = await OnboardingRequest.findOneAndUpdate({ requestId: id }, { status: 'approved' }, { new: true });
     if (!request) return envRes.sendError(404, 'API_ERROR', 'Request not found');
     
-    // Create an invite for the newly approved business
-    const clientId = request.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.random().toString(36).substring(7);
+    // Create a duplicate-free invite for the newly approved business
+    const clientId = await generateUniqueClientId(request.businessName);
     const token = crypto.randomBytes(32).toString('hex');
+    const activationToken = 'ACT-' + crypto.randomBytes(12).toString('hex').toUpperCase();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // Valid for 7 days
     const inviteId = `inv_${crypto.randomBytes(6).toString('hex')}`;
@@ -62,7 +94,12 @@ router.post('/onboarding-requests/:id/approve', async (req, res) => {
       onboardedEmail: request.email
     });
 
-    await logAction((req as any).user?.email || 'admin', 'APPROVE_ONBOARDING', id, { clientId, inviteId });
+    // We can also pre-create the client record or wait for onboarding. 
+    // Usually we wait for onboarding. But the user wants an "activation token".
+    // Let's ensure the activation token is stored for the client when it's eventually created.
+    // Or better, generate it here and tell the user.
+
+    await logAction((req as any).user?.email || 'admin', 'APPROVE_ONBOARDING', id, { clientId, inviteId, activationToken });
 
     // Send Approval Email
     const fullUrl = `${req.headers.origin}/onboarding/${token}`;
@@ -87,7 +124,7 @@ router.get('/health', async (req, res) => {
     // Test AI availability (simulated check)
     let aiStatus = 'healthy';
     try {
-      // In real scenario, test connectivity to Groq/Gemini
+      // In real scenario, test connectivity to Groq
     } catch {
       aiStatus = 'down';
     }
@@ -96,7 +133,7 @@ router.get('/health', async (req, res) => {
       status: dbStatus === 'healthy' && aiStatus === 'healthy' ? 'healthy' : 'degraded',
       services: {
         database: { status: dbStatus, latency: '12ms' },
-        ai: { status: aiStatus, provider: 'Groq/Gemini' },
+        ai: { status: aiStatus, provider: 'Groq' },
         email: { status: 'healthy', provider: 'SMTP' },
         storage: { status: 'healthy', used: '42.5MB' }
       },
@@ -185,18 +222,43 @@ router.post('/onboarding-requests/:id/info-request', async (req, res) => {
   }
 });
 
-// Get all clients
+// Get all clients with real database usage stats
 router.get('/clients', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clients = await Client.find({ role: 'client' }).select('-password').lean();
-    const processedClients = clients.map((c: any) => ({
-      ...c,
-      status: c.status || 'active'
-    }));
+    const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const usages = await UsageStats.find({ month: currentMonth }).lean();
+
+    const usageMap = new Map();
+    for (const u of usages) {
+      usageMap.set(u.clientId, u);
+    }
+
+    const processedClients = clients.map((c: any) => {
+      const u = usageMap.get(c.clientId) || {};
+      return {
+        ...c,
+        status: c.status || 'active',
+        aiMessagesUsed: u.aiMessagesUsed || 0,
+        storageBytesUsed: u.storageBytesUsed || 0
+      };
+    });
     envRes.sendSuccess(processedClients);
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Server error');
+  }
+});
+
+// Generate a guaranteed unique client ID based on business name
+router.get('/clients/generate-id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const name = String(req.query.name || 'client');
+    const clientId = await generateUniqueClientId(name);
+    envRes.sendSuccess({ clientId });
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate unique client ID');
   }
 });
 
@@ -282,6 +344,7 @@ router.post('/clients', async (req, res) => {
 
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(password, salt);
+    const activationToken = 'ACT-' + crypto.randomBytes(12).toString('hex').toUpperCase();
 
     const clientPayload: any = {
       clientId,
@@ -292,6 +355,8 @@ router.post('/clients', async (req, res) => {
       aiMessageLimit,
       storageLimitBytes,
       customFields,
+      activationToken,
+      isActivated: false,
       apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
     };
     if (customDomain) clientPayload.customDomain = customDomain;
@@ -356,6 +421,27 @@ router.get('/logs', async (req, res) => {
   }
 });
 
+router.post('/logs', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { action, target, metadata } = req.body;
+    const actor = (req as any).user?.email || 'admin';
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    
+    const log = await AuditLog.create({
+      actor,
+      action,
+      target: target || 'GLOBAL',
+      metadata,
+      ip: typeof ip === 'string' ? ip : undefined
+    });
+    
+    envRes.sendSuccess(log);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to write audit log');
+  }
+});
+
 // Get all leads (Platform wide)
 router.get('/leads', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -368,7 +454,17 @@ router.get('/leads', async (req, res) => {
   }
 });
 
-// Platform-wide bookings
+// Platform-wide bookings (Alias for system-admin)
+router.get('/bookings', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const bookings = await Booking.find().sort({ createdAt: -1 }).limit(100).lean();
+    envRes.sendSuccess(bookings);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform bookings');
+  }
+});
+
 router.get('/platform-bookings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
@@ -379,7 +475,17 @@ router.get('/platform-bookings', async (req, res) => {
   }
 });
 
-// Platform-wide contacts/tickets
+// Platform-wide contacts/tickets (Alias for system-admin)
+router.get('/inquiries', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const contacts = await Contact.find().sort({ createdAt: -1 }).limit(100).lean();
+    envRes.sendSuccess(contacts);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform inquiries');
+  }
+});
+
 router.get('/platform-contacts', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
@@ -525,11 +631,40 @@ router.get('/settings', async (req, res) => {
 router.put('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const settings = await PlatformSettings.findOneAndUpdate({}, req.body, { upsert: true, new: true });
+    const { homepageClientId, platformName, supportEmail, allowAnonymousContact, maintenanceMode, defaultAiLimit, defaultStorageMB, enforceMfa, restrictSubdomains, detailedAuditLogging, masterDns } = req.body;
+    
+    // Validate homepageClientId if provided
+    if (homepageClientId) {
+      const client = await Client.findOne({ clientId: homepageClientId });
+      if (!client) {
+         // We allow it but warn or we can auto-create later
+      }
+    }
+
+    const settings = await PlatformSettings.findOneAndUpdate({}, {
+      homepageClientId, platformName, supportEmail, allowAnonymousContact, maintenanceMode, defaultAiLimit, defaultStorageMB, enforceMfa, restrictSubdomains, detailedAuditLogging, masterDns
+    }, { upsert: true, new: true });
+    
     await logAction((req as any).user?.email || 'admin', 'UPDATE_PLATFORM_SETTINGS', 'platform', req.body);
     envRes.sendSuccess({ settings  });
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Failed to update settings');
+  }
+});
+
+// Generate/Regenerate Activation Token
+router.post('/clients/:clientId/regenerate-token', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { clientId } = req.params;
+    const activationToken = 'ACT-' + crypto.randomBytes(12).toString('hex').toUpperCase();
+    const client = await Client.findOneAndUpdate({ clientId }, { activationToken }, { new: true });
+    if (!client) return envRes.sendError(404, 'API_ERROR', 'Client not found');
+    
+    await logAction((req as any).user?.email || 'admin', 'REGENERATE_ACTIVATION_TOKEN', clientId);
+    envRes.sendSuccess({ activationToken });
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to regenerate token');
   }
 });
 

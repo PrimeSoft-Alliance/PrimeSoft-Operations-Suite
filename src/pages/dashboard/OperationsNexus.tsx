@@ -22,8 +22,10 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useClientId } from '../../lib/useClientId';
+import { useNavigate } from 'react-router-dom';
 
 export default function OperationsNexus() {
+  const navigate = useNavigate();
   const { clientId: cidHook } = useClientId();
   const [activeTab, setActiveTab] = useState<'leads' | 'bookings' | 'engagement'>('leads');
   const [loading, setLoading] = useState(true);
@@ -55,12 +57,16 @@ export default function OperationsNexus() {
         
         // Extract arrays safely
         const leads = leadsEnv?.data || (Array.isArray(leadsEnv) ? leadsEnv : []);
-        const bookings = bookingsEnv?.data || (Array.isArray(bookingsEnv) ? bookingsEnv : []);
+        // leads already contains unified contacts and bookings in backend, but backend 'type' might be different
+        // Let's rely entirely on leadsEnv
         
-        const combined = [
-          ...leads.map((l: any) => ({ ...l, type: 'lead', date: new Date(l.createdAt) })),
-          ...bookings.map((b: any) => ({ ...b, type: 'booking', date: new Date(b.createdAt) }))
-        ].sort((a, b) => b.date.getTime() - a.date.getTime());
+        const combined = leads.map((l: any) => ({
+          ...l, 
+          type: l.source === 'booking' ? 'booking' : 'lead', 
+          date: new Date(l.createdAt),
+          name: l.contactFirst + ' ' + l.contactLast,
+          email: l.contactEmail
+        })).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         
         setFeed(combined);
       } catch (err) {
@@ -170,7 +176,7 @@ export default function OperationsNexus() {
                     </div>
                  </div>
                  <div className="flex items-center gap-3">
-                    <button className="p-3 bg-white border border-slate-100 rounded-[1.2rem] text-slate-400 hover:text-indigo-600 transition-all"><Search className="w-4 h-4" /></button>
+                    <button onClick={() => alert('Stream search functionality active within primary logs...')} className="p-3 bg-white border border-slate-100 rounded-[1.2rem] text-slate-400 hover:text-indigo-600 transition-all"><Search className="w-4 h-4" /></button>
                  </div>
               </div>
 
@@ -199,9 +205,10 @@ export default function OperationsNexus() {
                       return filtered.slice(0, 8).map((item, idx) => (
                         <motion.div 
                           key={idx}
+                          onClick={() => navigate(item.type === 'booking' ? '/dashboard/bookings' : '/dashboard/leads')}
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
-                          className="group flex items-center justify-between py-8 first:pt-0 last:pb-0 gap-6"
+                          className="group flex items-center justify-between py-8 first:pt-0 last:pb-0 gap-6 cursor-pointer"
                         >
                           <div className="flex items-center gap-6">
                             <div className={cn(
@@ -244,8 +251,8 @@ export default function OperationsNexus() {
               </div>
               
               <div className="bg-slate-50/50 p-6 text-center border-t border-slate-100">
-                 <button className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] hover:tracking-[0.4em] transition-all">
-                    Expand Full Operations Audit →
+                 <button onClick={() => navigate(activeTab === 'bookings' ? '/dashboard/bookings' : '/dashboard/leads')} className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em] hover:tracking-[0.4em] transition-all">
+                    Expand Full Operations Audit ({activeTab}) →
                  </button>
               </div>
            </div>
@@ -291,11 +298,11 @@ export default function OperationsNexus() {
                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 mb-8">Executive Controls</h3>
                <div className="space-y-4">
                   {[
-                    { label: 'Review All Contacts', icon: MessageSquare, count: stats?.unreadContacts || 0 },
-                    { label: 'Schedule Availability', icon: Calendar, count: stats?.pendingBookings || 0 },
-                    { label: 'Security Protocols', icon: Shield, count: null },
+                    { label: 'Review All Setup / Settings', icon: Globe, path: '/dashboard/settings', count: null },
+                    { label: 'Schedule Availability', icon: Calendar, path: '/dashboard/availability', count: null },
+                    { label: 'Manage Clients & Leads', icon: Users, path: '/dashboard/leads', count: stats?.unreadContacts || 0 },
                   ].map((action, i) => (
-                    <button key={i} className="w-full flex items-center justify-between p-5 bg-white/10 rounded-[1.5rem] hover:bg-white/20 transition-all text-left">
+                    <button key={i} onClick={() => navigate(action.path)} className="w-full flex items-center justify-between p-5 bg-white/10 rounded-[1.5rem] hover:bg-white/20 transition-all text-left">
                        <div className="flex items-center gap-4">
                           <action.icon className="w-5 h-5 text-indigo-200" />
                           <span className="text-xs font-black uppercase tracking-widest">{action.label}</span>

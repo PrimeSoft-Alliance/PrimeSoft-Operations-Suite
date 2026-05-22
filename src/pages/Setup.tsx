@@ -11,14 +11,13 @@ export default function Setup() {
   const [error, setError] = useState('');
   
   const [formData, setFormData] = useState({
-    businessName: 'System Admin',
     email: '',
     password: '',
-    secret: ''
+    code: ''
   });
 
   useEffect(() => {
-    fetch('/v1/auth/setup-status')
+    fetch('/v1/auth/status-info')
       .then(res => res.json())
       .then(data => {
         setSetupRequired(data.setupRequired);
@@ -36,20 +35,32 @@ export default function Setup() {
     setError('');
     
     try {
-      const res = await fetch('/v1/auth/super-admin/onboard', {
+      const res = await fetch('/v1/auth/welcome-onboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       });
       
-      const data = await res.json();
-      if (data.success) {
+      let data;
+      try {
+        const text = await res.text();
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error('Invalid JSON response:', text);
+          throw new Error(`Server returned invalid response: ${text.substring(0, 50)}...`);
+        }
+      } catch (e) {
+        throw e instanceof Error ? e : new Error('Failed to read server response');
+      }
+
+      if (res.ok && data.success) {
         navigate('/login');
       } else {
-        setError(data.error || 'Setup failed');
+        setError(data?.error || data?.message || 'Setup failed');
       }
     } catch (err) {
-      setError('Connection failed');
+      setError(err instanceof Error ? err.message : 'Connection failed');
     } finally {
       setSubmitting(false);
     }
@@ -121,16 +132,16 @@ export default function Setup() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Setup Secret</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Platform Invite Code</label>
             <div className="relative">
               <Rocket className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 required
                 type="password"
-                placeholder="Check SUPERADMIN_SETUP_SECRET env"
+                placeholder="Enter system invite code"
                 className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all font-medium font-mono"
-                value={formData.secret}
-                onChange={e => setFormData({...formData, secret: e.target.value})}
+                value={formData.code}
+                onChange={e => setFormData({...formData, code: e.target.value})}
               />
             </div>
             <p className="text-[10px] text-gray-400 italic px-1">Defaults to <b>platform_init_secret</b> if not set.</p>

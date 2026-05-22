@@ -1,7 +1,7 @@
 import express from 'express';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
-import { Booking, Contact, Settings, UsageStats, AILog, Client, Lead } from '../models';
+import { Booking, Contact, Settings, UsageStats, AILog, Client, Lead, AuditLog } from '../models';
 import { authMiddleware } from '../auth';
 import { sendEmail } from '../email';
 
@@ -120,13 +120,13 @@ router.get('/stats', async (req, res) => {
     const client = await Client.findOne({ clientId });
     
     // Fetch data points for overview
-    const [totalBookings, pendingBookings, totalContacts, unreadContacts, totalLeads] = await Promise.all([
+    const [totalBookings, pendingBookings, totalLeads, unreadContacts] = await Promise.all([
       Booking.countDocuments({ clientId }),
       Booking.countDocuments({ clientId, status: 'pending' }),
-      Contact.countDocuments({ clientId }),
-      Contact.countDocuments({ clientId, status: 'unread' }),
-      Lead.countDocuments({ clientId })
+      Lead.countDocuments({ clientId }),
+      Lead.countDocuments({ clientId, tags: 'inquiry', stage: 'New' })
     ]);
+    const totalContacts = await Lead.countDocuments({ clientId, tags: 'inquiry' });
     
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -171,8 +171,17 @@ router.get('/domains', async (req, res) => {
 router.post('/domains', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { Domain } = await import('../models');
+    const { Domain, PlatformSettings } = await import('../models');
     const { host, type } = req.body;
+    
+    // Check if subdomains are restricted
+    if (type === 'subdomain') {
+       const pSettings = await PlatformSettings.findOne();
+       if (pSettings?.restrictSubdomains) {
+          return envRes.sendError(403, 'RESTRICTED', 'Platform policy restricts creation of new subdomains at this time.');
+       }
+    }
+
     const domain = await Domain.create({ 
       clientId: getCid(req), 
       host, 
@@ -214,28 +223,6 @@ router.patch('/bookings/:id/status', async (req, res) => {
   } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
-// Contacts
-router.get('/contacts', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const cid = getCid(req);
-    const [contacts, client] = await Promise.all([
-      Contact.find({ clientId: cid }).sort({ createdAt: -1 }),
-      Client.findOne({ clientId: cid })
-    ]);
-    envRes.sendSuccess(contacts, { clientId: cid, businessName: client?.businessName });
-  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
-});
-
-router.patch('/contacts/:id/status', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { status } = req.body;
-    const contact = await Contact.findOneAndUpdate({ _id: req.params.id, clientId: getCid(req) }, { status }, { new: true });
-    envRes.sendSuccess(contact);
-  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
-});
-
 // Settings
 router.get('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -273,6 +260,71 @@ router.post('/security', async (req, res) => {
   } catch (e) {
     envRes.sendError(500, 'API_ERROR', 'Failed to update security');
   }
+});
+
+router.post('/logs', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { PlatformSettings } = await import('../models');
+    const pSettings = await PlatformSettings.findOne();
+    
+    const { action, target, metadata } = req.body;
+    
+    if (pSettings?.detailedAuditLogging === false) {
+       // Filter non-critical logs
+       const criticalActions = ['UPDATE_SECURITY', 'UPDATE_SETTINGS', 'DELETE_DOMAIN'];
+       if (!criticalActions.includes(action)) {
+         return envRes.sendSuccess({ skipped: true, reason: 'Detailed logging disabled' });
+       }
+    }
+
+    const clientId = getCid(req);
+    const actor = (req as any).user?.email || clientId || 'client-operator';
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    const log = await AuditLog.create({
+      actor,
+      action,
+      target: target || clientId,
+      metadata: {
+        ...metadata,
+        clientId
+      },
+      ip: typeof ip === 'string' ? ip : undefined
+    });
+
+    envRes.sendSuccess(log);
+  } catch (e) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to write audit log');
+  }
+});
+
+// Contacts / Inquiries
+router.get('/contacts', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const cid = getCid(req);
+    const contacts = await Contact.find({ clientId: cid }).sort({ createdAt: -1 });
+    envRes.sendSuccess(contacts);
+  } catch (error) { envRes.sendError(500, 'API_ERROR', 'Failed to fetch contacts'); }
+});
+
+router.patch('/contacts/:id/status', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { status } = req.body;
+    const contact = await Contact.findOneAndUpdate({ _id: req.params.id, clientId: getCid(req) }, { status }, { new: true });
+    envRes.sendSuccess(contact);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed update'); }
+});
+
+router.put('/bookings/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { status } = req.body;
+    const booking = await Booking.findOneAndUpdate({ _id: req.params.id, clientId: getCid(req) }, { status }, { new: true });
+    envRes.sendSuccess(booking);
+  } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
 export default router;

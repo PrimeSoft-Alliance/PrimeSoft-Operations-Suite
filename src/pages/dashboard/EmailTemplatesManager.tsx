@@ -134,9 +134,9 @@ export default function EmailTemplatesManager() {
           </div>
         </section>
 
-        <div className="fixed bottom-0 left-64 right-0 p-4 bg-white border-t border-gray-200 flex justify-end items-center px-8 z-10">
-          {saveSuccess && <span className="text-sm text-green-600 font-medium mr-4 flex items-center">✓ Saved successfully</span>}
-          <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50">
+        <div className="flex flex-col sm:flex-row justify-end items-center gap-4 py-6 border-t border-slate-100">
+          {saveSuccess && <span className="text-sm text-green-600 font-medium flex items-center">✓ Saved successfully</span>}
+          <button type="submit" disabled={saving} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold uppercase text-xs tracking-wider transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save Templates'}
           </button>
         </div>

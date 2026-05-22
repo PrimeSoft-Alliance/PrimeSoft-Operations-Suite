@@ -16,10 +16,11 @@ export default function PromptGenerator() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    fetch('/v1/super-admin/clients')
+    fetch('/v1/sys-admin/clients')
       .then(res => res.json())
       .then(data => {
-        setClients(data);
+        const clientList = data?.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+        setClients(clientList);
         setLoading(false);
       });
   }, []);
@@ -27,7 +28,7 @@ export default function PromptGenerator() {
   const generatePrompts = async (clientId: string) => {
     setGenerating(true);
     try {
-      const res = await fetch(`/v1/super-admin/builder-prompt/${clientId}`);
+      const res = await fetch(`/v1/sys-admin/builder-prompt/${clientId}`);
       const data = await res.json();
       
       // Split or specifically generate other types in a real scenario
@@ -36,7 +37,7 @@ export default function PromptGenerator() {
       
       setGeneratedPrompts({
         website: basePrompt,
-        ai: `AI RECEPTIONIST SETUP for ${selectedClient?.businessName}:\n\nSystem Instructions:\n${basePrompt.split('TECHNICAL REQUIREMENTS')[0]}\n\nBehavioral Rules:\n- Be professional\n- Use only business data\n- Encourage booking`,
+        ai: `AI RECEPTIONIST SETUP for ${selectedClient?.businessName}:\n\nSystem Instructions:\n${(basePrompt || '').split('TECHNICAL REQUIREMENTS')[0]}\n\nBehavioral Rules:\n- Be professional\n- Use only business data\n- Encourage booking`,
         backend: `BACKEND INTEGRATION for ${clientId}:\n\n- Endpoint: /api/bookings\n- Requirements: fullName, email, phone, date, time\n- SDK: data-platform-form="booking"`,
         onboarding: `ONBOARDING SUMMARY for ${selectedClient?.businessName}:\n\nBusiness is ${selectedClient?.businessType}. Setup with 1000 AI messages limit.`
       });
@@ -59,10 +60,10 @@ export default function PromptGenerator() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AI Prompt Generator</h1>
-          <p className="text-gray-500">Generate copy-ready prompts for Lovable, v0, and Backend setup.</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">AI Prompt Generator</h1>
+          <p className="text-sm font-medium text-slate-500 mt-1 font-sans">Generate copy-ready prompts for Lovable, v0, and Backend setup.</p>
         </div>
       </div>
 
@@ -80,9 +81,9 @@ export default function PromptGenerator() {
           </div>
           
           <div className="flex-1 overflow-y-auto space-y-1">
-            {filteredClients.map(client => (
+            {filteredClients.map((client, idx) => (
               <button
-                key={client.clientId}
+                key={client.clientId || client._id || client.id || `client-${idx}`}
                 onClick={() => {
                   setSelectedClient(client);
                   setGeneratedPrompts({});

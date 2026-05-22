@@ -43,7 +43,7 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="relative bg-white overflow-hidden min-h-screen flex items-center pt-20">
+      <section className="relative bg-white overflow-hidden min-h-[90vh] flex items-center pt-20">
         {/* Abstract Background */}
         <div className="absolute inset-0 z-0 overflow-hidden">
           <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_20%,rgba(99,102,241,0.08),transparent_50%)]" />
@@ -64,7 +64,7 @@ export default function Home() {
             </motion.div>
 
             <motion.h1 variants={fadeUpVariant} className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 tracking-tight leading-[0.9] mb-10">
-              {heroTitle.split(' ').map((word, i, arr) => (
+              {heroTitle.split(' ').map((word: string, i: number, arr: string[]) => (
                 <React.Fragment key={i}>
                   {i >= arr.length - 2 ? <span className="text-indigo-600">{word}</span> : word}
                   {' '}
@@ -78,10 +78,13 @@ export default function Home() {
 
             <motion.div variants={fadeUpVariant} className="flex flex-col sm:flex-row gap-6 w-full sm:w-auto">
               <Link to="/get-started" className="inline-flex justify-center items-center px-10 py-5 bg-indigo-600 text-white font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all shadow-2xl shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-1 group">
-                Begin Onboarding <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                Launch Platform <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
-              <Link to="/contact" className="inline-flex justify-center items-center px-10 py-5 bg-white text-gray-900 border-2 border-gray-100 font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all hover:bg-gray-50 hover:border-gray-200">
-                Book a Strategy Call
+              <Link
+                to="/book-discovery"
+                className="inline-flex justify-center items-center px-10 py-5 bg-white text-gray-900 border-2 border-gray-100 font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all hover:bg-gray-50 hover:border-gray-200"
+              >
+                Book Discovery Session
               </Link>
             </motion.div>
             
@@ -123,7 +126,7 @@ export default function Home() {
             className="grid md:grid-cols-4 sm:grid-cols-2 gap-6"
           >
             {services.slice(0, 4).map((s: any, i: number) => {
-              const Icon = s.icon || [Zap, Shield, Globe, Database][i % 4];
+              const Icon = [Zap, Shield, Globe, Database][i % 4];
               return (
                 <motion.div 
                   key={i} 
@@ -140,20 +143,10 @@ export default function Home() {
               );
             })}
           </motion.div>
-          
-          <motion.div 
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="mt-12 text-center"
-          >
-            <Link to="/services" className="inline-flex items-center text-primary font-semibold hover:opacity-80 transition-colors group">
-              View all services <ArrowRight className="ml-1 w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </motion.div>
         </div>
       </section>
       )}
+
 
       {/* Portfolio Section */}
       {settings?.portfolioProjects?.length > 0 && (
@@ -318,11 +311,14 @@ export default function Home() {
           <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">{settings?.ctaTitle || 'Ready to Scale?'}</h2>
           <p className="text-xl text-white opacity-90 mb-10 font-light">{settings?.ctaSubtitle || 'Our architects are ready to build your next generation platform.'}</p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/booking" className="inline-flex justify-center items-center px-8 py-4 bg-white text-primary font-bold rounded-xl shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 hover:-translate-y-1 transition-all group">
-              {settings?.ctaPrimaryBtn || 'Start Project'} <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <Link 
+              to="/book-discovery"
+              className="inline-flex justify-center items-center px-8 py-4 bg-white text-primary font-bold rounded-xl shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 hover:-translate-y-1 transition-all group"
+            >
+              Book Discovery Call <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
-            <Link to="/contact" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
-              <PhoneCall className="mr-2 w-5 h-5" /> {settings?.ctaSecondaryBtn || 'Contact Sales'}
+            <Link to="/get-started" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
+               System Login
             </Link>
           </div>
         </motion.div>
@@ -337,4 +333,114 @@ function Star(props: any) {
       <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385c.148.621-.531 1.114-1.059.777l-4.704-3.003a.563.563 0 00-.598 0l-4.704 3.003c-.528.337-1.207-.156-1.059-.777l1.285-5.385a.563.563 0 00-.182-.557l-4.204-3.602a.563.563 0 00.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
     </svg>
   );
+}
+
+function DiscoveryForm({ clientId }: { clientId: string }) {
+   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+   const [formData, setFormData] = useState({
+      name: '',
+      email: '',
+      phone: '',
+      businessName: '',
+      message: ''
+   });
+
+   const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setStatus('loading');
+      try {
+         const res = await fetch('/v1/public/onboarding-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-client-id': clientId },
+            body: JSON.stringify(formData)
+         });
+         const data = await res.json();
+         if (data.success) setStatus('success');
+         else setStatus('error');
+      } catch (err) {
+         setStatus('error');
+      }
+   };
+
+   if (status === 'success') {
+      return (
+         <div className="text-center py-20 space-y-6">
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+               <CheckCircle className="w-10 h-10" />
+            </div>
+            <h3 className="text-3xl font-black text-slate-900 tracking-tight">Request Logged</h3>
+            <p className="text-slate-500 font-medium">An implementation agent will review your profile and reach out within 24 hours.</p>
+         </div>
+      );
+   }
+
+   return (
+      <form onSubmit={handleSubmit} className="space-y-6">
+         <div className="grid sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
+               <input 
+                 required
+                 type="text"
+                 value={formData.name}
+                 onChange={e => setFormData({...formData, name: e.target.value})}
+                 placeholder="Kayode Olufowobi"
+                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
+               />
+            </div>
+            <div className="space-y-2">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Work Email</label>
+               <input 
+                 required
+                 type="email"
+                 value={formData.email}
+                 onChange={e => setFormData({...formData, email: e.target.value})}
+                 placeholder="name@company.com"
+                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
+               />
+            </div>
+         </div>
+         <div className="grid sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Name</label>
+               <input 
+                 required
+                 type="text"
+                 value={formData.businessName}
+                 onChange={e => setFormData({...formData, businessName: e.target.value})}
+                 placeholder="Acme Corp"
+                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
+               />
+            </div>
+            <div className="space-y-2">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
+               <input 
+                 required
+                 type="tel"
+                 value={formData.phone}
+                 onChange={e => setFormData({...formData, phone: e.target.value})}
+                 placeholder="+971 ..."
+                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
+               />
+            </div>
+         </div>
+         <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Implementation Scope</label>
+            <textarea 
+              rows={3}
+              value={formData.message}
+              onChange={e => setFormData({...formData, message: e.target.value})}
+              placeholder="Tell us about your technical requirements..."
+              className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
+            />
+         </div>
+         <button 
+           disabled={status === 'loading'}
+           className="w-full py-5 bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50"
+         >
+            {status === 'loading' ? 'Transmitting Request...' : 'Submit Discovery Request'}
+         </button>
+         {status === 'error' && <p className="text-center text-xs font-bold text-rose-500">Transmission failure. Please try direct contact.</p>}
+      </form>
+   );
 }

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Settings as SettingsIcon, Save, Plus, Trash2, Clock, Globe, Palette, Mail, Sparkles, CheckCircle, X, Bot, MessageCircle, User, Cpu, Database, Shield, Code, Copy, Layout } from 'lucide-react';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn } from '../../lib/utils';
 
 export default function SettingsManager() {
@@ -1095,9 +1094,16 @@ export default function SettingsManager() {
         </section>
 
         {/* Action Bar */}
-        <div className="fixed bottom-0 left-64 right-0 p-4 bg-white border-t border-gray-200 flex justify-end items-center px-8 z-10">
-          {saveSuccess && <span className="text-sm text-green-600 font-medium mr-4 flex items-center"><svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Saved successfully</span>}
-          <button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50">
+        <div className="flex flex-col sm:flex-row justify-end items-center gap-4 py-6 border-t border-slate-100">
+          {saveSuccess && (
+            <span className="text-sm text-green-600 font-medium flex items-center">
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg> 
+              Saved successfully
+            </span>
+          )}
+          <button type="submit" disabled={saving} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold uppercase text-xs tracking-wider transition-all shadow-lg shadow-indigo-100 disabled:opacity-50">
             {saving ? 'Saving...' : 'Save All Changes'}
           </button>
         </div>

@@ -66,12 +66,12 @@ export default function BookingsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Manage Bookings</h2>
-          <p className="text-sm text-gray-500">Track and manage your customer appointments</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Manage Bookings</h2>
+          <p className="text-sm font-medium text-slate-500 mt-1">Track and manage your customer appointments</p>
         </div>
-        <div className="flex bg-gray-100 p-1 rounded-xl">
+        <div className="flex bg-slate-50 border border-slate-100 p-1 rounded-xl self-start sm:self-center">
           <button 
             onClick={() => setView('list')}
             className={cn(

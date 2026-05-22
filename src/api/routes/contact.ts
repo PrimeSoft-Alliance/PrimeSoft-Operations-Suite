@@ -1,25 +1,19 @@
 import express from 'express';
-import { Contact, Settings, UsageStats, Client } from '../models';
+import { Lead, Settings, UsageStats, Client, Contact } from '../models';
 import { sendEmail } from '../email';
 import { EnvelopeResponse } from '../middlewares/envelope';
+import { resolveClientId } from '../utils/resolveClient';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
-    const { name, email, phone, subject, message, preferredContactMethod, clientId: bodyClientId } = req.body;
-    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+    const { name, email, phone, subject, message, preferredContactMethod } = req.body;
+    const clientId = await resolveClientId(req);
 
-    // Fix: Ensure clientId is a string if it was passed as an object
-    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
-      clientId = (clientId as any).clientId;
-    }
-    clientId = String(clientId);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Target client could not be identified');
 
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
-
-    // Fetch Geo Location
     const ip = (req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '').split(',')[0].trim();
     let location = { ip, city: 'Unknown', country: 'Unknown' };
     try {
@@ -28,7 +22,7 @@ router.post('/', async (req, res) => {
       if (geoData.status === 'success') {
         location = { ip, city: geoData.city, country: geoData.country };
       }
-    } catch (e) { console.warn('[GEO] Failed to fetch IP geo:', e); }
+    } catch (e) {}
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -40,79 +34,107 @@ router.post('/', async (req, res) => {
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
 
     if (usage.storageBytesUsed >= storageLimit) {
-      return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new messages right now.');
+      return envRes.sendError(401, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new messages right now.');
     }
 
-    const contact = await Contact.create({
-      clientId,
-      name, email, phone, subject, message, preferredContactMethod,
-      location
-    });
+    const nameParts = (name || '').trim().split(' ');
+    const contactFirst = nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : name;
+    const contactLast = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
 
     const settings = await Settings.findOne({ clientId });
 
     if (settings) {
       sendEmail(
         settings.contactEmail,
-        `New Contact Message: ${subject || 'No Subject'}`,
+        `New Inquiry: ${subject || 'No Subject'}`,
         `From: ${name}\nEmail: ${email}\nPhone: ${phone}\nPrefers: ${preferredContactMethod}\n\nMessage:\n${message}`,
         undefined,
         clientId
       );
-    }
-
-    const businessName = settings?.businessName || 'our team';
-    sendEmail(
-      email,
-      `Message Received - ${businessName}`,
-      `Hello ${name},\n\nWe received your message and will get back to you shortly.\n\nThank you,\n${businessName}`,
-      undefined,
-      clientId
-    );
-
-    // Sync to Leads immediately
-    try {
-      const { Lead } = await import('../models');
-      const [first, ...lastParts] = (name || '').split(' ');
       
+      const businessName = settings.businessName || 'our team';
+      sendEmail(
+        email,
+        `Message Received - ${businessName}`,
+        `Hello ${name},\n\nWe received your message and will get back to you shortly.\n\nThank you,\n${businessName}`,
+        undefined,
+        clientId
+      );
+    }
+    
+    // Save to Contact model for Inquiries View
+    await Contact.create({
+      clientId,
+      name,
+      email,
+      phone,
+      subject: subject || 'General Inquiry',
+      message,
+      preferredContactMethod,
+      location,
+      status: 'unread'
+    });
+
+    // Sync to Leads logic
+    let savedLead = null;
+    try {
       const criteria: any = { clientId };
       const or = [];
       if (email) or.push({ contactEmail: email.toLowerCase().trim() });
       if (phone) or.push({ contactPhone: phone.trim() });
       
-      let lead = null;
-      if (or.length > 0) lead = await Lead.findOne({ ...criteria, $or: or });
+      let existingLead = null;
+      if (or.length > 0) existingLead = await Lead.findOne({ ...criteria, $or: or });
 
-      if (lead) {
-        lead.lastActivity = new Date();
-        const tags = new Set([...(lead.tags || []), 'from contact']);
-        lead.tags = Array.from(tags);
-        if (location) lead.location = location;
-        const existingData = lead.data instanceof Map ? Object.fromEntries(lead.data) : (lead.data || {});
-        lead.data = { ...existingData, lastContactMessage: message, contactRef: contact._id };
-        await lead.save();
+      if (existingLead) {
+        existingLead.lastActivity = new Date();
+        const tags = new Set([...(existingLead.tags || []), 'inquiry']);
+        existingLead.tags = Array.from(tags);
+        if (location) existingLead.location = location;
+        const existingData = existingLead.data instanceof Map ? Object.fromEntries(existingLead.data) : (existingLead.data || {});
+        existingLead.data = { ...existingData, lastContactMessage: message, subject, preferredContactMethod };
+        
+        existingLead.activities.push({
+           type: 'email',
+           description: `Submitted inquiry: ${subject || 'No Subject'}`,
+           date: new Date(),
+           metadata: { message }
+        });
+        
+        await existingLead.save();
+        savedLead = existingLead;
       } else {
-        await Lead.create({
+        savedLead = await Lead.create({
           clientId,
-          contactFirst: first || 'Unknown',
-          contactLast: lastParts.join(' ') || '',
+          contactFirst: contactFirst || 'Unknown',
+          contactLast: contactLast || '',
           contactEmail: email,
           contactPhone: phone,
           source: 'contact',
-          tags: ['from contact', 'auto-synced'],
-          status: 'new',
+          tags: ['inquiry'],
+          stage: 'New',
           location,
           lastActivity: new Date(),
-          data: { lastContactMessage: message, contactRef: contact._id }
+          data: { lastContactMessage: message, subject, preferredContactMethod },
+          activities: [{
+             type: 'email',
+             description: `Submitted inquiry: ${subject || 'No Subject'}`,
+             date: new Date(),
+             metadata: { message }
+          }]
         });
       }
     } catch (err) {
       console.warn('[LEAD-SYNC] Failed to sync contact to lead:', err);
     }
 
-    envRes.sendSuccess(contact);
-  } catch (error) {
-    envRes.sendError(500, 'SERVER_ERROR', 'Contact submission failed');
+    envRes.sendSuccess(savedLead);
+  } catch (error: any) {
+    console.error('[CONTACT_ROUTE_ERROR]', error);
+    if (error.name === 'ValidationError') {
+      return envRes.sendError(400, 'VALIDATION_ERROR', Object.values(error.errors).map((e: any) => e.message).join(', '));
+    }
+    envRes.sendError(500, 'SERVER_ERROR', 'Contact submission failed: ' + (error.message || 'Unknown error'));
   }
 });
 

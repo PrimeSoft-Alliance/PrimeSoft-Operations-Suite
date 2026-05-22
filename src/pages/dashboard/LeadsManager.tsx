@@ -14,13 +14,16 @@ export default function LeadsManager() {
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<'kanban'|'list'>('kanban');
 
+  const isSuperAdminPath = window.location.pathname.startsWith('/superadmin');
+
   useEffect(() => {
-    if (cidHook) fetchLeads();
-  }, [cidHook]);
+    if (cidHook || isSuperAdminPath) fetchLeads();
+  }, [cidHook, isSuperAdminPath]);
 
   const fetchLeads = async () => {
     try {
-      const res = await fetch('/v1/leads', { headers: { 'x-client-id': cidHook } });
+      const targetCid = isSuperAdminPath ? 'all' : cidHook;
+      const res = await fetch('/v1/leads', { headers: { 'x-client-id': targetCid } });
       const data = await res.json();
       if (data.success) {
          setLeads(data.data.map((l:any) => ({...l, stage: l.stage || 'New'})));
@@ -57,9 +60,9 @@ export default function LeadsManager() {
        <div className="p-8 border-b border-slate-200 bg-white shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 z-10 relative">
           <div className="space-y-1">
              <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-4">
-                Pipeline Control <span className="bg-indigo-100 text-indigo-700 text-xs px-3 py-1 rounded-full uppercase tracking-widest">{filteredLeads.length} Entities</span>
+                Leads & Public Inquiries <span className="bg-indigo-100 text-indigo-700 text-xs px-3 py-1 rounded-full uppercase tracking-widest">{filteredLeads.length} Records</span>
              </h1>
-             <p className="text-slate-500 font-medium">Command center for structural opportunity ingestion and tracking.</p>
+             <p className="text-slate-500 font-medium">Command center for structural opportunity ingestion, public form inquiries, and site contacts.</p>
           </div>
           
           <div className="flex items-center gap-4 w-full md:w-auto">
@@ -141,15 +144,16 @@ export default function LeadsManager() {
                })}
              </div>
           ) : (
-             <div className="p-8 h-full overflow-y-auto">
-               <div className="bg-white border text-left border-slate-200 rounded-[2rem] shadow-xl overflow-hidden">
-                  <table className="w-full">
+             <div className="p-4 sm:p-8 h-full overflow-y-auto w-full">
+               <div className="bg-white border text-left border-slate-200 rounded-3xl sm:rounded-[2rem] shadow-xl overflow-hidden min-w-full">
+                  <div className="overflow-x-auto w-full">
+                  <table className="w-full min-w-[800px]">
                      <thead>
                         <tr className="bg-slate-50/50 border-b border-slate-100">
-                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest">Entity Signature</th>
-                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest">Stage Vector</th>
-                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest">Intelligence Location</th>
-                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest">Calculated Value</th>
+                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest whitespace-nowrap">Entity Signature</th>
+                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest whitespace-nowrap">Stage Vector</th>
+                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest whitespace-nowrap">Intelligence Location</th>
+                           <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest whitespace-nowrap">Calculated Value</th>
                            <th className="px-6 py-4 font-black text-[10px] text-slate-400 uppercase tracking-widest text-right">Ops</th>
                         </tr>
                      </thead>
@@ -158,10 +162,10 @@ export default function LeadsManager() {
                            <tr key={lead._id} onClick={()=>setSelectedLead(lead)} className="hover:bg-indigo-50/30 cursor-pointer group transition-colors">
                               <td className="px-6 py-4">
                                  <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex justify-center items-center font-black group-hover:scale-110 transition-transform">{lead.contactFirst?.[0]||'X'}</div>
-                                    <div>
-                                       <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{lead.contactFirst} {lead.contactLast}</div>
-                                       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex gap-4 mt-1">
+                                    <div className="w-10 h-10 shrink-0 rounded-xl bg-slate-900 text-white flex justify-center items-center font-black group-hover:scale-110 transition-transform">{lead.contactFirst?.[0]||'X'}</div>
+                                    <div className="min-w-0">
+                                       <div className="font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">{lead.contactFirst} {lead.contactLast}</div>
+                                       <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex flex-wrap gap-x-4 gap-y-1 mt-1 truncate">
                                           <span className="flex items-center gap-1"><Mail className="w-3 h-3"/> {lead.contactEmail||'N/A'}</span>
                                           <span className="flex items-center gap-1"><Building2 className="w-3 h-3"/> {lead.company||'Independent'}</span>
                                        </div>
@@ -173,12 +177,12 @@ export default function LeadsManager() {
                                        value={lead.stage} 
                                        onChange={e => { e.stopPropagation(); updateStage(lead._id, e.target.value); }} 
                                        onClick={e => e.stopPropagation()} 
-                                       className="text-xs border-none rounded-xl bg-white font-black uppercase tracking-widest text-indigo-600 focus:ring-0 cursor-pointer shadow-sm hover:bg-slate-50 py-2 pl-4 pr-8 border border-slate-100"
+                                       className="text-xs border-none rounded-xl bg-white font-black uppercase tracking-widest text-indigo-600 focus:ring-0 cursor-pointer shadow-sm hover:bg-slate-50 py-2 pl-4 pr-8 border border-slate-100 min-w-[140px]"
                                     >
                                        {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
                               </td>
-                              <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                              <td className="px-6 py-4 text-xs font-bold text-slate-600 whitespace-nowrap">
                                  {lead.location?.city || 'Unknown Node'}, {lead.location?.country || ''}
                               </td>
                               <td className="px-6 py-4">
@@ -191,6 +195,7 @@ export default function LeadsManager() {
                         ))}
                      </tbody>
                   </table>
+                  </div>
                </div>
              </div>
           )}

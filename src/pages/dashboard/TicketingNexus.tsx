@@ -78,25 +78,26 @@ export default function TicketingNexus() {
   };
 
   return (
-    <div className="h-full flex flex-col p-6 space-y-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Support Tickets</h1>
-          <p className="text-gray-500 font-medium">Manage customer support, routing, and live interventions.</p>
-        </div>
+    <div className="h-full flex flex-col p-4 sm:p-6 space-y-6">
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Support Tickets</h1>
+        <p className="text-sm font-medium text-slate-500 mt-1">Manage customer support, routing, and live interventions.</p>
       </div>
 
-      <div className="flex-1 flex gap-6 min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row gap-6 min-h-0">
         {/* Ticket List */}
-        <div className="w-1/3 bg-white border border-gray-200 rounded-[2rem] shadow-sm flex flex-col overflow-hidden">
-          <div className="h-full overflow-y-auto custom-scrollbar p-2">
+        <div className={cn(
+          "w-full lg:w-1/3 bg-white border border-slate-100 rounded-[2rem] shadow-sm flex flex-col overflow-hidden max-h-[400px] lg:max-h-none",
+          selectedTicket ? "hidden lg:flex" : "flex"
+        )}>
+          <div className="h-full overflow-y-auto custom-scrollbar p-3">
             {tickets.map(ticket => (
               <button
                 key={ticket._id}
-                onClick={() => selectTicket(ticket)}
+                onClick={() => selectTicket(ticket || null)}
                 className={cn(
-                  "w-full text-left p-4 rounded-[1.5rem] mb-2 transition-all border",
-                  selectedTicket?._id === ticket._id ? "bg-indigo-50 border-indigo-200" : "bg-white border-transparent hover:bg-gray-50"
+                  "w-full text-left p-4 rounded-2xl mb-2 transition-all border",
+                  selectedTicket?._id === ticket._id ? "bg-indigo-50 border-indigo-200" : "bg-white border-transparent hover:bg-slate-50"
                 )}
               >
                 <div className="flex justify-between items-start mb-2">
@@ -108,7 +109,7 @@ export default function TicketingNexus() {
                     ticket.status === 'resolved' ? 'bg-emerald-100 text-emerald-700' :
                     'bg-gray-100 text-gray-500'
                   )}>
-                    {ticket.status.replace('_', ' ')}
+                    {ticket.status?.replace('_', ' ') || 'status'}
                   </div>
                 </div>
                 <div className="text-sm font-semibold text-gray-800 line-clamp-1">{ticket.subject}</div>
@@ -119,7 +120,7 @@ export default function TicketingNexus() {
               </button>
             ))}
             {tickets.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-gray-400">
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
                 <TicketIcon className="w-8 h-8 mb-2 opacity-50" />
                 <div className="text-xs font-bold uppercase tracking-widest">No Tickets Found</div>
               </div>
@@ -128,16 +129,28 @@ export default function TicketingNexus() {
         </div>
 
         {/* Ticket Thread */}
-        <div className="w-2/3 bg-white border border-gray-200 rounded-[2rem] shadow-sm flex flex-col overflow-hidden relative">
+        <div className={cn(
+          "w-full lg:w-2/3 bg-white border border-slate-100 rounded-[2rem] shadow-sm flex flex-col overflow-hidden relative min-h-[500px] lg:min-h-0",
+          selectedTicket ? "flex" : "hidden lg:flex"
+        )}>
           {selectedTicket ? (
             <>
               {/* Header */}
-              <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white z-10 shrink-0">
-                <div>
-                  <h3 className="text-lg font-black text-gray-900">{selectedTicket.subject}</h3>
-                  <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                     <Mail className="w-4 h-4"/> {selectedTicket.customerEmail}
-                  </p>
+              <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between sm:items-center bg-white z-10 shrink-0">
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setSelectedTicket(null)}
+                    className="p-2 -ml-1 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 rounded-xl transition lg:hidden"
+                    title="Back to tickets list"
+                  >
+                    ← Back
+                  </button>
+                  <div>
+                    <h3 className="text-lg font-black text-gray-900">{selectedTicket.subject}</h3>
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                       <Mail className="w-4 h-4"/> {selectedTicket.customerEmail}
+                    </p>
+                  </div>
                 </div>
                 <select
                   value={selectedTicket.status}

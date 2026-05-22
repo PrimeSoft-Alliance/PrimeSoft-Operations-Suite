@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Phone, MapPin, Send, Loader2, CheckCircle2, MessageSquare, Globe, ArrowRight } from 'lucide-react';
 import { useClientId } from '../lib/useClientId';
 import { cn } from '../lib/utils';
-import MapComponent from '../components/Map';
 
 export default function Contact() {
   const { clientId } = useClientId();
@@ -22,20 +21,29 @@ export default function Contact() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     fetch(`/v1/public/settings?clientId=${clientId}`)
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) throw new Error('Failed to load profile');
+        return res.json();
+      })
       .then(data => {
         if (data?.success) setSettings(data.data);
         else setSettings(data);
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error('Settings load error:', err);
+        setError('Failed to initialize session. Please check your connection.');
+      })
+      .finally(() => setLoading(false));
   }, [clientId]);
 
   const businessName = settings?.businessName || 'Business Hub';
-  const businessEmail = settings?.email || 'admin@example.com';
-  const businessPhone = settings?.phone || '+1 (555) 000-0000';
+  const businessEmail = settings?.contactEmail || settings?.email || 'admin@example.com';
+  const businessPhone = settings?.contactPhone || settings?.phone || '+1 (555) 000-0000';
   const businessAddress = settings?.address || 'Global Hub';
 
   const validateField = (name: string, value: string) => {
@@ -114,6 +122,17 @@ export default function Contact() {
     errors[name] ? "border-red-100 focus:ring-red-500/10 focus:border-red-400" : "border-slate-100 focus:ring-indigo-500/10 focus:border-indigo-500"
   );
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading Environment...</p>
+        </div>
+      </div>
+    );
+  }
+
   if (success) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-6">
@@ -179,10 +198,6 @@ export default function Contact() {
                  </div>
                ))}
             </div>
-            {/* Map */}
-            <div className="rounded-[2rem] overflow-hidden border border-slate-100 shadow-xl">
-                 <MapComponent address={businessAddress} />
-            </div>
           </motion.div>
 
           {/* Form */}
@@ -205,7 +220,7 @@ export default function Contact() {
                   <input
                     name="name"
                     className={inputClasses('name')}
-                    placeholder="Alex Chen"
+                    placeholder="Enter full name"
                     value={formData.name}
                     onChange={handleChange}
                     onBlur={handleBlur}
@@ -217,7 +232,7 @@ export default function Contact() {
                   <input
                     name="phone"
                     className={inputClasses('phone')}
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+1 (000) 000-0000"
                     value={formData.phone}
                     onChange={handleChange}
                     onBlur={handleBlur}
@@ -225,28 +240,28 @@ export default function Contact() {
                   {errors.phone && <p className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-1">{errors.phone}</p>}
                 </div>
               </div>
-
+ 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
                 <input
                   name="email"
                   type="email"
                   className={inputClasses('email')}
-                  placeholder="alex@enterprise.com"
+                  placeholder="email@company.com"
                   value={formData.email}
                   onChange={handleChange}
                   onBlur={handleBlur}
                 />
                 {errors.email && <p className="text-[10px] font-black text-red-500 uppercase tracking-widest ml-1">{errors.email}</p>}
               </div>
-
+ 
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Message</label>
                 <textarea
                   name="message"
                   rows={4}
                   className={inputClasses('message')}
-                  placeholder="Describe your project vision..."
+                  placeholder="How can we help?"
                   value={formData.message}
                   onChange={handleChange}
                   onBlur={handleBlur}

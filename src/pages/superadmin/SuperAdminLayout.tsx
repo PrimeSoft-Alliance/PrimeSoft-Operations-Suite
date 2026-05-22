@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode, FileText, MessageSquare, Zap, Calendar, Contact } from 'lucide-react';
+import { LayoutDashboard, Users, UserCheck, BarChart3, Settings, LogOut, ShieldCheck, User, Menu, ChevronLeft, ChevronRight, Sparkles, Globe, HeartPulse, Bell, FileCode, FileText, MessageSquare, Zap, Calendar, Contact, Home, Mail } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
+import ProfileModal from '../../components/ProfileModal';
 
 export default function SuperAdminLayout() {
   const [loading, setLoading] = useState(true);
@@ -10,6 +11,7 @@ export default function SuperAdminLayout() {
   const [user, setUser] = useState<any>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,10 +53,9 @@ export default function SuperAdminLayout() {
     { icon: Users, label: 'Clients', path: '/superadmin/clients' },
     { icon: UserCheck, label: 'Onboarding', path: '/superadmin/onboarding' },
     { icon: Sparkles, label: 'Prompt Engine', path: '/superadmin/prompts' },
-    { icon: FileText, label: 'Forms', path: '/superadmin/forms' },
-    { icon: MessageSquare, label: 'Leads', path: '/superadmin/leads' },
+    { icon: Mail, label: 'Inquiries', path: '/superadmin/inquiries' },
     { icon: Calendar, label: 'Bookings', path: '/superadmin/bookings' },
-    { icon: Contact, label: 'Contacts', path: '/superadmin/contacts' },
+    { icon: Users, label: 'Leads Stream', path: '/superadmin/leads' },
     { icon: Globe, label: 'Domains', path: '/superadmin/domains' },
     { icon: BarChart3, label: 'Usage & Quotas', path: '/superadmin/usage' },
     { icon: ShieldCheck, label: 'Audit Logs', path: '/superadmin/logs' },
@@ -142,7 +143,13 @@ export default function SuperAdminLayout() {
             </h1>
           </div>
           <div className="flex items-center gap-6">
-             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors">Go to Homepage</Link>
+             <Link 
+               to="/" 
+               title="Go to Homepage" 
+               className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all"
+             >
+               <Home className="w-5 h-5" />
+             </Link>
              <div className="flex items-center gap-3 sm:gap-6 border-l pl-6 border-gray-100">
             <button className="relative text-gray-500 hover:text-indigo-600 transition hidden sm:block">
                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -150,14 +157,18 @@ export default function SuperAdminLayout() {
                </svg>
                <span className="absolute top-0 right-0 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
             </button>
-            <div className="flex items-center gap-2 sm:gap-3 border-l sm:pl-6 border-gray-200">
-              <span className="text-xs sm:text-sm text-gray-500 hidden md:block max-w-[150px] truncate">{user?.email}</span>
-              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
+            <div 
+              onClick={() => setIsProfileOpen(true)}
+              className="flex items-center gap-2 sm:gap-3 border-l sm:pl-6 border-gray-200 cursor-pointer group"
+            >
+              <span className="text-xs sm:text-sm text-gray-500 hidden md:block max-w-[150px] truncate group-hover:text-indigo-600 transition-colors">{user?.email}</span>
+              <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-all ring-2 ring-transparent group-hover:ring-indigo-100 ring-offset-2">
                 {user?.email?.[0]?.toUpperCase()}
               </div>
             </div>
           </div>
         </div>
+        <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
       </header>
 
         <main className="p-4 sm:p-8 overflow-y-auto">

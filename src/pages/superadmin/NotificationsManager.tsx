@@ -8,7 +8,7 @@ export default function NotificationsManager() {
 
   const fetchNotifs = async () => {
     try {
-      const res = await fetch('/v1/super-admin/notifications');
+      const res = await fetch('\/v1\/sys-admin/notifications');
       const data = await res.json();
       setNotifications(data?.success && Array.isArray(data.data) ? data.data : []);
     } catch (err) {

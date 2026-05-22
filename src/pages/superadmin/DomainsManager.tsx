@@ -24,7 +24,7 @@ export default function DomainsManager() {
 
   const fetchDomains = async () => {
     try {
-      const res = await fetch('/v1/super-admin/domains');
+      const res = await fetch('\/v1\/sys-admin/domains');
       const data = await res.json();
       setDomains(data);
     } catch (err) {
@@ -41,7 +41,7 @@ export default function DomainsManager() {
   const handleAddDomain = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/v1/super-admin/domains', {
+      const res = await fetch('/v1/sys-admin/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newDomain)
@@ -67,7 +67,7 @@ export default function DomainsManager() {
       type: 'danger',
       onConfirm: async () => {
         try {
-          await fetch(`/v1/super-admin/domains/${id}`, { method: 'DELETE' });
+          await fetch(`/v1/sys-admin/domains/${id}`, { method: 'DELETE' });
           fetchDomains();
           setConfirmModal(prev => ({ ...prev, show: false }));
         } catch (err) {
@@ -84,32 +84,23 @@ export default function DomainsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Domain Mapping</h1>
-          <p className="text-gray-500">Manage tenant subdomains and custom domain resolution.</p>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20"
-        >
-          <Plus className="w-5 h-5" />
-          Add Domain
-        </button>
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Domain Mapping</h1>
+        <p className="text-sm font-medium text-slate-500 mt-1">Manage tenant subdomains and custom domain resolution.</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between sm:items-center bg-slate-50/30">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
             <input 
               placeholder="Filter by host or clientId..."
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-indigo-500 outline-none"
+              className="w-full pl-9 pr-4 py-2.5 border border-slate-200 bg-white rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{filteredDomains.length} Domains Active</p>
+          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{filteredDomains.length} Domains Active</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -172,6 +163,25 @@ export default function DomainsManager() {
             No domain mappings found matching your search.
           </div>
         )}
+      </div>
+
+      {/* Quick Action Domain Mapping Ingestion Banner */}
+      <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl border border-indigo-950 flex flex-col md:flex-row justify-between items-center gap-6 mt-6 animate-fade-in">
+        <div className="space-y-2 text-center md:text-left">
+          <h3 className="text-lg sm:text-xl font-black tracking-tight flex items-center justify-center md:justify-start gap-2.5">
+            <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-xl border border-indigo-500/20"><Globe className="w-5 h-5" /></span>
+            Configure New Domain Mapping
+          </h3>
+          <p className="text-slate-300 text-xs sm:text-sm font-medium max-w-2xl leading-relaxed">
+            Provision subdomains or bind custom naked/wildcard domains directly to any business tenant account instantly.
+          </p>
+        </div>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="w-full md:w-auto shrink-0 bg-white hover:bg-slate-50 text-indigo-950 font-black text-xs uppercase tracking-widest px-6 py-4 rounded-xl transition-all duration-200 shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
+        >
+          Add Domain Mapping
+        </button>
       </div>
 
       <AnimatePresence>

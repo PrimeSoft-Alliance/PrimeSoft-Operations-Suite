@@ -31,6 +31,7 @@ const contactSchema = new mongoose.Schema({
   message: { type: String, required: true },
   preferredContactMethod: { type: String, enum: ['email', 'phone'], default: 'email' },
   status: { type: String, enum: ['unread', 'resolved'], default: 'unread' },
+  source: { type: String, default: 'web_form' },
   location: {
     city: String,
     country: String,
@@ -248,6 +249,8 @@ const clientSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: String, default: 'starter' },
   apiKey: { type: String, default: () => 'api_' + crypto.randomUUID() },
+  activationToken: { type: String },
+  isActivated: { type: Boolean, default: false },
   subdomain: { type: String, unique: true, sparse: true },
   customDomain: { type: String, unique: true, sparse: true },
   aiMessageLimit: { type: Number, default: 1000 },
@@ -341,6 +344,7 @@ const platformSettingsSchema = new mongoose.Schema({
   enforceMfa: { type: Boolean, default: false },
   restrictSubdomains: { type: Boolean, default: true },
   detailedAuditLogging: { type: Boolean, default: true },
+  homepageClientId: { type: String, default: 'platform-prime' },
   masterDns: { type: String, default: 'your-platform.com' },
   smtpVerified: { type: Boolean, default: true }
 }, { timestamps: true });

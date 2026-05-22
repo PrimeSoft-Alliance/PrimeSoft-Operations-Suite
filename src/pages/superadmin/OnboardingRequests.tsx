@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Info, User, Mail, Phone, Briefcase, Calendar, MessageSquare, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Info, User, Mail, Phone, Briefcase, Calendar, MessageSquare, ExternalLink, Link as LinkIcon, Plus, X, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function OnboardingRequests() {
@@ -9,9 +9,59 @@ export default function OnboardingRequests() {
   const [actionLoading, setActionLoading] = useState(false);
   const [notes, setNotes] = useState('');
 
+  // Onboarding Link Generator States
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedBusinessName, setSelectedBusinessName] = useState('');
+  const [onboardingUrl, setOnboardingUrl] = useState('');
+  const [expiryHours, setExpiryHours] = useState(24);
+  const [inviteFields, setInviteFields] = useState<{ name: string, type: string }[]>([]);
+
+  const autoGenerateId = async () => {
+    const name = selectedBusinessName || 'client';
+    try {
+      const res = await fetch(`/v1/sys-admin/clients/generate-id?name=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success && result.data?.clientId) {
+          setSelectedClientId(result.data.clientId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate id', err);
+    }
+  };
+
+  const submitOnboardingLink = async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch('/v1/sys-admin/generate-onboarding-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          clientId: selectedClientId, 
+          expiryHours, 
+          customFields: inviteFields 
+        })
+      });
+      const data = await res.json();
+      if (data?.success && data.data?.url) {
+        setOnboardingUrl(data.data.url);
+      } else if (data.url) {
+        setOnboardingUrl(data.url);
+      } else {
+        alert(data.error || 'Failed to generate link');
+      }
+    } catch (err) {
+      alert('Failed to generate link');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const fetchRequests = async () => {
     try {
-      const res = await fetch('/v1/super-admin/onboarding-requests');
+      const res = await fetch('\/v1\/sys-admin/onboarding-requests');
       if (!res.ok) throw new Error('Failed to fetch');
       const data = await res.json();
       setRequests(data?.success && Array.isArray(data.data) ? data.data : []);
@@ -29,7 +79,7 @@ export default function OnboardingRequests() {
   const handleAction = async (requestId: string, action: 'approve' | 'reject' | 'info-request') => {
     setActionLoading(true);
     try {
-      const res = await fetch(`/v1/super-admin/onboarding-requests/${requestId}/${action}`, {
+      const res = await fetch(`/v1/sys-admin/onboarding-requests/${requestId}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(action === 'approve' ? {} : (action === 'reject' ? { reason: notes } : { message: notes }))
@@ -52,11 +102,11 @@ export default function OnboardingRequests() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Onboarding Requests</h1>
-          <p className="text-gray-500">Manage new business applications and approvals.</p>
-        </div>
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+          Onboarding Requests
+        </h1>
+        <p className="text-sm font-medium text-slate-500 mt-1">Manage new business applications, approvals, & onboarding links.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -216,6 +266,177 @@ export default function OnboardingRequests() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Quick Action Onboarding Link Generator Banner */}
+      <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl border border-indigo-950 flex flex-col md:flex-row justify-between items-center gap-6 mt-6">
+        <div className="space-y-2 text-center md:text-left">
+          <h3 className="text-lg sm:text-xl font-black tracking-tight flex items-center justify-center md:justify-start gap-2.5">
+            <span className="bg-indigo-500/20 text-indigo-300 p-2 rounded-xl border border-indigo-500/20"><LinkIcon className="w-5 h-5" /></span>
+            Direct Client Onboarding Ingestion
+          </h3>
+          <p className="text-slate-300 text-xs sm:text-sm font-medium max-w-2xl leading-relaxed">
+            Bypass the normal approval queue. Instantly generate a custom secure onboarding link with optional custom field inputs and expiration windows.
+          </p>
+        </div>
+        <button 
+          onClick={() => {
+            setSelectedClientId('');
+            setSelectedBusinessName('');
+            setOnboardingUrl('');
+            setInviteFields([]);
+            setShowOnboardingModal(true);
+          }}
+          className="w-full md:w-auto shrink-0 bg-white hover:bg-slate-50 text-indigo-950 font-black text-xs uppercase tracking-widest px-6 py-4 rounded-xl transition-all duration-200 shadow-md transform hover:-translate-y-0.5 active:translate-y-0"
+        >
+          Generate Onboarding Link
+        </button>
+      </div>
+      <AnimatePresence>
+        {showOnboardingModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowOnboardingModal(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <LinkIcon className="w-6 h-6 text-emerald-600" />
+                Onboarding Link
+              </h3>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Business / Client Name</label>
+                  <input 
+                    placeholder="e.g., Smith Plumbing"
+                    value={selectedBusinessName}
+                    onChange={e => setSelectedBusinessName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-3"
+                  />
+                  <div className="flex gap-2">
+                    <input 
+                      placeholder="e.g., smith-plumbing"
+                      value={selectedClientId}
+                      onChange={e => setSelectedClientId(e.target.value)}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={autoGenerateId}
+                      className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-black rounded-xl transition uppercase tracking-wider border border-indigo-100"
+                    >
+                      Auto
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Adjust Expiry (Hours)</label>
+                  <div className="flex items-center gap-4">
+                    <input 
+                      type="range" min="1" max="168" 
+                      value={expiryHours} 
+                      onChange={e => setExpiryHours(parseInt(e.target.value))}
+                      className="flex-1 accent-emerald-600"
+                    />
+                    <span className="font-mono font-bold text-emerald-600">{expiryHours}h</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Required Custom Fields</label>
+                    <button 
+                      onClick={() => setInviteFields([...inviteFields, { name: '', type: 'text' }])}
+                      className="text-xs text-emerald-600 hover:underline flex items-center gap-1 font-bold"
+                    >
+                      <Plus className="w-3 h-3" /> Add Requirement
+                    </button>
+                  </div>
+                  
+                  {inviteFields.map((field, idx) => (
+                    <div key={idx} className="flex gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                      <input 
+                        placeholder="Field Label (e.g. VAT Number)" 
+                        className="flex-1 bg-white border border-slate-200 px-3 py-2 rounded-lg text-sm outline-none"
+                        value={field.name}
+                        onChange={e => {
+                          const next = [...inviteFields];
+                          next[idx].name = e.target.value;
+                          setInviteFields(next);
+                        }}
+                      />
+                      <select 
+                        className="bg-white border border-slate-200 px-3 py-2 rounded-lg text-xs outline-none"
+                        value={field.type}
+                        onChange={e => {
+                          const next = [...inviteFields];
+                          next[idx].type = e.target.value;
+                          setInviteFields(next);
+                        }}
+                      >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="email">Email</option>
+                        <option value="textarea">Large Text</option>
+                      </select>
+                      <button 
+                        onClick={() => setInviteFields(inviteFields.filter((_, i) => i !== idx))}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button 
+                  disabled={actionLoading || !selectedClientId}
+                  onClick={submitOnboardingLink}
+                  className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition shadow-xl shadow-emerald-500/20 disabled:opacity-50"
+                >
+                  {actionLoading ? 'Generating...' : 'Generate New Link'}
+                </button>
+
+                {onboardingUrl && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl"
+                  >
+                    <p className="text-sm font-medium text-emerald-600 mb-2 font-bold font-sans">Share this link with your client:</p>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        readOnly 
+                        value={onboardingUrl} 
+                        className="flex-1 bg-white border border-emerald-200 px-3 py-2 rounded-lg text-sm font-mono truncate"
+                      />
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(onboardingUrl);
+                          alert('Copied onboarding link details to clipboard!');
+                        }}
+                        className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-emerald-500 mt-2 italic text-center">Expires at {new Date(new Date().getTime() + expiryHours * 60 * 60 * 1000).toLocaleString()}</p>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

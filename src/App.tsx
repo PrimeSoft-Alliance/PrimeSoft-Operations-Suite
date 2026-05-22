@@ -2,18 +2,17 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import About from './pages/About';
-import Services from './pages/Services';
 import Booking from './pages/Booking';
-import Contact from './pages/Contact';
+import BookDiscovery from './pages/BookDiscovery';
+import Inquiry from './pages/Inquiry';
 import ChatbotMini from './pages/ChatbotMini';
 import Onboarding from './pages/Onboarding';
 import PublicOnboarding from './pages/PublicOnboarding';
+import Activate from './pages/Activate';
 
 import DashboardLayout from './pages/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
 import BookingsManager from './pages/dashboard/BookingsManager';
-import ContactsManager from './pages/dashboard/ContactsManager';
-import FormsManager from './pages/dashboard/FormsManager';
 import LeadsManager from './pages/dashboard/LeadsManager';
 import TicketingNexus from './pages/dashboard/TicketingNexus';
 import OperationsNexus from './pages/dashboard/OperationsNexus';
@@ -22,6 +21,8 @@ import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
 import WebsiteManager from './pages/dashboard/WebsiteManager';
+import ClientInquiries from './pages/dashboard/Inquiries';
+import ClientBookings from './pages/dashboard/Bookings';
 import Login from './pages/Login';
 import Setup from './pages/Setup';
 import Privacy from './pages/Privacy';
@@ -40,6 +41,8 @@ import DomainsManager from './pages/superadmin/DomainsManager';
 import NotificationsManager from './pages/superadmin/NotificationsManager';
 import PlatformSettings from './pages/superadmin/PlatformSettings';
 import MissionControl from './pages/superadmin/MissionControl';
+import SuperAdminInquiries from './pages/superadmin/Inquiries';
+import SuperAdminBookings from './pages/superadmin/Bookings';
 
 export default function App() {
   return (
@@ -48,9 +51,9 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
-          <Route path="services" element={<Services />} />
           <Route path="booking" element={<Booking />} />
-          <Route path="contact" element={<Contact />} />
+          <Route path="book-discovery" element={<BookDiscovery />} />
+          <Route path="inquiry" element={<Inquiry />} />
           <Route path="privacy" element={<Privacy />} />
           <Route path="terms" element={<Terms />} />
           <Route path="get-started" element={<PublicOnboarding />} />
@@ -58,6 +61,7 @@ export default function App() {
         
         <Route path="/client/login" element={<Login loginRole="client" />} />
         <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
+        <Route path="/activate" element={<Activate />} />
         <Route path="/setup" element={<Setup />} />
         <Route path="/chatbot-mini" element={<ChatbotMini />} />
         <Route path="/onboarding/:token" element={<Onboarding />} />
@@ -65,9 +69,8 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="nexus" element={<OperationsNexus />} />
-          <Route path="bookings" element={<BookingsManager />} />
-          <Route path="contacts" element={<ContactsManager />} />
-          <Route path="forms" element={<FormsManager />} />
+          <Route path="bookings" element={<ClientBookings />} />
+          <Route path="inquiries" element={<ClientInquiries />} />
           <Route path="leads" element={<LeadsManager />} />
           <Route path="tickets" element={<TicketingNexus />} />
           <Route path="availability" element={<AvailabilityManager />} />
@@ -81,10 +84,9 @@ export default function App() {
           <Route index element={<GlobalStats />} />
           <Route path="hub" element={<MissionControl />} />
           <Route path="clients" element={<ClientsManager />} />
-          <Route path="forms" element={<FormsManager />} />
           <Route path="leads" element={<LeadsManager />} />
-          <Route path="bookings" element={<BookingsManager />} />
-          <Route path="contacts" element={<ContactsManager />} />
+          <Route path="bookings" element={<SuperAdminBookings />} />
+          <Route path="inquiries" element={<SuperAdminInquiries />} />
           <Route path="onboarding" element={<OnboardingRequests />} />
           <Route path="prompts" element={<PromptGenerator />} />
           <Route path="domains" element={<DomainsManager />} />

@@ -38,18 +38,26 @@ router.get('/', async (req, res) => {
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
-    // 1. Fetch all leads, bookings, and contacts
+    // 1. Fetch all leads and bookings
     console.log(`[LEADS] Querying Leads collection for ${clientId}`);
-    const [leads, bookings, contacts, client] = await Promise.all([
-      Lead.find({ clientId }).lean(),
-      Booking.find({ clientId }).lean(),
-      Contact.find({ clientId }).lean(),
+    
+    // For SuperAdmin, if clientId is platform-prime (the host default) or missing, they might want to see EVERYTHING.
+    // However, let's be explicit. If clientId is 'all' and req.user.role === 'superadmin', return all.
+    const user = (req as any).user;
+    const isSuperAdminAll = user?.role === 'superadmin' && (!req.headers['x-client-id'] || req.headers['x-client-id'] === 'all');
+    
+    const leadQuery = isSuperAdminAll ? {} : { clientId };
+    const bookingQuery = isSuperAdminAll ? {} : { clientId };
+
+    const [leadsRaw, bookings, client] = await Promise.all([
+      Lead.find(leadQuery).lean(),
+      Booking.find(bookingQuery).lean(),
       Client.findOne({ clientId }).lean()
     ]);
     
     // Combine them into a unified format
     const combined = [
-      ...leads.map((l: any) => ({
+      ...leadsRaw.map((l: any) => ({
         ...l,
         type: 'lead'
       })),
@@ -71,23 +79,6 @@ router.get('/', async (req, res) => {
           date: b.preferredDate || b.date,
           time: b.preferredStartTime || b.time,
           notes: b.notes
-        }
-      })),
-      ...contacts.map((c: any) => ({
-        _id: c._id,
-        clientId: c.clientId,
-        contactFirst: c.name?.split(' ')[0] || 'Unknown',
-        contactLast: c.name?.split(' ').slice(1).join(' ') || '',
-        contactEmail: c.email,
-        contactPhone: c.phone || '',
-        status: c.status || 'new',
-        source: 'contact',
-        location: { city: 'Unknown', country: 'Unknown' },
-        createdAt: c.createdAt,
-        lastActivity: c.createdAt,
-        type: 'contact',
-        data: {
-           message: c.message
         }
       }))
     ];

@@ -8,6 +8,7 @@ export default function PublicOnboarding() {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -22,11 +23,24 @@ export default function PublicOnboarding() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    // Simulate API call for lead generation
-    setTimeout(() => {
+    setError('');
+    try {
+      const res = await fetch('/v1/public/onboarding-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      const data = await res.json();
+      if (res.ok && (data.success || data.data?.success)) {
+        setSuccess(true);
+      } else {
+        setError(data.error || 'Failed to submit onboarding application. Please try again.');
+      }
+    } catch (err) {
+      setError('A connection error occurred. Our servers are indexing your request, please retry in a second.');
+    } finally {
       setSubmitting(false);
-      setSuccess(true);
-    }, 2000);
+    }
   };
 
   const benefits = [
@@ -128,6 +142,12 @@ export default function PublicOnboarding() {
                     </h3>
                     <p className="text-sm font-medium text-gray-400">Step {step} of 2 — Tell us about yourself</p>
                   </div>
+
+                  {error && (
+                    <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-2xl text-xs font-bold leading-relaxed flex items-center gap-2">
+                      <span>⚠️</span> {error}
+                    </div>
+                  )}
 
                   <AnimatePresence mode="wait">
                     {step === 1 ? (

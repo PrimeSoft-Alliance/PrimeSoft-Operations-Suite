@@ -2,10 +2,13 @@ import express from 'express';
 import { Groq } from 'groq-sdk';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { EnvelopeResponse } from '../middlewares/envelope';
 import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings } from '../models';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
+import { upsertLead } from '../leads';
 import { incrementAiUsage } from '../../lib/usage';
+import { resolveClientId } from '../utils/resolveClient';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
@@ -20,6 +23,9 @@ router.get('/widget.js', (req, res) => {
   
   const script = `
 (function() {
+  const scriptTag = document.currentScript;
+  const clientId = scriptTag?.getAttribute('data-client-id') || (new URLSearchParams(window.location.search)).get('clientId') || '';
+  
   const container = document.createElement('div');
   container.id = 'ai-chat-widget';
   container.style.position = 'fixed';
@@ -28,24 +34,26 @@ router.get('/widget.js', (req, res) => {
   container.style.zIndex = '999999';
   
   const iframe = document.createElement('iframe');
-  iframe.src = '${baseUrl}/chatbot-mini';
+  iframe.src = '${baseUrl}/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
   iframe.style.width = '400px';
   iframe.style.height = '600px';
   iframe.style.border = 'none';
   iframe.style.borderRadius = '16px';
   iframe.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
-  iframe.style.display = 'none'; // Hidden by default
+  iframe.style.display = 'none';
   
   const toggle = document.createElement('button');
-  toggle.innerHTML = 'AI';
-  toggle.style.width = '60px';
-  toggle.style.height = '60px';
-  toggle.style.borderRadius = '50%';
+  toggle.innerHTML = 'Agent Chat';
+  toggle.style.padding = '0 20px';
+  toggle.style.height = '50px';
+  toggle.style.borderRadius = '25px';
   toggle.style.background = '#6366f1';
   toggle.style.color = 'white';
   toggle.style.border = 'none';
-  toggle.style.fontSize = '20px';
-  toggle.style.fontWeight = 'bold';
+  toggle.style.fontSize = '14px';
+  toggle.style.fontWeight = 'black';
+  toggle.style.textTransform = 'uppercase';
+  toggle.style.letterSpacing = '0.05em';
   toggle.style.cursor = 'pointer';
   toggle.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
   
@@ -67,15 +75,10 @@ router.get('/widget.js', (req, res) => {
 });
 
 router.post('/', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
   try {
-    const { message, sessionId, history = [], clientId: bodyClientId, pageContext } = req.body;
-    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
-    
-    // Fix: Ensure clientId is a string if it was passed as an object
-    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
-      clientId = (clientId as any).clientId;
-    }
-    clientId = clientId ? String(clientId) : null;
+    const { message, sessionId, history = [], pageContext, userName, userEmail: chatUserEmail } = req.body;
+    const clientId = await resolveClientId(req);
     
     if (!clientId) {
       return res.status(401).json({ error: 'ClientId missing', message: 'Tenant context is required.' });
@@ -103,7 +106,18 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const clientRecord = await Client.findOne({ clientId });
+    let clientRecord = await Client.findOne({ clientId });
+
+    if (!clientRecord && clientId === 'platform-prime') {
+      clientRecord = await Client.create({
+        clientId: 'platform-prime',
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active'
+      });
+    }
 
     if (!clientRecord) {
       return res.status(404).json({ 
@@ -114,7 +128,7 @@ router.post('/', async (req, res) => {
 
     // Stop if suspended
     if (clientRecord?.status === 'suspended') {
-      return res.status(403).json({ 
+      return res.status(401).json({ 
         message: 'This service is currently unavailable. Please contact the business through alternative channels.',
         suspended: true 
       });
@@ -131,13 +145,22 @@ router.post('/', async (req, res) => {
 
     let settings = await Settings.findOne({ clientId });
 
+    if (!settings && clientId === 'platform-prime') {
+      settings = await Settings.create({
+        clientId: 'platform-prime',
+        businessName: 'Platform Central',
+        contactEmail: 'central@platform.com',
+        aboutText: 'The central hub for all platform operations and client management.'
+      });
+    }
+
     if (!settings) return res.status(500).json({ error: 'Settings not found', message: "Configuration for this business is incomplete." });
     
     // Get actual limit from Client record
     let messageLimit = clientRecord?.aiMessageLimit || 1000;
 
     if (usage.aiMessagesUsed >= messageLimit) {
-      return res.status(403).json({ 
+      return res.status(401).json({ 
         message: 'Monthly AI usage limit reached. Please contact the business directly.',
         limitReached: true 
       });
@@ -165,6 +188,11 @@ router.post('/', async (req, res) => {
       role: 'user',
       content: message
     });
+
+    const userFirstName = userName ? userName.split(' ')[0] : (chatUserEmail?.split('@')[0] || '');
+    const nameInstruction = userFirstName 
+      ? `The user's name is ${userFirstName}. You MUST refer to them by their first name frequently (e.g. "Sure, ${userFirstName}...", "Great question, ${userFirstName}") to maintain a personalized technical session.` 
+      : 'The user has not provided a name yet.';
 
     const systemPrompt = `
       # SYSTEM INSTRUCTIONS — ${clientRecord.businessName} AI ASSISTANT
@@ -220,11 +248,12 @@ router.post('/', async (req, res) => {
       Page Context:
       - Page: ${pageContext?.page || 'Home'}
       - URL: ${pageContext?.route || '/'}
-      - User Access: ${userRole}${userEmail ? ` (${userEmail})` : ''}
+      - User Access: ${userRole}${chatUserEmail || userEmail || decoded?.email ? ` (${chatUserEmail || userEmail || decoded?.email})` : ''}
 
       ## BEHAVIOR GUIDELINES
       - Instructions: ${settings.aiBehaviorInstructions || "Be professional and encourage bookings."}
       - External Knowledge Source: ${settings.externalDbConfig?.enabled ? 'CONNECTED & ENABLED' : 'DISABLED'}
+      - ${nameInstruction}
     `;
 
     const tools = [
@@ -313,6 +342,24 @@ router.post('/', async (req, res) => {
       {
         type: "function",
         function: {
+          name: "collect_lead",
+          description: "Save user's contact information to the leads database. Use this when the user expresses interest but isn't ready to book, or just to save their details.",
+          parameters: {
+            type: "object",
+            properties: {
+              fullName: { type: "string" },
+              email: { type: "string" },
+              phone: { type: "string" },
+              interest: { type: "string" },
+              notes: { type: "string" }
+            },
+            required: ["fullName", "email"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
           name: "transfer_to_human",
           description: "Transfer the conversation to a human support agent and create a ticket. Use when the user requests a human, has a complex issue, or when you don't have the answer.",
           parameters: {
@@ -382,7 +429,8 @@ router.post('/', async (req, res) => {
                           reason: `Closed on ${format(reqDate, 'EEEE')}. Our typical hours are from ${workingHour?.openTime || '8:00'} to ${workingHour?.closeTime || '17:00'}.` 
                         });
                       } else {
-                        const { openTime, closeTime } = workingHour;
+                        const openTime = workingHour.openTime || '08:00';
+                        const closeTime = workingHour.closeTime || '17:00';
                         const openParts = openTime.split(':').map(Number);
                         const closeParts = closeTime.split(':').map(Number);
                         
@@ -481,9 +529,45 @@ router.post('/', async (req, res) => {
                       sendEmail(settings.contactEmail, 'New Booking Received', `New booking: ${fullName}\nService: ${serviceName}\nDate: ${date}\nTime: ${startTime}`, undefined, clientId);
                       sendEmail(email, 'Booking Confirmed', `Hello ${fullName}, your booking for ${serviceName} on ${date} at ${startTime} has been received.`, undefined, clientId);
 
+                      // Sync to Leads
+                      await upsertLead({
+                        clientId,
+                        email,
+                        phone: phoneNumber,
+                        name: fullName,
+                        source: 'booking',
+                        tags: ['high-intent', 'ai-booking'],
+                        data: { serviceSelection: serviceName, date, startTime, notes }
+                      }).catch(e => console.error('AI Booking lead sync error:', e));
+
                       functionResult = JSON.stringify({ success: true, bookingId: booking._id });
                     }
                   }
+                } else if (toolCall.function.name === 'collect_lead') {
+                  const { fullName, email, phone, interest, notes } = args;
+                  
+                  // Also create a Contact record so it appears in the Inquiries view
+                  const { Contact: ContactModelBatch } = await import('../models');
+                  await ContactModelBatch.create({
+                    clientId,
+                    name: fullName,
+                    email,
+                    phone: phone || 'N/A',
+                    subject: 'AI Intelligence Lead',
+                    message: `Interest: ${interest || 'General'}\nNotes: ${notes || 'Captured via Chatbot'}`,
+                    source: 'ai_chatbot'
+                  }).catch(e => console.error('AI Contact creation error:', e));
+
+                  await upsertLead({
+                     clientId,
+                     email,
+                     phone,
+                     name: fullName,
+                     source: 'ai',
+                     tags: ['ai-collected', interest ? `interest:${interest}` : 'inquiry'],
+                     data: { interest, notes }
+                  });
+                  functionResult = JSON.stringify({ success: true, message: "Lead information saved successfully." });
                 } else if (toolCall.function.name === 'submit_onboarding_request') {
                   const { businessName, email, phone, businessType, details } = args;
                   const requestId = `req_${Math.random().toString(36).substring(7)}`;
@@ -647,7 +731,7 @@ router.post('/', async (req, res) => {
 
     await incrementAiUsage(clientId, sessionId, 'assistant', aiResponse);
 
-    res.json({ message: aiResponse });
+    envRes.sendSuccess({ text: aiResponse });
 
   } catch (error: any) {
     console.error("Chat route error:", error);

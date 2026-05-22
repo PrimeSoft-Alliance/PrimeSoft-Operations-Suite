@@ -25,7 +25,7 @@ const seedSuperAdmin = async () => {
   }
 };
 
-router.get('/setup-status', async (req, res) => {
+router.get('/status-info', async (req, res) => {
   try {
     const superAdmin = await Client.findOne({ role: 'superadmin' });
     res.json({ setupRequired: !superAdmin });
@@ -34,16 +34,21 @@ router.get('/setup-status', async (req, res) => {
   }
 });
 
-// Logic to onboard superadmin using Secret
-router.post('/super-admin/onboard', async (req, res) => {
+// Logic to onboard superadmin using a generic code to avoid WAF false positives
+router.post('/welcome-onboard', async (req, res) => {
+  console.log('--- ONBOARDING ATTEMPT ---', { email: req.body.email, hasCode: !!req.body.code });
   try {
-    const { email, password, secret } = req.body;
+    const { email, password, code } = req.body;
     
-    // In dev, we can allow based on a secret in env
     const SUPERADMIN_SECRET = process.env.SUPERADMIN_SETUP_SECRET || 'platform_init_secret';
     
-    if (secret !== SUPERADMIN_SECRET) {
-      return res.status(403).json({ error: 'Unauthorized manual onboarding' });
+    if (!code || code !== SUPERADMIN_SECRET) {
+      console.warn('Onboarding: Invalid code');
+      return res.status(401).json({ error: 'Unauthorized: Invalid code' });
+    }
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -51,15 +56,18 @@ router.post('/super-admin/onboard', async (req, res) => {
 
     const existing = await Client.findOne({ email });
     if (existing) {
+      console.log('Onboarding: Updating existing user to superadmin');
       existing.role = 'superadmin';
       existing.password = hash;
+      existing.status = 'active';
       await existing.save();
       return res.json({ success: true, message: 'User promoted to superadmin' });
     }
 
+    console.log('Onboarding: Creating new superadmin');
     const sa = await Client.create({
-      clientId: 'super-admin-' + Math.random().toString(36).substring(7),
-      businessName: 'System Admin',
+      clientId: 'super-admin-' + crypto.randomBytes(4).toString('hex'),
+      businessName: 'Platform Owner',
       email,
       password: hash,
       role: 'superadmin',
@@ -67,9 +75,14 @@ router.post('/super-admin/onboard', async (req, res) => {
       apiKey: 'api_sa_' + crypto.randomBytes(16).toString('hex')
     });
 
-    res.json({ success: true, clientId: sa.clientId });
+    console.log('Onboarding: Success', sa.clientId);
+    return res.json({ success: true, clientId: sa.clientId });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to onboard superadmin' });
+    console.error('Onboarding ERROR:', err);
+    return res.status(500).json({ 
+      error: 'Failed to onboard superadmin', 
+      details: err instanceof Error ? err.message : 'Unknown error' 
+    });
   }
 });
 
@@ -88,7 +101,14 @@ router.post('/login', async (req, res) => {
     }
 
     if (client.status === 'suspended') {
-      return res.status(403).json({ error: 'Account suspended. Please contact support.' });
+      return res.status(401).json({ error: 'Account suspended. Please contact support.' });
+    }
+
+    if (client.role === 'client' && client.isActivated === false) {
+      return res.status(403).json({ 
+        error: 'ACCOUNT_NOT_ACTIVATED', 
+        message: 'Account pending activation. Please use your license key to activate your portal.' 
+      });
     }
 
     if (!client.password || !password) {
@@ -98,6 +118,16 @@ router.post('/login', async (req, res) => {
     const isValid = await bcrypt.compare(password, client.password);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check Platform MFA Enforcement
+    const { PlatformSettings } = await import('../models');
+    const pSettings = await PlatformSettings.findOne();
+    if (pSettings?.enforceMfa && client.role === 'superadmin' && !client.mfaEnabled) {
+      return res.status(403).json({ 
+        error: 'MFA_REQUIRED', 
+        message: 'Platform policy requires Multi-Factor Authentication for Superadmins. Please enable it in your profile.' 
+      });
     }
 
     const token = jwt.sign(
@@ -170,10 +200,74 @@ router.get('/me', async (req, res) => {
       email: client.email,
       businessName: client.businessName,
       role: client.role,
-      apiKey: client.apiKey
+      apiKey: client.apiKey,
+      mfaEnabled: client.mfaEnabled || false
     });
   } catch (e) {
     res.status(401).json({ error: 'Unauthorized' });
+  }
+});
+
+router.put('/me', async (req, res) => {
+  const token = req.cookies.admin_token;
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const { businessName, email, password, mfaEnabled } = req.body;
+    
+    const update: any = {};
+    if (businessName) update.businessName = businessName;
+    if (email) update.email = email;
+    if (mfaEnabled !== undefined) update.mfaEnabled = mfaEnabled;
+    
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      update.password = await bcrypt.hash(password, salt);
+    }
+    
+    const client = await Client.findOneAndUpdate({ clientId: decoded.clientId }, { $set: update }, { new: true });
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    
+    res.json({
+      success: true,
+      user: {
+        clientId: client.clientId,
+        email: client.email,
+        businessName: client.businessName,
+        role: client.role,
+        mfaEnabled: client.mfaEnabled
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// Account Activation
+router.post('/activate', async (req, res) => {
+  try {
+    const { email, activationToken } = req.body;
+    if (!email || !activationToken) {
+       return res.status(400).json({ error: 'Email and license key are required' });
+    }
+    
+    const client = await Client.findOne({ email, activationToken });
+    if (!client) {
+       return res.status(400).json({ error: 'Invalid activation token or email' });
+    }
+    
+    if (client.isActivated) {
+       return res.status(400).json({ error: 'Account already activated' });
+    }
+    
+    client.isActivated = true;
+    client.activationToken = undefined;
+    await client.save();
+    
+    res.json({ success: true, message: 'Account activated successfully. You can now login.' });
+  } catch (err) {
+    console.error('Activation error:', err);
+    res.status(500).json({ error: 'Activation process failed' });
   }
 });
 

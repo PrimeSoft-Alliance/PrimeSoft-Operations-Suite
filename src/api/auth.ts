@@ -57,9 +57,9 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       if (client?.status === 'suspended') {
         const envRes = res as any;
         if (typeof envRes.sendError === 'function') {
-          return envRes.sendError(403, 'SUSPENDED', 'Account suspended');
+          return envRes.sendError(401, 'SUSPENDED', 'Account suspended');
         }
-        res.status(403).json({ error: 'Account suspended' });
+        res.status(401).json({ error: 'Account suspended' });
         return;
       }
     }
@@ -88,7 +88,7 @@ export const superAdminMiddleware = (req: Request, res: Response, next: NextFunc
     
     const decoded: any = jwt.verify(token, JWT_SECRET);
     if (decoded.role !== 'superadmin') {
-      res.status(403).json({ error: 'Forbidden: Super Admin only' });
+      res.status(401).json({ error: 'Forbidden: Super Admin only' });
       return;
     }
     (req as any).user = decoded;

@@ -16,6 +16,20 @@ export default function Chatbot() {
   const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [userData, setUserData] = useState<{name: string, email: string} | null>(null);
+  const [idInput, setIdInput] = useState({ name: '', email: '' });
+  
+  useEffect(() => {
+    const saved = localStorage.getItem('chat_user_data');
+    if (saved) {
+      try {
+        setUserData(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse saved user data');
+      }
+    }
+  }, []);
+
   const [sessionId] = useState(() => Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
@@ -87,9 +101,38 @@ export default function Chatbot() {
 
   const primaryColor = chatbotPrimaryColor;
 
+  const handleIdentify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!idInput.name || !idInput.email) return;
+    setIsLoading(true);
+    try {
+       const res = await fetch('/v1/public/ai/chat/identify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...idInput, clientId })
+       });
+       if (res.ok) {
+          const data = { name: idInput.name, email: idInput.email };
+          setUserData(data);
+          localStorage.setItem('chat_user_data', JSON.stringify(data));
+          const firstName = idInput.name.split(' ')[0];
+          setMessages(prev => [...prev, { role: 'assistant', content: `Thanks ${firstName}! How can I help you today?` }]);
+       } else {
+          const errorData = await res.json();
+          alert(errorData.error?.message || 'Identification failed. Please ensure all fields are correct.');
+       }
+    } catch (err) {
+       console.error('Identification failed');
+       alert('Connection error. Please try again.');
+    } finally {
+       setIsLoading(false);
+    }
+  };
+
   const sendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
+    if (!userData) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -97,7 +140,7 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/v1/chat', {
+      const res = await fetch('/v1/chat', { // using unified chat route
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -105,6 +148,8 @@ export default function Chatbot() {
           sessionId,
           history: messages,
           clientId,
+          userName: userData.name,
+          userEmail: userData.email,
           pageContext: {
             route: location.pathname,
             page: location.pathname.split('/').pop() || 'home',
@@ -115,11 +160,13 @@ export default function Chatbot() {
       const data = await res.json();
       
       if (!res.ok) {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.message || data.error || "I'm having trouble processing that right now." }]);
+        const errMsg = data.error?.message || data.message || "I'm having trouble processing that right now.";
+        setMessages(prev => [...prev, { role: 'assistant', content: errMsg }]);
         return;
       }
       
-      setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+      const reply = data.data?.text || data.message || data.text || "I'm not sure how to respond to that.";
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: "I'm having trouble connecting right now. Please try again later." }]);
     } finally {
@@ -212,6 +259,42 @@ export default function Chatbot() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+          {!userData && (
+             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                <div className="text-center">
+                   <div className="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <User className="w-6 h-6 text-indigo-600" />
+                   </div>
+                   <h4 className="text-sm font-black text-gray-900 tracking-tight">Introduction</h4>
+                   <p className="text-[10px] text-gray-500 font-medium">Please let us know who we're speaking with to start the chat.</p>
+                </div>
+                <form onSubmit={handleIdentify} className="space-y-3">
+                   <input 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="Your Full Name"
+                      required
+                      value={idInput.name}
+                      onChange={e => setIdInput({...idInput, name: e.target.value})}
+                   />
+                   <input 
+                      type="email"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                      placeholder="Your Email Address"
+                      required
+                      value={idInput.email}
+                      onChange={e => setIdInput({...idInput, email: e.target.value})}
+                   />
+                   <button 
+                      type="submit"
+                      disabled={isLoading}
+                      style={{ backgroundColor: primaryColor }}
+                      className="w-full text-white py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:opacity-90 disabled:opacity-50 transition-all"
+                   >
+                      {isLoading ? 'Verifying...' : 'Begin Technical Session'}
+                   </button>
+                </form>
+             </div>
+          )}
           {messages.map((msg, idx) => (
             <div key={idx} className={cn("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
               <div 
@@ -244,12 +327,13 @@ export default function Chatbot() {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Type your message..."
-            className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+            disabled={!userData}
+            placeholder={userData ? "Type your message..." : "Identification required"}
+            className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50"
           />
           <button 
             type="submit" 
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || !userData}
             style={{ backgroundColor: primaryColor }}
             className="p-2.5 text-white rounded-full hover:opacity-90 disabled:opacity-50 transition-colors shadow-sm"
           >

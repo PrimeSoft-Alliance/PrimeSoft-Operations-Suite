@@ -89,19 +89,9 @@ export default function WebsiteManager() {
 
   return (
     <div className="max-w-6xl space-y-8 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-gray-900 tracking-tight">Website Manager</h1>
-          <p className="text-gray-500 font-medium">Configure all text, labels, and imagery across your site.</p>
-        </div>
-        <button 
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50"
-        >
-          {saving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-5 h-5" />}
-          {saveSuccess ? 'Changes Applied!' : 'Push Updates Live'}
-        </button>
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Website Manager</h1>
+        <p className="text-sm font-medium text-slate-500 mt-1">Configure all text, labels, and imagery across your site.</p>
       </div>
 
       <div className="flex border-b border-gray-200 gap-8 overflow-x-auto scrollbar-hide">
@@ -278,6 +268,24 @@ export default function WebsiteManager() {
           </>
         )}
       </div>
+
+      {/* Bottom Action Footer */}
+      <div className="mt-8 pt-8 border-t border-slate-100 flex flex-col sm:flex-row justify-end items-center gap-4">
+        {saveSuccess && (
+          <span className="text-sm text-green-600 font-bold flex items-center">
+             ✓ Changes Applied Successfully!
+          </span>
+        )}
+        <button 
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all duration-200 shadow-xl shadow-indigo-600/15"
+        >
+          {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+          Push Updates Live
+        </button>
+      </div>
+
     </div>
   );
 }

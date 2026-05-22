@@ -1,5 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 console.log('--- SERVER.TS LOADED ---');
 
@@ -63,9 +64,33 @@ async function startServer() {
     try {
       const host = req.hostname;
       
-      // LOG ALL REQUESTS
+      // LOG ALL REQUESTS TO CONSOLE AND TO FILE
       if (req.url.startsWith('/v1/')) {
+        const logMsg = `[${new Date().toISOString()}] REQUEST: ${req.method} ${req.url} (Host: ${host}, Headers: ${JSON.stringify(req.headers)}, Body: ${JSON.stringify(req.body)})\n`;
         console.log(`[API REQUEST] ${req.method} ${req.url} (Host: ${host})`);
+        try {
+          fs.appendFileSync(path.join(process.cwd(), 'uploads', 'api_requests.log'), logMsg);
+        } catch (e) {
+          console.error('Failed to write to requests log file:', e);
+        }
+
+        // Intercept response to write the outcome
+        const originalEnd = res.end;
+        const originalSend = res.send;
+        let responseBody = '';
+        res.send = function(chunk) {
+          if (chunk) {
+            responseBody += chunk.toString();
+          }
+          return originalSend.apply(this, arguments as any);
+        };
+        res.end = function() {
+          const resMsg = `[${new Date().toISOString()}] RESPONSE: ${req.method} ${req.url} - STATUS: ${res.statusCode} - BODY: ${responseBody.substring(0, 1000)}\n`;
+          try {
+            fs.appendFileSync(path.join(process.cwd(), 'uploads', 'api_requests.log'), resMsg);
+          } catch (e) {}
+          return originalEnd.apply(this, arguments as any);
+        };
       }
 
       // Skip for main platform domains OR API routes
@@ -138,17 +163,55 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date() });
   });
 
+  // Ensure Platform Prime exists on start
+  try {
+    const platformPrimeId = 'platform-prime';
+    const client = await Client.findOne({ clientId: platformPrimeId });
+    if (!client) {
+      console.log('[INIT] Creating Platform Prime client...');
+      await Client.create({
+        clientId: platformPrimeId,
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active',
+        apiKey: 'pk_live_platform_prime_' + crypto.randomBytes(8).toString('hex')
+      });
+    }
+    
+    const settings = await Settings.findOne({ clientId: platformPrimeId });
+    if (!settings) {
+      console.log('[INIT] Creating Platform Prime settings...');
+      await Settings.create({
+        clientId: platformPrimeId,
+        businessName: 'Platform Central',
+        contactEmail: 'central@platform.com',
+        aboutText: 'The central hub for platform operations.',
+        services: [
+          { name: 'Consultation', description: 'Technical briefing and strategy session.', durationMinutes: 30 }
+        ]
+      });
+    }
+  } catch (err) {
+    console.error('[INIT] Platform Prime setup error:', err);
+  }
+
+  // Apply common middlewares to all /v1 routes
   app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware);
   
+  // Auth routes (setup, login, etc.)
+  app.use('/v1/auth', authRoutes);
+  
+  // Other standard API routes
   app.use('/v1/public', publicRoutes);
   app.use('/v1/booking', bookingRoutes);
   app.use('/v1/bookings', bookingRoutes);
   app.use('/v1/contact', contactRoutes);
   app.use('/v1/chat', chatRoutes);
-  app.use('/v1/auth', authRoutes);
   app.use('/v1/dashboard', dashboardRoutes);
   app.use('/v1/dashboard/ai', authMiddleware, aiRoutes);
-  app.use('/v1/super-admin', superAdminRoutes);
+  app.use('/v1/sys-admin', superAdminRoutes);
   app.use('/v1/forms', formsRoutes);
   app.use('/v1/leads', leadsRoutes);
   app.use('/v1/content', contentRoutes);

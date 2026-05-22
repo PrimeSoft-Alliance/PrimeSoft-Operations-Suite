@@ -3,15 +3,16 @@ import { Booking, Settings, UsageStats, Client } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, endOfDay, parseISO, isBefore, isAfter, addMinutes, format } from 'date-fns';
 import { EnvelopeResponse } from '../middlewares/envelope';
+import { resolveClientId } from '../utils/resolveClient';
 
 const router = express.Router();
 
 router.post('/check-availability', async (req, res) => {
   const envRes = res as EnvelopeResponse;
-  const { date, durationMinutes, clientId: bodyClientId } = req.body;
-  const clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+  const clientId = await resolveClientId(req);
+  const { date } = req.body;
   
-  if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
+  if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Target client could not be identified');
 
   try {
     const settings = await Settings.findOne({ clientId });
@@ -106,16 +107,11 @@ router.post('/check-availability', async (req, res) => {
 router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
-    const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes, clientId: bodyClientId } = req.body;
-    let clientId = bodyClientId || req.headers['x-client-id'] || (req as any).clientId;
+    const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes } = req.body;
+    if (!phoneNumber) return envRes.sendError(400, 'VALIDATION_ERROR', 'Phone number is required');
+    const clientId = await resolveClientId(req);
 
-    // Fix: Ensure clientId is a string if it was passed as an object
-    if (typeof clientId === 'object' && clientId !== null && 'clientId' in clientId) {
-      clientId = (clientId as any).clientId;
-    }
-    clientId = String(clientId);
-
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is required');
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Target client could not be identified');
 
     // Fetch Geo Location
     const ip = (req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '').split(',')[0].trim();
@@ -137,7 +133,7 @@ router.post('/', async (req, res) => {
     let storageLimit = clientRecord?.storageLimitBytes || 52428800;
 
     if (usage.storageBytesUsed >= storageLimit) {
-      return envRes.sendError(403, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new bookings right now.');
+      return envRes.sendError(401, 'QUOTA_EXCEEDED', 'Storage Limit reached. Cannot accept new bookings right now.');
     }
 
     const settings = await Settings.findOne({ clientId });

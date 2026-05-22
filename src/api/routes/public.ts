@@ -3,11 +3,30 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead } from '../models';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings } from '../models';
 import { sendEmail } from '../email';
+import { upsertLead } from '../leads';
 import { startOfDay, addMinutes, format } from 'date-fns';
 
 const router = express.Router();
+
+// Middleware to check maintenance mode
+router.use(async (req, res, next) => {
+  try {
+    const pSettings = await PlatformSettings.findOne();
+    if (pSettings?.maintenanceMode) {
+      // Allow only check and resolve paths
+      const allowedPaths = ['/headless/config', '/tenant/resolve', '/v1/public/settings'];
+      const isAllowed = allowedPaths.some(path => req.path.includes(path));
+      if (!isAllowed) {
+        return (res as any as EnvelopeResponse).sendError(503, 'MAINTENANCE', 'System is currently under maintenance. Please try again later.');
+      }
+    }
+    next();
+  } catch (err) {
+    next();
+  }
+});
 
 // Helper to fetch geo-location from IP
 async function getGeoLocation(ip: string) {
@@ -29,123 +48,9 @@ async function getGeoLocation(ip: string) {
   return { ip, city: 'Unknown', country: 'Unknown', region: 'Unknown' };
 }
 
-// Helper to upsert a lead with deduplication
-async function upsertLead(params: {
-  clientId: string;
-  email: string;
-  phone: string;
-  name?: string;
-  source: 'form' | 'booking' | 'contact';
-  location: any;
-  data?: any;
-  tags?: string[];
-}) {
-  // Build query criteria for deduplication
-  const criteria: any = { clientId: params.clientId };
-  const or = [];
-  if (params.email && typeof params.email === 'string' && params.email.trim()) {
-    or.push({ contactEmail: params.email.trim() });
-  }
-  if (params.phone && typeof params.phone === 'string' && params.phone.trim()) {
-    or.push({ contactPhone: params.phone.trim() });
-  }
-  
-  let lead = null;
-  if (or.length > 0) {
-    lead = await Lead.findOne({ ...criteria, $or: or });
-  }
-
-  const [first, ...lastParts] = (params.name || '').split(' ');
-  const contactFirst = first || '';
-  const contactLast = lastParts.join(' ') || '';
-
-  // Extract form info if present in data
-  const formId = params.data?.formId;
-  const formName = params.data?.formName;
-
-  if (lead) {
-    // Update existing lead
-    lead.lastActivity = new Date();
-    // Append tags
-    const newTags = new Set([...(lead.tags || []), ...(params.tags || [])]);
-    if (params.source === 'booking') newTags.add('from booking');
-    if (params.source === 'contact') newTags.add('from contact');
-    
-    lead.tags = Array.from(newTags);
-    
-    // If it's a booking, it's very strong
-    if (params.source === 'booking') {
-      lead.stage = 'Qualified';
-      lead.score = Math.min(100, (lead.score || 0) + 20);
-    }
-    
-    // Update location if it was unknown
-    if (lead.location?.city === 'Unknown' || !lead.location?.city) {
-      lead.location = params.location;
-    }
-    
-    // Update name if missing
-    if (!lead.contactFirst) lead.contactFirst = contactFirst;
-    if (!lead.contactLast) lead.contactLast = contactLast;
-
-    // Update form info if not set
-    if (formId && !lead.formId) lead.formId = formId;
-    if (formName && !lead.formName) lead.formName = formName;
-    
-    // Merge data
-    if (params.data) {
-      const existingData = lead.data instanceof Map ? Object.fromEntries(lead.data) : (lead.data || {});
-      lead.data = { ...existingData, ...params.data };
-    }
-
-    // Add activity
-    lead.activities.push({
-      type: 'system',
-      description: `Lead updated from ${params.source}`,
-      date: new Date(),
-      metadata: { source: params.source }
-    });
-    
-    await lead.save();
-    return lead;
-  } else {
-    // Create new lead
-    const tags = params.tags || [];
-    if (params.source === 'booking') tags.push('from booking');
-    if (params.source === 'contact') tags.push('from contact');
-
-    const stage = params.source === 'booking' ? 'Qualified' : 'New';
-    const score = params.source === 'booking' ? 80 : 20;
-
-    return await Lead.create({
-      clientId: params.clientId,
-      formId,
-      formName,
-      contactFirst,
-      contactLast,
-      contactEmail: params.email,
-      contactPhone: params.phone,
-      source: params.source,
-      location: params.location,
-      tags,
-      stage,
-      score,
-      data: params.data || {},
-      lastActivity: new Date(),
-      activities: [{
-        type: 'system',
-        description: `Lead initialized via ${params.source}`,
-        date: new Date(),
-        metadata: { source: params.source }
-      }]
-    });
-  }
-}
-
-
 // Helper to resolve client identity from various signals
 async function resolveClientId(req: express.Request): Promise<string | null> {
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey;
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
   let headerId = req.headers['x-client-id'];
   let queryId = req.query.clientId;
   let bodyId = req.body?.clientId;
@@ -154,13 +59,82 @@ async function resolveClientId(req: express.Request): Promise<string | null> {
   if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
   if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
 
+  console.log(`[RESOLVE] Attempting to resolve client for host: ${req.hostname}. Signals - APIKey: ${!!apiKey}, HeaderID: ${headerId}, QueryID: ${queryId}, BodyID: ${bodyId}`);
+
   if (apiKey) {
     const client = await Client.findOne({ apiKey });
-    if (client) return client.clientId;
+    if (client) {
+      console.log(`[RESOLVE] Resolved via API Key: ${client.clientId}`);
+      return client.clientId;
+    }
   }
 
   const cid = headerId || queryId || bodyId;
-  return cid ? String(cid) : null;
+  if (cid) {
+    console.log(`[RESOLVE] Resolved via ID signal: ${cid}`);
+    return String(cid);
+  }
+
+  // Fallback for Platform Main Site
+  const host = req.hostname;
+  
+  // Fetch Platform Settings for homepageClientId fallback
+  let pSettings = null;
+  try {
+    pSettings = await PlatformSettings.findOne();
+  } catch (e) {
+    console.error('[RESOLVE] Error fetching PlatformSettings:', e);
+  }
+
+  const homepageId = pSettings?.homepageClientId || 'platform-prime';
+
+  if (host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0' || host.includes('127.0.0.1')) {
+    console.log(`[RESOLVE] Platform domain detected (${host}), defaulting to ${homepageId}`);
+    
+    // Auto-provision default client if it doesn't exist
+    let client = await Client.findOne({ clientId: homepageId });
+    if (!client) {
+      client = await Client.create({
+        clientId: homepageId,
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active'
+      });
+      console.log(`[RESOLVE] Provisioned default client: ${homepageId}`);
+    }
+
+    // Ensure Settings exist for the client to avoid 404s
+    const settings = await Settings.findOne({ clientId: homepageId });
+    if (!settings) {
+      await Settings.create({ 
+        clientId: homepageId,
+        businessName: client.businessName,
+        email: client.email,
+        aboutText: 'Global platform hub for all integrated services.'
+      });
+      console.log(`[RESOLVE] Provisioned default settings for: ${homepageId}`);
+    }
+
+    return homepageId;
+  }
+
+  // Check database for domain mapping match
+  const domainMapping = await Domain.findOne({ host, status: 'active' });
+  if (domainMapping) {
+    console.log(`[RESOLVE] Resolved via Domain mapping: ${domainMapping.clientId}`);
+    return domainMapping.clientId;
+  }
+
+  const customClient = await Client.findOne({ customDomain: host });
+  if (customClient) {
+    console.log(`[RESOLVE] Resolved via customDomain field: ${customClient.clientId}`);
+    return customClient.clientId;
+  }
+
+  console.warn(`[RESOLVE] Failed to resolve client for host: ${host}`);
+  return null;
 }
 
 // Domain Resolution & Headless Config
@@ -367,6 +341,43 @@ router.get('/tenant/resolve', async (req, res) => {
   }
 });
 
+// Create a public onboarding request
+router.post('/onboarding-request', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { name, email, phone, businessType, message } = req.body;
+    if (!name || !email) {
+      return envRes.sendError(400, 'API_ERROR', 'Business name and email are required');
+    }
+
+    // Auto-generate unique requestId
+    const requestId = 'req_' + crypto.randomBytes(6).toString('hex');
+
+    const request = await OnboardingRequest.create({
+      requestId,
+      businessName: name,
+      email,
+      phone: phone || '',
+      businessType: businessType || 'service',
+      details: { message: message || 'Applied via website get-started form.' },
+      status: 'pending'
+    });
+
+    try {
+      await sendEmail(email, 'Onboarding Application Received', 
+        `Hello ${name},\n\nWe have received your onboarding application! Our team will review your application and send you an invite link shortly.\n\nThank you for choosing us!`,
+        undefined, 'system-onboarding'
+      );
+    } catch (err) {
+      console.error('Email notify error:', err);
+    }
+
+    envRes.sendSuccess({ success: true, requestId: request.requestId });
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', err.message || 'Onboarding request failed');
+  }
+});
+
 // Get onboarding link details
 router.get('/onboarding/:token', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -443,15 +454,21 @@ router.post('/onboarding/:token', async (req, res) => {
     }
 
     if (subdomain) {
-      const host = `${String(subdomain).trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}.client.com`;
-      const existingDomain = await Domain.findOne({ host });
-      if (!existingDomain) {
-        await Domain.create({
-          clientId: link.clientId,
-          host,
-          type: 'subdomain',
-          status: 'active'
-        });
+      const pSettings = await PlatformSettings.findOne();
+      if (pSettings?.restrictSubdomains) {
+        // If restricted, we don't automatically create the subdomain domain mapping
+        // but we still store it in the client record for potential later approval
+      } else {
+        const host = `${String(subdomain).trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}.client.com`;
+        const existingDomain = await Domain.findOne({ host });
+        if (!existingDomain) {
+          await Domain.create({
+            clientId: link.clientId,
+            host,
+            type: 'subdomain',
+            status: 'active'
+          });
+        }
       }
     }
 
@@ -508,11 +525,7 @@ router.get('/settings', async (req, res) => {
     const clientId = await resolveClientId(req);
     let settings = await Settings.findOne({ clientId });
     
-    if (!settings) {
-      return envRes.sendError(404, 'API_ERROR', 'Client settings not found');
-    }
-
-    const settingsObj = settings.toObject();
+    const settingsObj = settings ? settings.toObject() : {};
 
     // Ensure all CMS fields exist
     const defaults = {
@@ -569,11 +582,25 @@ router.post('/booking', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
-    const client = await Client.findOne({ clientId });
+    
+    // Ensure client exists and is active
+    let client = await Client.findOne({ clientId });
+    if (!client && clientId === 'platform-prime') {
+      client = await Client.create({
+        clientId: 'platform-prime',
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active'
+      });
+    }
+
     if (!client || client.status === 'suspended') {
-      return envRes.sendError(403, 'API_ERROR', 'This business is currently not accepting bookings.');
+      return envRes.sendError(401, 'API_ERROR', 'This business is currently not accepting bookings.');
     }
     const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, notes } = req.body;
+    if (!phoneNumber) return envRes.sendError(400, 'VALIDATION_ERROR', 'Phone number is required');
 
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Client not found');
@@ -582,6 +609,10 @@ router.post('/booking', async (req, res) => {
     const duration = selectedService?.durationMinutes || settings.slotDurationMinutes || 60;
     
     const startDate = new Date(preferredDate);
+    if (!preferredStartTime) {
+      return envRes.sendError(400, 'BAD_REQUEST', 'Missing preferredStartTime');
+    }
+
     const startParts = preferredStartTime.split(':').map(Number);
     startDate.setHours(startParts[0], startParts[1], 0, 0);
     
@@ -599,8 +630,7 @@ router.post('/booking', async (req, res) => {
       status: 'pending',
       location
     });
-
-    // Sync to Leads with higher priority
+    
     await upsertLead({
       clientId,
       email,
@@ -617,11 +647,15 @@ router.post('/booking', async (req, res) => {
       tags: ['high-intent', 'booking-submission']
     });
 
-    sendEmail(settings.contactEmail, 'External Booking Received', `New booking: ${fullName}\nService: ${serviceSelection}`);
+    sendEmail(settings.contactEmail || settings.email || 'admin@platform.com', 'External Booking Received', `New booking: ${fullName}\nService: ${serviceSelection}`);
     sendEmail(email, 'Booking Request Received', `Hello ${fullName}, your booking has been received.`);
 
     envRes.sendSuccess({ bookingId: booking._id  });
   } catch (err: any) {
+    console.error(`[BOOKING] Save Error:`, err);
+    if (err.name === 'ValidationError') {
+      return envRes.sendError(400, 'VALIDATION_ERROR', `Validation Failed: ${Object.values(err.errors).map((e: any) => e.message).join(', ')}`);
+    }
     envRes.sendError(500, 'API_ERROR', 'Booking failed' + ': ' + err.message);
   }
 });
@@ -630,10 +664,29 @@ router.post('/booking', async (req, res) => {
 router.post('/contact', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
+    const pSettings = await PlatformSettings.findOne();
+    if (pSettings?.allowAnonymousContact === false) {
+       // Optional: Block if anonymous is disabled
+       // For now just logging or we could enforce auth if needed
+    }
+
     const clientId = await resolveClientId(req);
-    const client = await Client.findOne({ clientId });
+    
+    // Ensure client exists
+    let client = await Client.findOne({ clientId });
+    if (!client && clientId === 'platform-prime') {
+      client = await Client.create({
+        clientId: 'platform-prime',
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active'
+      });
+    }
+
     if (!client || client.status === 'suspended') {
-      return envRes.sendError(403, 'API_ERROR', 'This business is currently not accepting messages.');
+      return envRes.sendError(401, 'API_ERROR', 'This business is currently not accepting messages.');
     }
     const { name, email, phone, message, preferredContactMethod, subject } = req.body;
 
@@ -755,7 +808,7 @@ router.post('/ai/chat', async (req, res) => {
     const clientId = await resolveClientId(req);
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
 
-    const { message, history } = req.body;
+    const { message, history, userName, userEmail } = req.body;
 
     const [client, settings] = await Promise.all([
       Client.findOne({ clientId }),
@@ -763,11 +816,16 @@ router.post('/ai/chat', async (req, res) => {
     ]);
 
     if (!client || client.status !== 'active') {
-      return envRes.sendError(403, 'API_ERROR', 'AI Assistant is currently unavailable for this account.');
+      return envRes.sendError(401, 'API_ERROR', 'AI Assistant is currently unavailable for this account.');
     }
 
     const { Groq } = await import('groq-sdk');
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'dummy' });
+
+    const userFirstName = userName ? userName.split(' ')[0] : (userEmail?.split('@')[0] || '');
+    const nameInstruction = userFirstName 
+      ? `The user's name is ${userFirstName}. You MUST refer to them by their first name frequently (e.g. "Sure, ${userFirstName}...", "Great question, ${userFirstName}") to maintain a personalized technical session.` 
+      : 'The user has not provided a name yet.';
 
     const businessContext = `
       You are the AI Assistant for ${client.businessName}.
@@ -778,10 +836,15 @@ router.post('/ai/chat', async (req, res) => {
       Contact Email: ${settings?.contactEmail || client.email}
       Contact Phone: ${settings?.contactPhone || ''}
       
-      Instructions:
-      - Be professional, helpful, and concise.
-      - If users ask for booking, guide them to use the booking tool or provide the contact info.
-      - Only answer based on the provided business context. If you don't know, ask them to contact the business directly.
+      User Context:
+      - Current User: ${userFirstName || 'Guest'}
+      - User Email: ${userEmail || 'undisclosed'}
+      
+      CRITICAL INSTRUCTION:
+      ${nameInstruction}
+      - Always address the user by their first name if known.
+      - Be professional, technical, and data-driven.
+      - Guide users to use the booking tool for formal sessions.
     `.trim();
 
     const completion = await groq.chat.completions.create({
@@ -807,9 +870,58 @@ router.post('/ai/chat', async (req, res) => {
     );
 
     envRes.sendSuccess({ text });
+
+    // Sync to Leads if user info is provided
+    if (userName && userEmail) {
+      const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+      const location = await getGeoLocation(ip.split(',')[0].trim());
+      await upsertLead({
+        clientId: clientId,
+        email: userEmail,
+        phone: '',
+        name: userName,
+        source: 'contact', // Categorizing chat leads under contact/chat
+        location,
+        tags: ['ai-chat-lead'],
+        data: {
+          lastChatMessage: message,
+          chatSessionId: req.body.sessionId
+        }
+      });
+    }
   } catch (err: any) {
     console.error('AI Chat Error:', err);
     envRes.sendError(500, 'API_ERROR', 'AI Chat failed: ' + err.message);
+  }
+});
+
+// Identify user in Chat for Lead Capture
+router.post('/ai/chat/identify', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+
+    const { name, email, phone } = req.body;
+    if (!email) return envRes.sendError(400, 'BAD_REQUEST', 'Email is required');
+
+    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+    const location = await getGeoLocation(ip.split(',')[0].trim());
+
+    const lead = await upsertLead({
+      clientId,
+      email,
+      phone: phone || '',
+      name: name || '',
+      source: 'contact',
+      location,
+      tags: ['ai-chat-identified'],
+      data: { identifiedVia: 'ai-chat' }
+    });
+
+    envRes.sendSuccess({ success: true, leadId: lead._id });
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Identification failed: ' + err.message);
   }
 });
 

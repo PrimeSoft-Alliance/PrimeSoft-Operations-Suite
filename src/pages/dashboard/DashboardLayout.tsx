@@ -1,7 +1,8 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe, Home, User, Mail, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import ProfileModal from '../../components/ProfileModal';
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -9,6 +10,8 @@ export default function DashboardLayout() {
   const [loading, setLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     fetch('/v1/auth/check')
@@ -18,7 +21,10 @@ export default function DashboardLayout() {
       })
       .then(data => {
         if (!data.authenticated) navigate('/client/login');
-        else setLoading(false);
+        else {
+          setUser(data);
+          setLoading(false);
+        }
       })
       .catch((err) => {
         console.error('Auth check failed:', err);
@@ -58,16 +64,14 @@ export default function DashboardLayout() {
 
   const links = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Operations Nexus', path: '/dashboard/nexus', icon: Zap },
+    { name: 'Inquiries', path: '/dashboard/inquiries', icon: Mail },
     { name: 'Bookings', path: '/dashboard/bookings', icon: CalendarDays },
-    { name: 'Contacts', path: '/dashboard/contacts', icon: MessageSquare },
-    { name: 'Forms', path: '/dashboard/forms', icon: FileText },
-    { name: 'Leads', path: '/dashboard/leads', icon: Users },
-    { name: 'Support Tickets', path: '/dashboard/tickets', icon: MessageSquare },
-    { name: 'Headless API', path: '/dashboard/developer', icon: Cpu },
-    { name: 'Website Manager', path: '/dashboard/website', icon: Globe },
-    { name: 'Availability', path: '/dashboard/availability', icon: CalendarDays },
-    { name: 'Email Config', path: '/dashboard/email-templates', icon: MessageSquare },
+    { name: 'Leads Stream', path: '/dashboard/leads', icon: Users },
+    { name: 'Operations', path: '/dashboard/nexus', icon: Zap },
+    { name: 'Ticketing', path: '/dashboard/tickets', icon: MessageSquare },
+    { name: 'Availability', path: '/dashboard/availability', icon: Clock },
+    { name: 'API Docs', path: '/dashboard/developer', icon: Cpu },
+    { name: 'Website', path: '/dashboard/website', icon: Globe },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },
   ];
 
@@ -152,10 +156,29 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-             <Link to="/" className="text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-700 transition-colors">Go to Homepage</Link>
+             <Link 
+               to="/" 
+               title="Go to Homepage" 
+               className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all"
+             >
+               <Home className="w-5 h-5" />
+             </Link>
+             <div 
+               onClick={() => setIsProfileOpen(true)}
+               className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-indigo-50 hover:border-indigo-100 transition-all group"
+             >
+               <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-black group-hover:bg-indigo-600 group-hover:text-white transition-all text-xs">
+                 {user?.businessName?.[0]?.toUpperCase() || <User className="w-4 h-4" />}
+               </div>
+               <div className="hidden sm:block">
+                 <div className="text-[10px] font-black text-slate-400 uppercase tracking-tight group-hover:text-indigo-600">Account</div>
+                 <div className="text-[11px] font-bold text-slate-700 truncate max-w-[100px]">{user?.businessName || 'Profile'}</div>
+               </div>
+             </div>
              <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 transition-colors lg:hidden"><LogOut className="w-5 h-5" /></button>
           </div>
         </header>
+        <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
         <div className="p-4 sm:p-8 flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto">
             <button 

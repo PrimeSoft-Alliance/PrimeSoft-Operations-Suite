@@ -8,7 +8,7 @@ export default function SuperadminLogs() {
 
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/v1/super-admin/logs');
+      const res = await fetch('/v1/sys-admin/logs');
       const data = await res.json();
       setLogs(data?.success && Array.isArray(data.data) ? data.data : []);
     } catch (err) {
@@ -35,17 +35,50 @@ export default function SuperadminLogs() {
     return 'text-indigo-600 bg-indigo-50';
   };
 
+  const handleExportCSV = () => {
+    if (!logs || logs.length === 0) return;
+    
+    try {
+      const headers = ['Timestamp', 'Actor', 'Action', 'Target', 'Metadata'];
+      const csvRows = logs.map(log => [
+        log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
+        log.actor || 'system',
+        log.action || 'UNKNOWN',
+        log.target || 'GLOBAL',
+        JSON.stringify(log.metadata || {})
+      ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(','));
+
+      const csvContent = [headers.join(','), ...csvRows].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `platform_audit_log_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Failed to export CSV. Please check console for details.');
+    }
+  };
+
   if (loading) return <div className="p-8">Retrieving audit trails...</div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Platform Audit Logs</h1>
-          <p className="text-gray-500">Trace every privileged action across the entire platform.</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Platform Audit Logs</h1>
+          <p className="text-sm font-medium text-slate-500 mt-1 font-sans">Trace every privileged action across the entire platform.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
+        <div className="flex gap-3 w-full sm:w-auto">
+          <button 
+            onClick={handleExportCSV}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold uppercase tracking-wider transition"
+          >
              <Download className="w-4 h-4" /> Export CSV
           </button>
         </div>

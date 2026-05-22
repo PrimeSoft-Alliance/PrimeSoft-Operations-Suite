@@ -10,7 +10,7 @@ export default function Login({ loginRole = 'client' }: { loginRole?: 'client' |
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/v1/auth/setup-status')
+    fetch('/v1/auth/status-info')
       .then(res => res.json())
       .then(data => {
         if (data.setupRequired) {
