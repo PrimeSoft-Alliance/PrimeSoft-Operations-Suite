@@ -27,6 +27,8 @@ import contentRoutes from './src/api/routes/content';
 import mediaRoutes from './src/api/routes/media';
 import webhookRoutes from './src/api/routes/webhooks';
 import ticketsRoutes from './src/api/routes/tickets';
+import embedRoutes from './src/api/routes/embed';
+import aiContentRoutes from './src/api/routes/ai-content';
 import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
 import { requestEnvelopeMiddleware } from './src/api/middlewares/envelope';
@@ -237,6 +239,7 @@ async function startServer() {
   app.use('/v1/contact', tenantContextMiddleware, contactRoutes);
   app.use('/v1/chat', tenantContextMiddleware, chatRoutes);
   app.use('/v1/dashboard', authMiddleware, tenantContextMiddleware, dashboardRoutes);
+  app.use('/v1/dashboard/ai', authMiddleware, tenantContextMiddleware, aiContentRoutes);
   app.use('/v1/dashboard/ai', authMiddleware, tenantContextMiddleware, aiRoutes);
   app.use('/v1/forms', tenantContextMiddleware, formsRoutes);
   app.use('/v1/leads', tenantContextMiddleware, leadsRoutes);
@@ -244,6 +247,9 @@ async function startServer() {
   app.use('/v1/media', tenantContextMiddleware, mediaRoutes);
   app.use('/v1/webhooks', tenantContextMiddleware, webhookRoutes);
   app.use('/v1/tickets', tenantContextMiddleware, ticketsRoutes);
+  
+  // Headless embed routes - tenant resolved but no auth required
+  app.use('/v1/embed', tenantContextMiddleware, embedRoutes);
   
   // Super admin routes - different auth pattern
   app.use('/v1/sys-admin', superAdminRoutes);
