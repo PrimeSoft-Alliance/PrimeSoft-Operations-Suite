@@ -27,6 +27,7 @@ import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
 import { requestEnvelopeMiddleware } from './src/api/middlewares/envelope';
 import { idempotencyMiddleware } from './src/api/middlewares/idempotency';
+import { tenantContextMiddleware } from './src/api/middlewares/tenantContext';
 import fs from 'fs';
 
 async function startServer() {
@@ -141,21 +142,41 @@ async function startServer() {
 
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri || (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))) {
-    console.error('\n⚠️  MongoDB URI is missing or invalid. Please set MONGODB_URI to a valid MongoDB connection string.\n');
-    mongoose.set('bufferCommands', false);
-  } else {
+    console.error('\n⚠️  FATAL: MongoDB URI is missing or invalid. Please set MONGODB_URI to a valid MongoDB connection string.\n');
+    process.exit(1);
+  }
+  
+  try {
+    await mongoose.connect(mongoUri);
+    console.log('✓ Connected to MongoDB');
+    
+    // Ensure indexes are set up for tenant isolation
     try {
-      await mongoose.connect(mongoUri);
-      console.log('Connected to MongoDB');
+      const clientsCollection = mongoose.connection.db?.collection('clients');
+      const bookingsCollection = mongoose.connection.db?.collection('bookings');
+      const contactsCollection = mongoose.connection.db?.collection('contacts');
+      const ailogsCollection = mongoose.connection.db?.collection('ailogs');
+      
+      // Drop legacy index if exists
       try {
-        await mongoose.connection.db?.collection('clients').dropIndex('apiKey_1');
-        console.log('Dropped legacy apiKey_1 index');
+        await clientsCollection?.dropIndex('apiKey_1');
+        console.log('  - Dropped legacy apiKey_1 index');
       } catch (e) {
         // ignore
       }
+      
+      // Ensure tenant isolation indexes
+      await clientsCollection?.createIndex({ clientId: 1 }, { unique: true });
+      await bookingsCollection?.createIndex({ clientId: 1 });
+      await contactsCollection?.createIndex({ clientId: 1 });
+      await ailogsCollection?.createIndex({ clientId: 1 });
+      console.log('  - Verified tenant isolation indexes');
     } catch (err) {
-      console.error('Failed to connect to MongoDB:', err);
+      console.warn('  - Index setup warning:', err);
     }
+  } catch (err) {
+    console.error('\n⚠️  FATAL: Failed to connect to MongoDB:', err, '\n');
+    process.exit(1);
   }
 
   // API Routes
@@ -200,24 +221,28 @@ async function startServer() {
   // Apply common middlewares to all /v1 routes
   app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware);
   
-  // Auth routes (setup, login, etc.)
+  // Auth routes (setup, login, etc.) - NO tenant validation needed, they establish identity
   app.use('/v1/auth', authRoutes);
   
-  // Other standard API routes
-  app.use('/v1/public', publicRoutes);
-  app.use('/v1/booking', bookingRoutes);
-  app.use('/v1/bookings', bookingRoutes);
-  app.use('/v1/contact', contactRoutes);
-  app.use('/v1/chat', chatRoutes);
-  app.use('/v1/dashboard', dashboardRoutes);
-  app.use('/v1/dashboard/ai', authMiddleware, aiRoutes);
+  // Public routes - tenant context required but minimal validation
+  app.use('/v1/public', tenantContextMiddleware, publicRoutes);
+  
+  // Protected tenant routes - STRICT tenant isolation
+  app.use('/v1/booking', tenantContextMiddleware, bookingRoutes);
+  app.use('/v1/bookings', tenantContextMiddleware, bookingRoutes);
+  app.use('/v1/contact', tenantContextMiddleware, contactRoutes);
+  app.use('/v1/chat', tenantContextMiddleware, chatRoutes);
+  app.use('/v1/dashboard', authMiddleware, tenantContextMiddleware, dashboardRoutes);
+  app.use('/v1/dashboard/ai', authMiddleware, tenantContextMiddleware, aiRoutes);
+  app.use('/v1/forms', tenantContextMiddleware, formsRoutes);
+  app.use('/v1/leads', tenantContextMiddleware, leadsRoutes);
+  app.use('/v1/content', tenantContextMiddleware, contentRoutes);
+  app.use('/v1/media', tenantContextMiddleware, mediaRoutes);
+  app.use('/v1/webhooks', tenantContextMiddleware, webhookRoutes);
+  app.use('/v1/tickets', tenantContextMiddleware, ticketsRoutes);
+  
+  // Super admin routes - different auth pattern
   app.use('/v1/sys-admin', superAdminRoutes);
-  app.use('/v1/forms', formsRoutes);
-  app.use('/v1/leads', leadsRoutes);
-  app.use('/v1/content', contentRoutes);
-  app.use('/v1/media', mediaRoutes);
-  app.use('/v1/webhooks', webhookRoutes);
-  app.use('/v1/tickets', ticketsRoutes);
 
   // Catch unmatched API routes before serving the SPA
   app.use('/v1/*', (req, res) => {

@@ -48,6 +48,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public site routes */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
@@ -59,13 +60,17 @@ export default function App() {
           <Route path="get-started" element={<PublicOnboarding />} />
         </Route>
         
+        {/* Auth routes */}
         <Route path="/client/login" element={<Login loginRole="client" />} />
         <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
         <Route path="/activate" element={<Activate />} />
         <Route path="/setup" element={<Setup />} />
-        <Route path="/chatbot-mini" element={<ChatbotMini />} />
         <Route path="/onboarding/:token" element={<Onboarding />} />
         
+        {/* Standalone pages */}
+        <Route path="/chatbot-mini" element={<ChatbotMini />} />
+        
+        {/* Client dashboard routes */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="nexus" element={<OperationsNexus />} />
@@ -80,6 +85,7 @@ export default function App() {
           <Route path="website" element={<WebsiteManager />} />
         </Route>
 
+        {/* Super admin routes */}
         <Route path="/superadmin" element={<SuperAdminLayout />}>
           <Route index element={<GlobalStats />} />
           <Route path="hub" element={<MissionControl />} />
@@ -96,6 +102,9 @@ export default function App() {
           <Route path="notifications" element={<NotificationsManager />} />
           <Route path="settings" element={<PlatformSettings />} />
         </Route>
+        
+        {/* Catch-all for SPA - must be last */}
+        <Route path="*" element={<Layout />} />
       </Routes>
     </BrowserRouter>
   );
