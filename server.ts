@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { validateEnvironment } from './src/api/utils/validateEnv';
+import { initializeTierDefinitions } from './src/api/utils/tierSystem';
 
 console.log('--- SERVER.TS LOADED ---');
 
@@ -29,11 +30,14 @@ import webhookRoutes from './src/api/routes/webhooks';
 import ticketsRoutes from './src/api/routes/tickets';
 import embedRoutes from './src/api/routes/embed';
 import aiContentRoutes from './src/api/routes/ai-content';
+import telegramRoutes from './src/api/routes/telegram';
+import whatsappRoutes from './src/api/routes/whatsapp';
 import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
 import { requestEnvelopeMiddleware } from './src/api/middlewares/envelope';
 import { idempotencyMiddleware } from './src/api/middlewares/idempotency';
 import { tenantContextMiddleware } from './src/api/middlewares/tenantContext';
+import { aiUsageTrackingMiddleware } from './src/api/middlewares/aiUsageTracking';
 import fs from 'fs';
 
 async function startServer() {
@@ -180,6 +184,9 @@ async function startServer() {
     } catch (err) {
       console.warn('  - Index setup warning:', err);
     }
+
+    // Initialize tier definitions
+    await initializeTierDefinitions();
   } catch (err) {
     console.error('\n⚠️  FATAL: Failed to connect to MongoDB:', err, '\n');
     process.exit(1);
@@ -225,7 +232,7 @@ async function startServer() {
   }
 
   // Apply common middlewares to all /v1 routes
-  app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware);
+  app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware, aiUsageTrackingMiddleware);
   
   // Auth routes (setup, login, etc.) - NO tenant validation needed, they establish identity
   app.use('/v1/auth', authRoutes);
@@ -251,8 +258,29 @@ async function startServer() {
   // Headless embed routes - tenant resolved but no auth required
   app.use('/v1/embed', tenantContextMiddleware, embedRoutes);
   
+  // Bot integration routes - webhook handlers for external platforms
+  app.use('/v1/telegram', tenantContextMiddleware, telegramRoutes);
+  app.use('/v1/whatsapp', tenantContextMiddleware, whatsappRoutes);
+  
   // Super admin routes - different auth pattern
   app.use('/v1/sys-admin', superAdminRoutes);
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    // Serve static files from dist directory
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath, {
+      index: false, // Don't auto-serve index.html for any path
+      maxAge: '1d',
+      etag: false
+    }));
+  }
 
   // Catch unmatched API routes before serving the SPA
   app.use('/v1/*', (req, res) => {
@@ -265,20 +293,39 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+  // SPA fallback: serve index.html for all non-API routes
+  // This must be LAST to catch all unmatched routes
+  app.get('*', (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      const distPath = path.join(process.cwd(), 'dist');
       res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+    } else {
+      // In development, serve index.html to enable SPA routing
+      const indexPath = path.join(process.cwd(), 'index.html');
+      try {
+        if (fs.existsSync(indexPath)) {
+          res.sendFile(indexPath);
+        } else {
+          // Fallback HTML that loads React
+          res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrimeSoft Operations Suite</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"><\/script>
+</body>
+</html>`);
+        }
+      } catch (err) {
+        console.error('[v0] SPA fallback error:', err);
+        res.status(500).send('Internal Server Error');
+      }
+    }
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);

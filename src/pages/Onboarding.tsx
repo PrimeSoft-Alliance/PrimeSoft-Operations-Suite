@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Building2, Mail, Phone, Lock, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, Mail, Phone, Lock, Clock, CheckCircle2, AlertCircle, Loader2, Zap, Star } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Onboarding() {
@@ -14,6 +14,7 @@ export default function Onboarding() {
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [selectedTier, setSelectedTier] = useState('starter');
 
   const [formData, setFormData] = useState({
     businessName: '',
@@ -28,6 +29,31 @@ export default function Onboarding() {
     openingTime: '08:00',
     closingTime: '17:00'
   });
+
+  const tiers = [
+    {
+      id: 'starter',
+      name: 'Starter Plan',
+      price: 'Free',
+      description: 'Perfect for small businesses',
+      features: ['Web Chat', 'AI Assistant', 'Custom Branding', '10K AI tokens/month', '1GB Storage']
+    },
+    {
+      id: 'professional',
+      name: 'Professional Plan',
+      price: '$29/mo',
+      description: 'For growing businesses',
+      features: ['Everything in Starter', 'Telegram Integration', 'AI Assistant', '100K AI tokens/month', '10GB Storage'],
+      recommended: true
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise Plan',
+      price: 'Custom',
+      description: 'Unlimited features',
+      features: ['Everything included', 'Telegram + WhatsApp', 'Unlimited AI tokens', '1TB Storage', 'Priority Support']
+    }
+  ];
 
   useEffect(() => {
     fetch(`/v1/public/onboarding/${token}`)
@@ -75,7 +101,8 @@ export default function Onboarding() {
         body: JSON.stringify({
           ...formData,
           workingHours,
-          customFields: customFieldValues
+          customFields: customFieldValues,
+          tier: selectedTier
         })
       });
       
@@ -260,6 +287,46 @@ export default function Onboarding() {
                   onChange={e => setFormData({...formData, closingTime: e.target.value})}
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-6 pt-6 border-t border-slate-100">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+              <Zap className="w-5 h-5 text-primary" />
+              Select Your Plan
+            </h3>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              {tiers.map((tier) => (
+                <motion.div
+                  key={tier.id}
+                  whileHover={{ translateY: -4 }}
+                  className={cn(
+                    "relative p-6 rounded-2xl border-2 transition-all cursor-pointer",
+                    selectedTier === tier.id
+                      ? "border-primary bg-primary/5"
+                      : "border-slate-200 hover:border-slate-300 bg-white"
+                  )}
+                  onClick={() => setSelectedTier(tier.id)}
+                >
+                  {tier.recommended && (
+                    <div className="absolute -top-3 right-6 bg-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                      <Star className="w-3 h-3" />
+                      Recommended
+                    </div>
+                  )}
+                  <h4 className="font-bold text-gray-900 mb-1">{tier.name}</h4>
+                  <p className="text-2xl font-black text-primary mb-2">{tier.price}</p>
+                  <p className="text-xs text-gray-600 mb-4">{tier.description}</p>
+                  <ul className="space-y-2">
+                    {tier.features.map((feature, idx) => (
+                      <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
+                        <CheckCircle2 className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              ))}
             </div>
           </div>
 
