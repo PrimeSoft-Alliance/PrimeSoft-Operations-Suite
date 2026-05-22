@@ -300,3 +300,61 @@ export async function logAIInteraction(
     console.error('[DATA-LOADER] Error logging AI interaction:', err);
   }
 }
+
+/**
+ * Load client business information - wrapper for loadClientSettings
+ */
+export async function getClientBusinessInfo(clientId: string) {
+  const settings = await loadClientSettings(clientId);
+  if (settings.error) {
+    return null;
+  }
+  return settings;
+}
+
+/**
+ * Get all services for a client
+ */
+export async function getClientServices(clientId: string): Promise<string[]> {
+  if (!clientId) {
+    return [];
+  }
+
+  try {
+    const settings = await Settings.findOne({ clientId });
+    if (!settings || !settings.services) {
+      return [];
+    }
+    return settings.services.map((s: any) => s.name || '');
+  } catch (err) {
+    console.error('[DATA-LOADER] Error loading client services:', err);
+    return [];
+  }
+}
+
+/**
+ * Get client branding information
+ */
+export async function getClientBranding(clientId: string) {
+  if (!clientId) {
+    return null;
+  }
+
+  try {
+    const settings = await Settings.findOne({ clientId });
+    if (!settings) {
+      return null;
+    }
+    return {
+      primaryColor: settings.primaryColor || '#3b82f6',
+      secondaryColor: settings.secondaryColor || '#6366f1',
+      fontFamily: settings.fontFamily || 'Inter',
+      heroTitle: settings.heroTitle || '',
+      heroSubtitle: settings.heroSubtitle || '',
+      aiBehaviorInstructions: settings.aiBehaviorInstructions || ''
+    };
+  } catch (err) {
+    console.error('[DATA-LOADER] Error loading client branding:', err);
+    return null;
+  }
+}

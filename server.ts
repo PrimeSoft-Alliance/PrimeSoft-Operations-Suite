@@ -1,8 +1,12 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { validateEnvironment } from './src/api/utils/validateEnv';
 
 console.log('--- SERVER.TS LOADED ---');
+
+// Validate environment at startup
+validateEnvironment();
 
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
