@@ -1,63 +1,31 @@
 import { Request, Response, NextFunction } from 'express';
-import { recordAIUsage } from '../services/quotaService';
+import { checkAIQuota, recordAIUsage } from '../services/quotaService';
+import { EnvelopeResponse } from '../middlewares/envelope';
 
-/**
- * Middleware to track AI usage on endpoints that use AI
- * Attach metadata to request object to be recorded after response
- */
-export function aiUsageTrackingMiddleware(req: Request, res: Response, next: NextFunction) {
-  // Initialize tracking object
-  (req as any).aiTracking = {
-    enabled: false,
-    feature: '',
-    source: '',
-    tokensUsed: 0,
-    metadata: {}
-  };
+export const aiUsageTracking = async (req: Request, res: Response, next: NextFunction) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = (req as any).clientId;
+  
+  if (!clientId) {
+    return next();
+  }
 
-  // Wrap res.json to track response
-  const originalJson = res.json.bind(res);
-  res.json = function (data: any) {
-    // Record usage if tracking is enabled
-    if ((req as any).aiTracking?.enabled) {
-      const clientId = (req as any).clientId;
-      const tracking = (req as any).aiTracking;
+  // Pre-check quota
+  const estimatedTokens = 1; // Basic assumption for request allowance
+  const quotaCheck = await checkAIQuota(clientId, estimatedTokens, 'api');
+  
+  if (!quotaCheck.allowed) {
+    return envRes.sendError(402, 'QUOTA_EXCEEDED', quotaCheck.reason);
+  }
 
-      recordAIUsage(
-        clientId,
-        tracking.feature,
-        tracking.source,
-        tracking.tokensUsed || 1,
-        {
-          endpoint: req.originalUrl,
-          method: req.method,
-          ...tracking.metadata
-        }
-      ).catch(err => console.error('[TRACKING] Failed to record usage:', err));
+  // Inject a method to track usage after successful response
+  (req as any).recordTokens = async (tokens: number, feature: string) => {
+    try {
+      await recordAIUsage(clientId, feature, 'api', 'web', tokens, { path: req.path });
+    } catch (e) {
+      console.error('[USAGE_TRACKING_ERR]', e);
     }
-
-    return originalJson(data);
   };
 
   next();
-}
-
-/**
- * Helper function to enable tracking on a request
- * Call this in AI endpoints after validating quota
- */
-export function enableAITracking(
-  req: Request,
-  feature: string,
-  source: string,
-  tokensUsed?: number,
-  metadata?: any
-) {
-  (req as any).aiTracking = {
-    enabled: true,
-    feature,
-    source,
-    tokensUsed: tokensUsed || 1,
-    metadata: metadata || {}
-  };
-}
+};

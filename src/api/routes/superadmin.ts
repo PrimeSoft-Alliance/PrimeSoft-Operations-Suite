@@ -3,7 +3,7 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Client, Settings, UsageStats, Booking, Contact, Invite, OnboardingRequest, Domain, AuditLog, PlatformNotification, PromptHistory, PlatformSettings } from '../models';
+import { Client, Settings, UsageStats, Booking, Contact, Invite, OnboardingRequest, Domain, AuditLog, PlatformNotification, PromptHistory, PlatformSettings, Lead } from '../models';
 import { superAdminMiddleware } from '../auth';
 
 const router = express.Router();
@@ -44,6 +44,14 @@ async function generateUniqueClientId(businessName: string): Promise<string> {
     .replace(/^-+|-+$/g, '');
   
   const baseSlug = base || 'client';
+  
+  // Try clean slug first
+  const existingClientFirst = await Client.findOne({ clientId: baseSlug });
+  const existingInviteFirst = await Invite.findOne({ clientId: baseSlug });
+  if (!existingClientFirst && !existingInviteFirst) {
+    return baseSlug;
+  }
+  
   let clientId = `${baseSlug}-${Math.random().toString(36).substring(7)}`;
   let attempt = 0;
   
@@ -99,10 +107,46 @@ router.post('/onboarding-requests/:id/approve', async (req, res) => {
     // Let's ensure the activation token is stored for the client when it's eventually created.
     // Or better, generate it here and tell the user.
 
+    // Pre-create Client & Settings document immediately in a "pending_onboard" status
+    // This allows other services and Admin clients to instantly see and persist them!
+    let client = await Client.findOne({ clientId });
+    if (!client) {
+      const placeholderPass = crypto.randomBytes(16).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(placeholderPass, salt);
+      
+      client = await Client.create({
+        clientId,
+        businessName: request.businessName,
+        email: request.email,
+        password: hash,
+        role: 'client',
+        status: 'active',
+        isActivated: false,
+        activationToken,
+        aiMessageLimit: 1000,
+        storageLimitBytes: 52428800
+      });
+    }
+
+    let settings = await Settings.findOne({ clientId });
+    if (!settings) {
+      await Settings.create({
+        clientId,
+        businessName: request.businessName,
+        contactEmail: request.email,
+        aboutText: 'This business has been approved. Profile details are currently pending registration.'
+      });
+    }
+
     await logAction((req as any).user?.email || 'admin', 'APPROVE_ONBOARDING', id, { clientId, inviteId, activationToken });
 
-    // Send Approval Email
-    const fullUrl = `${req.headers.origin}/onboarding/${token}`;
+    // Send Approval Email safely with protocol/host fallbacks
+    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const host = req.headers.host || 'localhost:3000';
+    const origin = req.headers.origin || `${protocol}://${host}`;
+    const fullUrl = `${origin}/onboarding/${token}`;
+
     const { sendEmail } = await import('../email');
     await sendEmail(request.email, 'Approved - Business Platform', 
       `Congratulations ${request.businessName}!\n\nYour onboarding request has been approved. Please follow the link below to set up your account:\n\n${fullUrl}\n\nThis link expires in 7 days.`,
@@ -227,9 +271,21 @@ router.get('/clients', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clients = await Client.find({ role: 'client' }).select('-password').lean();
+    
+    // Check if Quota is available
+    const { Quota } = await import('../models');
+    let quotas = [];
+    try {
+      quotas = await Quota.find({}).lean();
+    } catch(e) {}
+    
+    const quotaMap = new Map();
+    for (const q of quotas) {
+      quotaMap.set(q.clientId, q);
+    }
+
     const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     const usages = await UsageStats.find({ month: currentMonth }).lean();
-
     const usageMap = new Map();
     for (const u of usages) {
       usageMap.set(u.clientId, u);
@@ -237,11 +293,15 @@ router.get('/clients', async (req, res) => {
 
     const processedClients = clients.map((c: any) => {
       const u = usageMap.get(c.clientId) || {};
+      const q = quotaMap.get(c.clientId);
       return {
         ...c,
         status: c.status || 'active',
-        aiMessagesUsed: u.aiMessagesUsed || 0,
-        storageBytesUsed: u.storageBytesUsed || 0
+        tier: c.tier || (q ? q.tier : 'starter'),
+        aiMessageLimit: q ? q.aiTokensLimit : (c.aiMessageLimit || 1000),
+        storageLimitBytes: q ? (q.storageLimit * 1024 * 1024 * 1024) : (c.storageLimitBytes || 52428800),
+        aiMessagesUsed: q ? q.aiTokensUsed : (u.aiMessagesUsed || 0),
+        storageBytesUsed: q ? q.storageUsed : (u.storageBytesUsed || 0)
       };
     });
     envRes.sendSuccess(processedClients);
@@ -298,7 +358,7 @@ TECHNICAL REQUIREMENTS:
 router.post('/generate-onboarding-link', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { clientId, expiryHours = 24, customFields = [] } = req.body;
+    const { clientId, businessName, expiryHours = 24, customFields = [] } = req.body;
     
     if (!clientId) return envRes.sendError(400, 'API_ERROR', 'Client ID is required');
 
@@ -320,9 +380,46 @@ router.post('/generate-onboarding-link', async (req, res) => {
       customFields
     });
 
-    const fullUrl = `${req.headers.origin}/onboarding/${token}`;
+    // Save Client & Settings document immediately in a "pending_onboard" status
+    // This allows other services and Admin clients to instantly see and persist them!
+    let client = await Client.findOne({ clientId });
+    if (!client) {
+      const placeholderPass = crypto.randomBytes(16).toString('hex');
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash(placeholderPass, salt);
+      
+      client = await Client.create({
+        clientId,
+        businessName: businessName || 'Smith Plumbing',
+        email: `${clientId}@pending-onboard.com`,
+        password: hash,
+        role: 'client',
+        status: 'active',
+        isActivated: false,
+        activationToken: 'ACT-' + crypto.randomBytes(12).toString('hex').toUpperCase(),
+        aiMessageLimit: 1000,
+        storageLimitBytes: 52428800
+      });
+    }
+
+    let settings = await Settings.findOne({ clientId });
+    if (!settings) {
+      await Settings.create({
+        clientId,
+        businessName: businessName || 'Smith Plumbing',
+        contactEmail: `${clientId}@pending-onboard.com`,
+        aboutText: 'This business has been pre-onboarded. Profile details are currently pending registration.'
+      });
+    }
+
+    const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const host = req.headers.host || 'localhost:3000';
+    const origin = req.headers.origin || `${protocol}://${host}`;
+    const fullUrl = `${origin}/onboarding/${token}`;
+
     envRes.sendSuccess({ url: fullUrl, expiresAt  });
   } catch (err) {
+    console.error('Failed to generate onboarding link:', err);
     envRes.sendError(500, 'API_ERROR', 'Failed to generate link');
   }
 });
@@ -404,6 +501,9 @@ router.post('/clients', async (req, res) => {
       }))
     });
 
+    const { assignTierToClient } = await import('../services/quotaService');
+    await assignTierToClient(clientId, 'starter'); // Assign default tier
+
     envRes.sendSuccess({ client: { clientId, businessName, email }  });
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Server error');
@@ -442,19 +542,96 @@ router.post('/logs', async (req, res) => {
   }
 });
 
-// Get all leads (Platform wide)
+// Get unified leads (Platform wide)
 router.get('/leads', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { Lead } = await import('../models');
-    const leads = await Lead.find().sort({ createdAt: -1 }).limit(50).lean();
-    envRes.sendSuccess(leads);
+    const [leadsRaw, bookings, contacts] = await Promise.all([
+      Lead.find().sort({ createdAt: -1 }).limit(100).lean(),
+      Booking.find().sort({ createdAt: -1 }).limit(100).lean(),
+      Contact.find().sort({ createdAt: -1 }).limit(100).lean()
+    ]);
+
+    // Combine them into a unified format exactly like the client leads route
+    const combined = [
+      ...leadsRaw.map((l: any) => ({
+        ...l,
+        stage: l.stage || 'New',
+        type: 'lead'
+      })),
+      ...bookings.map((b: any) => ({
+        _id: b._id,
+        clientId: b.clientId,
+        contactFirst: b.fullName?.split(' ')[0] || b.customerName?.split(' ')[0] || 'Unknown',
+        contactLast: b.fullName?.split(' ').slice(1).join(' ') || b.customerName?.split(' ').slice(1).join(' ') || '',
+        contactEmail: b.email || b.customerEmail,
+        contactPhone: b.phoneNumber || b.customerPhone,
+        status: b.status || 'new',
+        stage: 'New', 
+        source: 'booking',
+        location: b.location || { city: 'Unknown', country: 'Unknown' },
+        createdAt: b.createdAt,
+        lastActivity: b.createdAt,
+        type: 'booking',
+        data: {
+          service: b.serviceSelection || b.serviceName,
+          date: b.preferredDate || b.date,
+          time: b.preferredStartTime || b.time,
+          notes: b.notes
+        }
+      })),
+      ...contacts.map((c: any) => ({
+        _id: c._id,
+        clientId: c.clientId,
+        contactFirst: c.name?.split(' ')[0] || 'Unknown',
+        contactLast: c.name?.split(' ').slice(1).join(' ') || '',
+        contactEmail: c.email,
+        contactPhone: c.phone,
+        status: c.status || 'unread',
+        stage: 'New',
+        source: 'contact',
+        location: c.location || { city: 'Unknown', country: 'Unknown' },
+        createdAt: c.createdAt,
+        lastActivity: c.createdAt,
+        type: 'contact',
+        data: {
+          subject: c.subject,
+          message: c.message
+        }
+      }))
+    ];
+
+    // Deduplicate by email and phone globally
+    const deduplicatedMap = new Map();
+    combined.forEach(record => {
+      const emailMatch = record.contactEmail ? String(record.contactEmail).toLowerCase().trim() : null;
+      const phoneMatch = record.contactPhone ? String(record.contactPhone).toLowerCase().trim() : null;
+      const dedupeKey = emailMatch || phoneMatch || record._id.toString();
+
+      if (deduplicatedMap.has(dedupeKey)) {
+        const existing = deduplicatedMap.get(dedupeKey);
+        if (existing.source !== record.source && existing.source !== 'multi-channel') {
+          existing.source = 'multi-channel';
+        }
+        if (new Date(record.createdAt).getTime() > new Date(existing.createdAt).getTime()) {
+           // Keep newest for basic fields but preserve ID if needed? Usually we want the aggregate.
+        }
+      } else {
+        deduplicatedMap.set(dedupeKey, { ...record });
+      }
+    });
+
+    const finalLeads = Array.from(deduplicatedMap.values());
+    finalLeads.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    envRes.sendSuccess(finalLeads);
   } catch (err) {
+    console.error('Platform Leads Fetch Error:', err);
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch platform leads');
   }
 });
 
-// Platform-wide bookings (Alias for system-admin)
+// Platform-wide bookings
 router.get('/bookings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
@@ -511,19 +688,22 @@ router.get('/notifications', async (req, res) => {
 router.get('/stats', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const totalClients = await Client.countDocuments({ role: 'client' });
-    const activeClients = await Client.countDocuments({ role: 'client', status: { $ne: 'suspended' } });
-    const suspendedClients = await Client.countDocuments({ role: 'client', status: 'suspended' });
-    const pendingOnboarding = await OnboardingRequest.countDocuments({ status: 'pending' });
-    const totalBookings = await Booking.countDocuments();
-    const totalContacts = await Contact.countDocuments();
+    const [totalClients, activeClients, suspendedClients, pendingOnboarding, totalBookings, totalContacts, totalLeads] = await Promise.all([
+      Client.countDocuments({ role: { $ne: 'superadmin' } }),
+      Client.countDocuments({ role: { $ne: 'superadmin' }, status: { $ne: 'suspended' } }),
+      Client.countDocuments({ role: { $ne: 'superadmin' }, status: 'suspended' }),
+      OnboardingRequest.countDocuments({ status: 'pending' }),
+      Booking.countDocuments(),
+      Contact.countDocuments(),
+      Lead.countDocuments()
+    ]);
     
     // Usage stats
     const usage = await UsageStats.aggregate([
       { $group: { _id: null, totalMessages: { $sum: '$aiMessagesUsed' }, totalStorage: { $sum: '$storageBytesUsed' } } }
     ]);
 
-    const nearQuota = await Client.find({ role: 'client' }).limit(5); // In production, would join with UsageStats
+    const nearQuota = await Client.find({ role: 'client' }).sort({ aiMessagesUsed: -1 }).limit(5);
     
     envRes.sendSuccess({
       totalClients,
@@ -532,6 +712,7 @@ router.get('/stats', async (req, res) => {
       pendingOnboarding,
       totalBookings,
       totalContacts,
+      totalLeads,
       totalMessages: usage[0]?.totalMessages || 0,
       totalStorage: (usage[0]?.totalStorage || 0) / (1024 * 1024), // MB
       nearQuota
@@ -546,7 +727,7 @@ router.put('/clients/:clientId', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const { clientId } = req.params;
-    const allowedFields = ['aiMessageLimit', 'storageLimitBytes', 'status', 'businessName', 'email'];
+    const allowedFields = ['aiMessageLimit', 'storageLimitBytes', 'status', 'businessName', 'email', 'isActivated'];
     const update: any = {};
     
     Object.keys(req.body).forEach(key => {
@@ -571,6 +752,31 @@ router.put('/clients/:clientId', async (req, res) => {
     envRes.sendSuccess({ client: updated  });
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Update failed');
+  }
+});
+
+// Update client tier
+router.put('/clients/:clientId/tier', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { clientId } = req.params;
+    const { tier } = req.body;
+    
+    if (!['starter', 'professional', 'enterprise'].includes(tier)) {
+      return envRes.sendError(400, 'API_ERROR', 'Invalid tier specified');
+    }
+    
+    const { assignTierToClient } = await import('../services/quotaService');
+    const success = await assignTierToClient(clientId, tier);
+    
+    if (success) {
+      await logAction((req as any).user?.email || 'admin', 'UPDATE_CLIENT_TIER', clientId, { tier });
+      envRes.sendSuccess({ success: true, tier });
+    } else {
+      envRes.sendError(500, 'API_ERROR', 'Failed to update client tier');
+    }
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to update tier');
   }
 });
 

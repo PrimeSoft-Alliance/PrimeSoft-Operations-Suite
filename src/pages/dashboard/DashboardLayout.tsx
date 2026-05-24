@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe, Home, User, Mail, Clock, Code2 } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe, Home, User, Mail, Clock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import ProfileModal from '../../components/ProfileModal';
 
@@ -28,8 +28,7 @@ export default function DashboardLayout() {
       })
       .catch((err) => {
         console.error('Auth check failed:', err);
-        // Do not navigate immediately, let the user see the error or stay on the page for debugging
-        // navigate('/client/login');
+        navigate('/client/login');
       });
 
     // Also fetch public settings for branding (favicon)
@@ -70,7 +69,6 @@ export default function DashboardLayout() {
     { name: 'Operations', path: '/dashboard/nexus', icon: Zap },
     { name: 'Ticketing', path: '/dashboard/tickets', icon: MessageSquare },
     { name: 'Availability', path: '/dashboard/availability', icon: Clock },
-    { name: 'Headless Integration', path: '/dashboard/headless', icon: Code2 },
     { name: 'API Docs', path: '/dashboard/developer', icon: Cpu },
     { name: 'Website', path: '/dashboard/website', icon: Globe },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },

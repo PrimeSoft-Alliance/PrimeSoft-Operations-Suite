@@ -15,7 +15,7 @@ export default function ClientInquiries() {
 
   const fetchInquiries = async () => {
     try {
-      const res = await fetch('/v1/dashboard/contacts');
+      const res = await fetch('/v1/contacts');
       const data = await res.json();
       if (data.success) setInquiries(data.data);
     } catch (err) {
@@ -27,7 +27,7 @@ export default function ClientInquiries() {
 
   const resolveInquiry = async (id: string) => {
     try {
-      await fetch(`/v1/dashboard/contacts/${id}/status`, {
+      await fetch(`/v1/contacts/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'resolved' })

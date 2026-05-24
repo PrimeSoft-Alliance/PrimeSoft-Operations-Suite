@@ -317,8 +317,11 @@ export default function Home() {
             >
               Book Discovery Call <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
-            <Link to="/get-started" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
-               System Login
+            <Link to="/client/login" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
+               Client Login
+            </Link>
+            <Link to="/admin/login" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
+               Admin Login
             </Link>
           </div>
         </motion.div>

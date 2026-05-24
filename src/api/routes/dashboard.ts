@@ -120,13 +120,13 @@ router.get('/stats', async (req, res) => {
     const client = await Client.findOne({ clientId });
     
     // Fetch data points for overview
-    const [totalBookings, pendingBookings, totalLeads, unreadContacts] = await Promise.all([
+    const [totalBookings, pendingBookings, totalLeads, unreadContacts, totalContacts] = await Promise.all([
       Booking.countDocuments({ clientId }),
       Booking.countDocuments({ clientId, status: 'pending' }),
       Lead.countDocuments({ clientId }),
-      Lead.countDocuments({ clientId, tags: 'inquiry', stage: 'New' })
+      Contact.countDocuments({ clientId, status: 'unread' }),
+      Contact.countDocuments({ clientId })
     ]);
-    const totalContacts = await Lead.countDocuments({ clientId, tags: 'inquiry' });
     
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -227,8 +227,18 @@ router.patch('/bookings/:id/status', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    let settings = await Settings.findOne({ clientId: getCid(req) });
-    envRes.sendSuccess(settings);
+    const clientId = getCid(req);
+    let settings = await Settings.findOne({ clientId });
+    let client = await Client.findOne({ clientId });
+    
+    let combined = settings ? settings.toObject() : {};
+    if (client) {
+      combined.telegramBotToken = client.telegramBotToken;
+      combined.whatsappBusinessAccountId = client.whatsappBusinessAccountId;
+      combined.whatsappAccessToken = client.whatsappAccessToken;
+    }
+    
+    envRes.sendSuccess(combined);
   } catch (e) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
 });
 
@@ -237,6 +247,26 @@ router.put('/settings', async (req, res) => {
   try {
     const update = req.body;
     const clientId = getCid(req);
+    
+    // Extract bot integration fields from settings update and apply to Client
+    const botUpdates: any = {};
+    if (update.telegramBotToken !== undefined) {
+      botUpdates.telegramBotToken = update.telegramBotToken;
+      delete update.telegramBotToken;
+    }
+    if (update.whatsappBusinessAccountId !== undefined) {
+      botUpdates.whatsappBusinessAccountId = update.whatsappBusinessAccountId;
+      delete update.whatsappBusinessAccountId;
+    }
+    if (update.whatsappAccessToken !== undefined) {
+      botUpdates.whatsappAccessToken = update.whatsappAccessToken;
+      delete update.whatsappAccessToken;
+    }
+
+    if (Object.keys(botUpdates).length > 0) {
+      await Client.updateOne({ clientId }, { $set: botUpdates });
+    }
+
     const settings = await Settings.findOneAndUpdate(
       { clientId },
       { $set: { ...update, clientId } },

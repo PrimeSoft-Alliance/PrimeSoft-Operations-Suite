@@ -38,25 +38,29 @@ export default function OperationsNexus() {
       try {
         const headers = { 'x-client-id': cidHook };
         const [statsRes, leadsRes, devRes] = await Promise.all([
-          fetch(`/v1/dashboard/stats?t=${Date.now()}`, { headers }),
+          fetch(`/v1/stats?t=${Date.now()}`, { headers }),
           fetch(`/v1/leads?t=${Date.now()}`, { headers }),
-          fetch(`/v1/dashboard/bookings?t=${Date.now()}`, { headers })
+          fetch(`/v1/bookings?t=${Date.now()}`, { headers })
         ]);
 
         const statsEnv = await statsRes.json();
         const leadsEnv = await leadsRes.json();
         const bookingsEnv = await devRes.json();
 
+        // Robust fallback parsing
+        const statsPayload = (statsEnv && statsEnv.success && statsEnv.data !== undefined) ? statsEnv.data : statsEnv;
+        const leadsPayload = (leadsEnv && leadsEnv.success && leadsEnv.data !== undefined) ? leadsEnv.data : leadsEnv;
+
         // Include meta in stats so we have clientId
         const mergedStats = {
-          ...(statsEnv?.data || {}),
-          _clientId: statsEnv?.meta?.clientId,
-          _businessName: statsEnv?.meta?.businessName
+          ...(statsPayload || {}),
+          _clientId: statsEnv?.meta?.clientId || statsPayload?.clientId || cidHook,
+          _businessName: statsEnv?.meta?.businessName || statsPayload?.businessName || 'Business'
         };
         setStats(mergedStats);
         
         // Extract arrays safely
-        const leads = leadsEnv?.data || (Array.isArray(leadsEnv) ? leadsEnv : []);
+        const leads = Array.isArray(leadsPayload) ? leadsPayload : [];
         // leads already contains unified contacts and bookings in backend, but backend 'type' might be different
         // Let's rely entirely on leadsEnv
         
@@ -64,7 +68,7 @@ export default function OperationsNexus() {
           ...l, 
           type: l.source === 'booking' ? 'booking' : 'lead', 
           date: new Date(l.createdAt),
-          name: l.contactFirst + ' ' + l.contactLast,
+          name: (l.contactFirst || '') + ' ' + (l.contactLast || ''),
           email: l.contactEmail
         })).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         

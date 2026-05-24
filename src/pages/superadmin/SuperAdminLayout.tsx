@@ -20,7 +20,7 @@ export default function SuperAdminLayout() {
       .then(res => res.json())
       .then(data => {
         if (!data.authenticated || data.role !== 'superadmin') {
-          navigate('/login');
+          navigate('/admin/login');
         } else {
           setUser(data);
           setLoading(false);
@@ -30,7 +30,7 @@ export default function SuperAdminLayout() {
         console.error('Auth check error:', err);
         setError('Authentication check failed. Please login again.');
         setLoading(false);
-        setTimeout(() => navigate('/login'), 2000);
+        setTimeout(() => navigate('/admin/login'), 2000);
       });
   }, [navigate]);
 
@@ -58,6 +58,7 @@ export default function SuperAdminLayout() {
     { icon: Users, label: 'Leads Stream', path: '/superadmin/leads' },
     { icon: Globe, label: 'Domains', path: '/superadmin/domains' },
     { icon: BarChart3, label: 'Usage & Quotas', path: '/superadmin/usage' },
+    { icon: ShieldCheck, label: 'Quota Management', path: '/superadmin/quotas' },
     { icon: ShieldCheck, label: 'Audit Logs', path: '/superadmin/logs' },
     { icon: HeartPulse, label: 'System Health', path: '/superadmin/health' },
     { icon: Bell, label: 'Notifications', path: '/superadmin/notifications' },

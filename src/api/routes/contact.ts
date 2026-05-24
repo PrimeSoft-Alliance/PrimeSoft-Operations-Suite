@@ -10,7 +10,9 @@ router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
     const { name, email, phone, subject, message, preferredContactMethod } = req.body;
+    
     const clientId = await resolveClientId(req);
+    console.log('[DEBUG] [Contact] Received body:', req.body, 'Resolved clientId:', clientId);
 
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Target client could not be identified');
 

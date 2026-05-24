@@ -2,8 +2,7 @@ import express from 'express';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { Groq } from 'groq-sdk';
 import { incrementAiUsage } from '../../lib/usage';
-import { Settings, Client } from '../models';
-import { getClientBusinessInfo, getClientServices, getClientBranding } from '../utils/aiDataLoaders';
+import { Settings } from '../models';
 
 const router = express.Router();
 const groq = new Groq({
@@ -14,9 +13,6 @@ const groq = new Groq({
 router.post('/generate-form', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
-    
     const { prompt } = req.body;
     if (!prompt) return envRes.sendError(400, 'BAD_REQUEST', 'Prompt is required');
 
@@ -24,22 +20,12 @@ router.post('/generate-form', async (req, res) => {
       return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
     }
 
-    // VALIDATE: Ensure client exists and load business context
-    const client = await Client.findOne({ clientId });
-    if (!client) {
-      return envRes.sendError(404, 'NOT_FOUND', 'Client not found in database');
-    }
-
-    // Get branding if available
-    const branding = await getClientBranding(clientId);
-    const themeColor = branding?.primaryColor || '#3b82f6';
-
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are an expert lead generation strategist and technical form architect for the business "${client.businessName}". 
-          Generate a high-converting lead funnel structure aligned with their services.
+          content: `You are an expert lead generation strategist and technical form architect. 
+          Generate a high-converting lead funnel structure.
           Return ONLY a JSON object that defines a form. 
           The object must have:
           - name: A catchy title for the form
@@ -66,17 +52,15 @@ router.post('/generate-form', async (req, res) => {
       response_format: { type: 'json_object' }
     });
 
+    const clientId = (req as any).clientId;
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     await incrementAiUsage(clientId, 'form-gen', 'assistant', `AI Form Generation: ${prompt}`);
 
     const result = JSON.parse(completion.choices[0].message.content || '{}');
-    // Ensure theme color is set to client's branding
-    result.theme = result.theme || {};
-    result.theme.primaryColor = themeColor;
-    
     envRes.sendSuccess(result);
   } catch (error: any) {
     console.error('AI Form Generation Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate form structure: ' + (error.message || 'Unknown error'));
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate form structure');
   }
 });
 
@@ -84,25 +68,11 @@ router.post('/generate-form', async (req, res) => {
 router.post('/generate-branding', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+    const { businessName, services } = req.body;
     
     if (!process.env.GROQ_API_KEY) {
       return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
     }
-
-    // VALIDATE: Load actual client data from database instead of assuming
-    const clientData = await getClientBusinessInfo(clientId);
-    if (!clientData) {
-      return envRes.sendError(404, 'NOT_FOUND', 'Client business information not found in database');
-    }
-
-    const services = await getClientServices(clientId);
-    if (!services || services.length === 0) {
-      return envRes.sendError(400, 'VALIDATION_FAILED', 'Client has no services defined in database');
-    }
-
-    const servicesText = services.join(', ');
 
      const completion = await groq.chat.completions.create({
       messages: [
@@ -113,8 +83,8 @@ router.post('/generate-branding', async (req, res) => {
         {
           role: 'user',
           content: `You are a world-class brand strategist and UI/UX designer. 
-Generate a professional brand identity for a business named "${clientData.businessName}". 
-Services offered: ${servicesText}.
+Generate a professional brand identity for a business named "${businessName}". 
+Services offered: ${services}.
 
 Return ONLY a JSON object with:
 {
@@ -131,13 +101,15 @@ Return ONLY a JSON object with:
       response_format: { type: 'json_object' }
     });
 
-    await incrementAiUsage(clientId, 'branding-gen', 'assistant', `AI Branding Generation for ${clientData.businessName}`);
+    const clientId = (req as any).clientId;
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+    await incrementAiUsage(clientId, 'branding-gen', 'assistant', 'AI Branding Generation');
 
     const result = JSON.parse(completion.choices[0].message.content || '{}');
     envRes.sendSuccess(result);
   } catch (error: any) {
     console.error('AI Branding Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate branding: ' + (error.message || 'Unknown error'));
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate branding');
   }
 });
 
@@ -145,25 +117,13 @@ Return ONLY a JSON object with:
 router.post('/generate-website-section', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
-    
-    const { section } = req.body;
+    const { section, businessName, services } = req.body;
     
     if (!process.env.GROQ_API_KEY) {
       return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
     }
 
-    // VALIDATE: Load actual client data from database
-    const clientData = await getClientBusinessInfo(clientId);
-    if (!clientData) {
-      return envRes.sendError(404, 'NOT_FOUND', 'Client business information not found in database');
-    }
-
-    const services = await getClientServices(clientId);
-    const servicesText = services.length > 0 ? services.join(', ') : 'professional services';
-
-    let userContent = `Generate content for the "${section}" section of a website for a business named "${clientData.businessName}" offering ${servicesText}.`;
+    let userContent = `Generate content for the "${section}" section of a website for a business named "${businessName}" offering ${services}.`;
 
     if (section === 'landing-hero') {
       userContent += `
@@ -191,7 +151,7 @@ router.post('/generate-website-section', async (req, res) => {
           "ctaSecondaryBtn": "Button text"
         }`;
     } else {
-        return envRes.sendError(400, 'API_ERROR', 'Unsupported section type');
+        return envRes.sendError(400, 'API_ERROR', 'Unsupported section');
     }
 
      const completion = await groq.chat.completions.create({
@@ -203,13 +163,15 @@ router.post('/generate-website-section', async (req, res) => {
       response_format: { type: 'json_object' }
     });
 
+    const clientId = (req as any).clientId;
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     await incrementAiUsage(clientId, 'website-gen', 'assistant', `AI Website Content Generation: ${section}`);
 
     const result = JSON.parse(completion.choices[0].message.content || '{}');
     envRes.sendSuccess(result);
   } catch (error: any) {
     console.error('AI Website Generation Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate website content: ' + (error.message || 'Unknown error'));
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate website content');
   }
 });
 

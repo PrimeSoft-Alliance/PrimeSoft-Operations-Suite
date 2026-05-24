@@ -19,7 +19,7 @@ export default function BookingsManager() {
 
   const fetchBookings = () => {
     setLoading(true);
-    fetch(`/v1/dashboard/bookings?t=${Date.now()}`, {
+    fetch(`/v1/bookings?t=${Date.now()}`, {
       headers: { 'x-client-id': cidHook }
     })
       .then(async res => {
@@ -49,7 +49,7 @@ export default function BookingsManager() {
   }, [cidHook]);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/v1/dashboard/bookings/${id}/status`, {
+    await fetch(`/v1/bookings/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })

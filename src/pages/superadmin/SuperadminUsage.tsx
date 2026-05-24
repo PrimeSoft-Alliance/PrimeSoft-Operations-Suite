@@ -44,7 +44,8 @@ export default function SuperadminUsage() {
     fetch('/v1/sys-admin/clients')
       .then(res => res.ok ? res.json() : [])
       .then(data => {
-        setClients(Array.isArray(data) ? data : []);
+        const clientList = data?.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+        setClients(clientList);
       })
       .catch(err => console.error(err))
       .finally(() => setLoading(false));
@@ -290,7 +291,7 @@ export default function SuperadminUsage() {
                 
                 const storageUsedMB = (client.storageBytesUsed || 0) / (1024 * 1024);
                 const storageLimitMB = (client.storageLimitBytes || 52428800) / (1024 * 1024);
-                const storagePercentage = Math.min(100, (client.storageBytesUsed / client.storageLimitBytes) * 100);
+                const storagePercentage = Math.min(100, (((client.storageBytesUsed || 0) / (client.storageLimitBytes || 52428800)) * 100));
                 
                 const isWarning = aiPercentage > 85 || storagePercentage > 85;
 

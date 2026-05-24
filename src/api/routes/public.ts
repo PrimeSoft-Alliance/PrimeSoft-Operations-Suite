@@ -3,10 +3,9 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings } from '../models';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, PlatformNotification } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
-import { resolveClientId as resolveClientUtil } from '../utils/resolveClient';
 import { startOfDay, addMinutes, format } from 'date-fns';
 
 const router = express.Router();
@@ -47,6 +46,104 @@ async function getGeoLocation(ip: string) {
     console.warn('[GEO] Failed to fetch location:', err);
   }
   return { ip, city: 'Unknown', country: 'Unknown', region: 'Unknown' };
+}
+
+// Helper to resolve client identity from various signals
+async function resolveClientId(req: express.Request): Promise<string | null> {
+  const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
+  let headerId = req.headers['x-client-id'];
+  let queryId = req.query.clientId;
+  let bodyId = req.body?.clientId;
+
+  if (typeof headerId === 'object' && headerId !== null && 'clientId' in headerId) headerId = (headerId as any).clientId;
+  if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
+  if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
+
+  console.log(`[RESOLVE] Attempting to resolve client for host: ${req.hostname}. Signals - APIKey: ${!!apiKey}, HeaderID: ${headerId}, QueryID: ${queryId}, BodyID: ${bodyId}`);
+
+  if (apiKey) {
+    const client = await Client.findOne({ apiKey });
+    if (client) {
+      console.log(`[RESOLVE] Resolved via API Key: ${client.clientId}`);
+      return client.clientId;
+    }
+  }
+
+  const cid = headerId || queryId || bodyId;
+  if (cid) {
+    console.log(`[RESOLVE] Resolved via ID signal: ${cid}`);
+    return String(cid);
+  }
+
+  // Fallback for Platform Main Site
+  const host = req.hostname;
+  
+  // Fetch Platform Settings for homepageClientId fallback
+  let pSettings = null;
+  try {
+    pSettings = await PlatformSettings.findOne();
+  } catch (e) {
+    console.error('[RESOLVE] Error fetching PlatformSettings:', e);
+  }
+
+  const homepageId = pSettings?.homepageClientId || 'platform-prime';
+
+  if (host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0' || host.includes('127.0.0.1')) {
+    console.log(`[RESOLVE] Platform domain detected (${host}), defaulting to ${homepageId}`);
+    
+    // Auto-provision default client if it doesn't exist
+    let client = await Client.findOne({ clientId: homepageId });
+    if (!client) {
+      client = await Client.create({
+        clientId: homepageId,
+        businessName: 'Platform Central',
+        email: 'central@platform.com',
+        password: 'platform_prime_placeholder',
+        role: 'superadmin',
+        status: 'active'
+      });
+      console.log(`[RESOLVE] Provisioned default client: ${homepageId}`);
+    }
+
+    // Ensure Settings exist for the client to avoid 404s
+    const settings = await Settings.findOne({ clientId: homepageId });
+    if (!settings) {
+      await Settings.create({ 
+        clientId: homepageId,
+        businessName: client.businessName,
+        email: client.email,
+        aboutText: 'Global platform hub for all integrated services.'
+      });
+      console.log(`[RESOLVE] Provisioned default settings for: ${homepageId}`);
+    }
+
+    return homepageId;
+  }
+
+  // Check database for domain mapping match
+  const domainMapping = await Domain.findOne({ host, status: 'active' });
+  if (domainMapping) {
+    console.log(`[RESOLVE] Resolved via Domain mapping: ${domainMapping.clientId}`);
+    return domainMapping.clientId;
+  }
+
+  const customClient = await Client.findOne({ customDomain: host });
+  if (customClient) {
+    console.log(`[RESOLVE] Resolved via customDomain field: ${customClient.clientId}`);
+    return customClient.clientId;
+  }
+
+  // Ultimate self-healing fallback for public router
+  try {
+    const fallbackClient = await Client.findOne().sort({ createdAt: 1 });
+    if (fallbackClient) {
+      console.log(`[RESOLVE] Failed host resolution fallback to first client: ${fallbackClient.clientId}`);
+      return fallbackClient.clientId;
+    }
+  } catch (e) {}
+
+  console.warn(`[RESOLVE] Failed to resolve client for host: ${host}, defaulting to platform-prime`);
+  return 'platform-prime';
 }
 
 // Domain Resolution & Headless Config
@@ -126,7 +223,7 @@ router.get('/headless/config', async (req, res) => {
 router.get('/content', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Settings not found');
 
@@ -155,7 +252,7 @@ router.get('/content', async (req, res) => {
 router.get('/content/items', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     const query: any = { clientId, status: 'published' };
     if (req.query.type) query.type = req.query.type;
     if (req.query.tag) query.tags = req.query.tag;
@@ -171,7 +268,7 @@ router.get('/content/items', async (req, res) => {
 router.get('/content/config', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Client settings not found');
 
@@ -207,7 +304,7 @@ router.get('/content/config', async (req, res) => {
 router.get('/content/items/:slug', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     const item = await mongoose.models.ContentItem.findOne({ 
       clientId, 
       slug: req.params.slug,
@@ -258,11 +355,13 @@ router.post('/onboarding-request', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const { name, email, phone, businessType, message } = req.body;
+    console.log('[DEBUG_ONBOARDING] Body received:', { name, email, phone, businessType, message });
     if (!name || !email) {
       return envRes.sendError(400, 'API_ERROR', 'Business name and email are required');
     }
 
     // Auto-generate unique requestId
+    const clientId = await resolveClientId(req) || 'platform-prime';
     const requestId = 'req_' + crypto.randomBytes(6).toString('hex');
 
     const request = await OnboardingRequest.create({
@@ -273,6 +372,31 @@ router.post('/onboarding-request', async (req, res) => {
       businessType: businessType || 'service',
       details: { message: message || 'Applied via website get-started form.' },
       status: 'pending'
+    });
+
+    // Create a notification for Superadmin
+    try {
+      await PlatformNotification.create({
+        type: 'info',
+        title: 'New Onboarding Request',
+        message: `Business "${name}" has submitted an onboarding request application.`,
+        link: '/superadmin/onboarding',
+        clientId: 'platform-prime'
+      });
+    } catch (notifErr) {
+      console.error('[NOTIF] Failed to create onboarding request notification:', notifErr);
+    }
+
+    // Create an inquiry/contact record
+    await Contact.create({
+      clientId,
+      name,
+      email,
+      phone,
+      subject: 'Onboarding Inquiry',
+      message: message || 'Applied via website get-started form.',
+      preferredContactMethod: 'email',
+      status: 'unread'
     });
 
     try {
@@ -353,16 +477,34 @@ router.post('/onboarding/:token', async (req, res) => {
         email,
         password: hash,
         customFields,
+        isActivated: true,
         apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
       });
     } else {
       client.businessName = businessName || client.businessName;
       client.businessType = businessType || client.businessType;
-      if (subdomain) client.subdomain = subdomain;
+      if (subdomain) {
+        client.subdomain = subdomain;
+      }
       client.password = hash;
+      client.isActivated = true;
       client.customFields = { ...client.customFields, ...customFields };
-      if (email) client.email = email;
+      if (email) {
+        client.email = email;
+      }
       await client.save();
+    }
+
+    try {
+      await PlatformNotification.create({
+        type: 'success',
+        title: 'New Onboarding Completed',
+        message: `${businessName || client.businessName} has completed their onboarding registration successfully!`,
+        link: '/superadmin/clients',
+        clientId: 'platform-prime'
+      });
+    } catch (notifErr) {
+      console.error('[NOTIF] Failed to create onboarding notification:', notifErr);
     }
 
     if (subdomain) {
@@ -434,7 +576,7 @@ router.post('/onboarding/:token', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     let settings = await Settings.findOne({ clientId });
     
     const settingsObj = settings ? settings.toObject() : {};
@@ -493,7 +635,7 @@ router.get('/settings', async (req, res) => {
 router.post('/booking', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     
     // Ensure client exists and is active
     let client = await Client.findOne({ clientId });
@@ -511,7 +653,8 @@ router.post('/booking', async (req, res) => {
     if (!client || client.status === 'suspended') {
       return envRes.sendError(401, 'API_ERROR', 'This business is currently not accepting bookings.');
     }
-    const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, notes } = req.body;
+    const { fullName, email, serviceSelection, preferredDate, preferredStartTime, notes } = req.body;
+    const phoneNumber = req.body.phoneNumber || req.body.phone;
     if (!phoneNumber) return envRes.sendError(400, 'VALIDATION_ERROR', 'Phone number is required');
 
     const settings = await Settings.findOne({ clientId });
@@ -582,7 +725,7 @@ router.post('/contact', async (req, res) => {
        // For now just logging or we could enforce auth if needed
     }
 
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     
     // Ensure client exists
     let client = await Client.findOne({ clientId });
@@ -717,7 +860,7 @@ router.post('/forms/:formId/submit', async (req, res) => {
 router.post('/ai/chat', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
 
     const { message, history, userName, userEmail } = req.body;
@@ -729,6 +872,12 @@ router.post('/ai/chat', async (req, res) => {
 
     if (!client || client.status !== 'active') {
       return envRes.sendError(401, 'API_ERROR', 'AI Assistant is currently unavailable for this account.');
+    }
+
+    const { checkAIQuota, recordAIUsage } = await import('../services/quotaService');
+    const quotaCheck = await checkAIQuota(clientId, 100, 'chat');
+    if (!quotaCheck.allowed) {
+      return envRes.sendError(429, 'QUOTA_EXCEEDED', quotaCheck.reason || 'AI token quota exceeded for this billing cycle.');
     }
 
     const { Groq } = await import('groq-sdk');
@@ -773,13 +922,8 @@ router.post('/ai/chat', async (req, res) => {
 
     const text = completion.choices[0].message.content || '';
     
-    // Log AI usage
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    await UsageStats.updateOne(
-      { clientId, month: currentMonth },
-      { $inc: { aiMessagesUsed: 1 } },
-      { upsert: true }
-    );
+    // Log AI usage via QuotaService
+    await recordAIUsage(clientId, 'chat', '/ai/chat', 'groq-llama-3.3-70b', 100, { userEmail });
 
     envRes.sendSuccess({ text });
 
@@ -811,7 +955,7 @@ router.post('/ai/chat', async (req, res) => {
 router.post('/ai/chat/identify', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const clientId = await resolveClientUtil(req);
+    const clientId = await resolveClientId(req);
     if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
 
     const { name, email, phone } = req.body;
@@ -834,6 +978,29 @@ router.post('/ai/chat/identify', async (req, res) => {
     envRes.sendSuccess({ success: true, leadId: lead._id });
   } catch (err: any) {
     envRes.sendError(500, 'API_ERROR', 'Identification failed: ' + err.message);
+  }
+});
+
+// Check public quota
+router.get('/quota-check', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+
+    const client = await Client.findOne({ clientId });
+    if (!client) return envRes.sendError(404, 'API_ERROR', 'Client not found');
+
+    const { getClientQuota } = await import('../services/quotaService');
+    const quota = await getClientQuota(clientId);
+    
+    envRes.sendSuccess({
+      tier: client.tier || 'starter',
+      aiTokensUsed: quota.aiTokensUsed,
+      aiTokensLimit: quota.aiTokensLimit
+    });
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to check quota: ' + err.message);
   }
 });
 

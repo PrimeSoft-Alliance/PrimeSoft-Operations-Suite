@@ -22,7 +22,7 @@ export default function Setup() {
       .then(data => {
         setSetupRequired(data.setupRequired);
         if (!data.setupRequired) {
-          navigate('/login');
+          navigate('/admin/login');
         }
       })
       .catch(() => setError('Failed to check system status'))
@@ -55,7 +55,7 @@ export default function Setup() {
       }
 
       if (res.ok && data.success) {
-        navigate('/login');
+        navigate('/admin/login');
       } else {
         setError(data?.error || data?.message || 'Setup failed');
       }

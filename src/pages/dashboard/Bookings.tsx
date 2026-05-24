@@ -15,7 +15,7 @@ export default function ClientBookings() {
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch('/v1/dashboard/bookings');
+      const res = await fetch('/v1/bookings');
       const data = await res.json();
       if (data.success) setBookings(data.data);
     } catch (err) {
@@ -27,7 +27,7 @@ export default function ClientBookings() {
 
   const updateBookingStatus = async (id: string, status: string) => {
     try {
-      await fetch(`/v1/dashboard/bookings/${id}`, {
+      await fetch(`/v1/bookings/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })

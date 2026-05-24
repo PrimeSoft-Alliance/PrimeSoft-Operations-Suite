@@ -31,8 +31,10 @@ export default function Contact() {
         return res.json();
       })
       .then(data => {
-        if (data?.success) setSettings(data.data);
-        else setSettings(data);
+        // Robust fallback parsing
+        const isEnveloped = data && typeof data === 'object' && 'success' in data;
+        const payload = (isEnveloped && data.data !== undefined) ? data.data : data;
+        setSettings(payload);
       })
       .catch(err => {
         console.error('Settings load error:', err);
@@ -102,7 +104,10 @@ export default function Contact() {
     try {
       const res = await fetch('/v1/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-client-id': clientId || '' 
+        },
         body: JSON.stringify({ ...formData, clientId })
       });
       if (!res.ok) {
