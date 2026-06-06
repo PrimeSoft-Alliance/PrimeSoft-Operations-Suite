@@ -3,7 +3,7 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings } from '../models';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, Quota } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { resolveClientId as resolveClientUtil } from '../utils/resolveClient';
@@ -333,7 +333,7 @@ router.post('/onboarding/:token', async (req, res) => {
     const { token } = req.params;
     const { 
       businessName, businessType, subdomain, email, password, 
-      contactPhone, contactEmail, workingHours, customFields = {} 
+      contactPhone, contactEmail, workingHours, customFields = {}, tier = 'starter'
     } = req.body;
 
     const link = await Invite.findOne({ token, status: 'pending' });
@@ -353,6 +353,7 @@ router.post('/onboarding/:token', async (req, res) => {
         email,
         password: hash,
         customFields,
+        tier: tier || 'starter',
         apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
       });
     } else {
@@ -361,6 +362,7 @@ router.post('/onboarding/:token', async (req, res) => {
       if (subdomain) client.subdomain = subdomain;
       client.password = hash;
       client.customFields = { ...client.customFields, ...customFields };
+      if (tier) client.tier = tier;
       if (email) client.email = email;
       await client.save();
     }
@@ -382,6 +384,31 @@ router.post('/onboarding/:token', async (req, res) => {
           });
         }
       }
+    }
+
+    // Create quota record based on tier
+    const tierLimits: Record<string, any> = {
+      starter: { aiTokensLimit: 10000, chatMessagesLimit: 1000, storageLimit: 1073741824 },
+      professional: { aiTokensLimit: 100000, chatMessagesLimit: 10000, storageLimit: 10737418240 },
+      enterprise: { aiTokensLimit: null, chatMessagesLimit: null, storageLimit: null }
+    };
+    
+    const tierConfig = tierLimits[tier] || tierLimits.starter;
+    const existingQuota = await Quota.findOne({ clientId: link.clientId });
+    if (!existingQuota) {
+      await Quota.create({
+        clientId: link.clientId,
+        tier: tier || 'starter',
+        aiTokensLimit: tierConfig.aiTokensLimit || 999999999,
+        chatMessagesLimit: tierConfig.chatMessagesLimit || 999999999,
+        storageLimit: tierConfig.storageLimit || 1099511627776,
+        enabledFeatures: {
+          webChat: true,
+          telegram: tier === 'professional' || tier === 'enterprise',
+          whatsapp: tier === 'enterprise',
+          aiAssistant: true
+        }
+      });
     }
 
     const currentMonth = format(new Date(), 'yyyy-MM');
