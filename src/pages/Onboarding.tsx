@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Building2, Mail, Phone, Lock, Clock, CheckCircle2, AlertCircle, Loader2, Zap, Star } from 'lucide-react';
+import { Building2, Mail, Phone, Lock, Clock, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export default function Onboarding() {
@@ -30,39 +30,22 @@ export default function Onboarding() {
     closingTime: '17:00'
   });
 
-  const tiers = [
-    {
-      id: 'starter',
-      name: 'Starter Plan',
-      price: 'Free',
-      description: 'Perfect for small businesses',
-      features: ['Web Chat', 'AI Assistant', 'Custom Branding', '10K AI tokens/month', '1GB Storage']
-    },
-    {
-      id: 'professional',
-      name: 'Professional Plan',
-      price: '$29/mo',
-      description: 'For growing businesses',
-      features: ['Everything in Starter', 'Telegram Integration', 'AI Assistant', '100K AI tokens/month', '10GB Storage'],
-      recommended: true
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise Plan',
-      price: 'Custom',
-      description: 'Unlimited features',
-      features: ['Everything included', 'Telegram + WhatsApp', 'Unlimited AI tokens', '1TB Storage', 'Priority Support']
-    }
-  ];
-
   useEffect(() => {
     fetch(`/v1/public/onboarding/${token}`)
       .then(res => res.json())
       .then(data => {
-        if (!data?.success) {
-           setError(data?.error?.message || 'Invalid link');
+        // Robust fallback parsing
+        const isEnveloped = data && typeof data === 'object' && 'success' in data;
+        const success = isEnveloped ? data.success : true;
+        
+        if (!success) {
+           setError(data?.error?.message || data?.error || 'Invalid link');
         } else {
-           const payload = data.data;
+           const payload = (isEnveloped && data.data !== undefined) ? data.data : data;
+           if (!payload || typeof payload !== 'object') {
+             setError('Invalid payload structure');
+             return;
+           }
            setClientId(payload.clientId);
            setInviteFields(payload.customFields || []);
            if (payload.prefill) {
@@ -101,16 +84,29 @@ export default function Onboarding() {
         body: JSON.stringify({
           ...formData,
           workingHours,
-          customFields: customFieldValues,
-          tier: selectedTier
+          customFields: customFieldValues
         })
       });
       
       const data = await res.json();
-      if (data.success) {
+      const isEnveloped = data && typeof data === 'object' && 'success' in data;
+      const successData = isEnveloped ? data.success : res.ok;
+      
+      if (successData) {
+        // Also assign chosen tier
+        try {
+          await fetch('/v1/auth/assign-tier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clientId, tier: selectedTier })
+          });
+        } catch (tierErr) {
+          console.warn('Tier assignment failed', tierErr);
+        }
         setSuccess(true);
       } else {
-        setError(data.error || 'Submission failed');
+        const errorDetails = isEnveloped ? (data.error?.message || data.error) : data.error;
+        setError(errorDetails || 'Submission failed');
       }
     } catch (err) {
       setError('Connection failed');
@@ -141,7 +137,7 @@ export default function Onboarding() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome Aboard!</h1>
           <p className="text-gray-600 mb-8">Your account has been created successfully. You can now log in to manage your digital business.</p>
           <button 
-            onClick={() => navigate('/login')}
+            onClick={() => navigate('/client/login')}
             className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:opacity-90 transition-all shadow-lg shadow-primary/20"
           >
             Go to Login
@@ -290,46 +286,6 @@ export default function Onboarding() {
             </div>
           </div>
 
-          <div className="space-y-6 pt-6 border-t border-slate-100">
-            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
-              <Zap className="w-5 h-5 text-primary" />
-              Select Your Plan
-            </h3>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-              {tiers.map((tier) => (
-                <motion.div
-                  key={tier.id}
-                  whileHover={{ translateY: -4 }}
-                  className={cn(
-                    "relative p-6 rounded-2xl border-2 transition-all cursor-pointer",
-                    selectedTier === tier.id
-                      ? "border-primary bg-primary/5"
-                      : "border-slate-200 hover:border-slate-300 bg-white"
-                  )}
-                  onClick={() => setSelectedTier(tier.id)}
-                >
-                  {tier.recommended && (
-                    <div className="absolute -top-3 right-6 bg-primary text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                      <Star className="w-3 h-3" />
-                      Recommended
-                    </div>
-                  )}
-                  <h4 className="font-bold text-gray-900 mb-1">{tier.name}</h4>
-                  <p className="text-2xl font-black text-primary mb-2">{tier.price}</p>
-                  <p className="text-xs text-gray-600 mb-4">{tier.description}</p>
-                  <ul className="space-y-2">
-                    {tier.features.map((feature, idx) => (
-                      <li key={idx} className="text-xs text-gray-700 flex items-start gap-2">
-                        <CheckCircle2 className="w-3 h-3 text-primary mt-0.5 flex-shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
           {inviteFields.length > 0 && (
             <div className="space-y-6 pt-6 border-t border-slate-100">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
@@ -361,6 +317,33 @@ export default function Onboarding() {
               </div>
             </div>
           )}
+
+          <div className="space-y-6 pt-6 border-t border-slate-100">
+            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+              <Building2 className="w-5 h-5 text-primary" />
+              Select Your Tier
+            </h3>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+               {[
+                 { id: 'starter', name: 'Starter', price: 'Free', features: ['10K AI Tokens', 'Web Chat'] },
+                 { id: 'professional', name: 'Professional', price: '$29/mo', features: ['100K AI Tokens', 'Telegram Bot'] },
+                 { id: 'enterprise', name: 'Enterprise', price: '$99/mo', features: ['1M AI Tokens', 'WhatsApp Integration'] }
+               ].map(tier => (
+                 <div key={tier.id} 
+                      onClick={() => setSelectedTier(tier.id)}
+                      className={cn(
+                        "p-4 border rounded-2xl cursor-pointer transition-all",
+                        selectedTier === tier.id ? "border-primary bg-primary/5 ring-2 ring-primary/20" : "border-slate-200 hover:border-primary/50"
+                      )}>
+                   <div className="font-bold text-lg">{tier.name}</div>
+                   <div className="text-primary font-semibold mb-2">{tier.price}</div>
+                   <ul className="text-sm text-gray-600 space-y-1">
+                     {tier.features.map(f => <li key={f}>• {f}</li>)}
+                   </ul>
+                 </div>
+               ))}
+            </div>
+          </div>
 
           <div className="space-y-6 pt-6 border-t border-slate-100">
             <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">

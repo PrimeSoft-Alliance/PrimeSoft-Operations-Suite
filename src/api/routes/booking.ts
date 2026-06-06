@@ -107,7 +107,9 @@ router.post('/check-availability', async (req, res) => {
 router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
-    const { fullName, phoneNumber, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes } = req.body;
+    const { fullName, email, serviceSelection, preferredDate, preferredStartTime, preferredEndTime, notes } = req.body;
+    const phoneNumber = req.body.phoneNumber || req.body.phone;
+    console.log('[DEBUG] [Booking] Received body:', req.body, 'Matched phoneNumber:', phoneNumber);
     if (!phoneNumber) return envRes.sendError(400, 'VALIDATION_ERROR', 'Phone number is required');
     const clientId = await resolveClientId(req);
 

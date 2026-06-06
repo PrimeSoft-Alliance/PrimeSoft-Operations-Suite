@@ -29,6 +29,7 @@ export default function OnboardingRequests() {
       }
     } catch (err) {
       console.error('Failed to generate id', err);
+      alert('Failed to generate ID: ' + err);
     }
   };
 
@@ -40,6 +41,7 @@ export default function OnboardingRequests() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           clientId: selectedClientId, 
+          businessName: selectedBusinessName,
           expiryHours, 
           customFields: inviteFields 
         })
@@ -318,7 +320,16 @@ export default function OnboardingRequests() {
                   <input 
                     placeholder="e.g., Smith Plumbing"
                     value={selectedBusinessName}
-                    onChange={e => setSelectedBusinessName(e.target.value)}
+                    onChange={e => {
+                      const newName = e.target.value;
+                      setSelectedBusinessName(newName);
+                      const derivedSlug = newName
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]/g, '-')
+                        .replace(/-+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                      setSelectedClientId(derivedSlug);
+                    }}
                     className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none mb-3"
                   />
                   <div className="flex gap-2">

@@ -21,7 +21,7 @@ export default function SettingsManager() {
   
   const fetchDomains = async () => {
     try {
-      const res = await fetch('/v1/dashboard/domains');
+      const res = await fetch('/v1/domains');
       const data = await res.json();
       if (data?.success && Array.isArray(data.data)) setDomains(data.data);
     } catch (err) { console.error('Failed to fetch domains'); }
@@ -29,7 +29,7 @@ export default function SettingsManager() {
 
   useEffect(() => {
     fetchDomains();
-    fetch(`/v1/dashboard/settings?t=${Date.now()}`)
+    fetch(`/v1/settings?t=${Date.now()}`)
       .then(async res => {
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -63,7 +63,7 @@ export default function SettingsManager() {
     setSaveSuccess(false);
     
     try {
-      const res = await fetch('/v1/dashboard/settings', {
+      const res = await fetch('/v1/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -87,7 +87,7 @@ export default function SettingsManager() {
     setSecuritySuccess('');
     
     try {
-      const res = await fetch('/v1/dashboard/security', {
+      const res = await fetch('/v1/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: securityData.email, password: securityData.password })
@@ -112,7 +112,7 @@ export default function SettingsManager() {
     setGeneratingAI(true);
     setAiError('');
     try {
-      const response = await fetch('/v1/dashboard/ai/generate-branding', {
+      const response = await fetch('/v1/ai/generate-branding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -181,7 +181,7 @@ export default function SettingsManager() {
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
-        const res = await fetch('/v1/dashboard/upload-image', {
+        const res = await fetch('/v1/upload-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64, fileName: file.name })
@@ -719,6 +719,39 @@ export default function SettingsManager() {
           </div>
         </section>
 
+        {/* Bot Integrations */}
+        <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-indigo-600" />
+              Bot Integrations
+            </h3>
+            <span className="px-2 py-1 bg-amber-50 text-amber-600 rounded text-[10px] uppercase font-bold tracking-tight">Professional / Enterprise</span>
+          </div>
+          <p className="text-sm text-gray-500 mb-6">Configure official API tokens to enable Telegram and WhatsApp messaging (subject to tier limits).</p>
+          
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="font-bold text-sm text-gray-700">Telegram Bot Setup</h4>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Bot Token</label>
+                <input type="password" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={settings.telegramBotToken || ''} onChange={e => updateField('telegramBotToken', e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-bold text-sm text-gray-700">WhatsApp Business API</h4>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Phone Number ID</label>
+                <input type="text" placeholder="101234567890123" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={settings.whatsappBusinessAccountId || ''} onChange={e => updateField('whatsappBusinessAccountId', e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Access Token</label>
+                <input type="password" placeholder="EAABwzL..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" value={settings.whatsappAccessToken || ''} onChange={e => updateField('whatsappAccessToken', e.target.value)} />
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Outgoing Email (SMTP) */}
         <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
@@ -804,7 +837,7 @@ export default function SettingsManager() {
                   const email = (document.getElementById('test-email-input') as HTMLInputElement).value;
                   if (!email) return alert('Enter an email address');
                   try {
-                    const res = await fetch('/v1/dashboard/test-email', {
+                    const res = await fetch('/v1/test-email', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ email, smtp: {
@@ -843,7 +876,7 @@ export default function SettingsManager() {
                   const host = prompt('Enter domain hostname (e.g. acme.com):');
                   if (!host) return;
                   try {
-                    const res = await fetch('/v1/dashboard/domains', {
+                    const res = await fetch('/v1/domains', {
                       method: 'POST',
                       headers: {'Content-Type': 'application/json'},
                       body: JSON.stringify({ host, type: 'custom-domain' })
@@ -872,7 +905,7 @@ export default function SettingsManager() {
                      type="button"
                      onClick={async () => {
                        if (!confirm('Remove this domain mapping?')) return;
-                       await fetch(`/v1/dashboard/domains/${dom._id}`, { method: 'DELETE' });
+                       await fetch(`/v1/domains/${dom._id}`, { method: 'DELETE' });
                        fetchDomains();
                      }}
                      className="text-gray-400 hover:text-red-500 p-2"

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import About from './pages/About';
@@ -20,7 +20,6 @@ import SettingsManager from './pages/dashboard/SettingsManager';
 import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
-import HeadlessManager from './pages/dashboard/HeadlessManager';
 import WebsiteManager from './pages/dashboard/WebsiteManager';
 import ClientInquiries from './pages/dashboard/Inquiries';
 import ClientBookings from './pages/dashboard/Bookings';
@@ -31,7 +30,6 @@ import Terms from './pages/Terms';
 import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
 import ClientsManager from './pages/superadmin/ClientsManager';
 import GlobalStats from './pages/superadmin/GlobalStats';
-import AdminHub from './pages/superadmin/AdminHub';
 
 import SuperadminUsage from './pages/superadmin/SuperadminUsage';
 import SuperadminTemplates from './pages/superadmin/SuperadminTemplates';
@@ -45,13 +43,16 @@ import PlatformSettings from './pages/superadmin/PlatformSettings';
 import MissionControl from './pages/superadmin/MissionControl';
 import SuperAdminInquiries from './pages/superadmin/Inquiries';
 import SuperAdminBookings from './pages/superadmin/Bookings';
+<<<<<<< HEAD
 import AITrainingManager from './pages/superadmin/AITrainingManager';
+=======
+import QuotaDashboard from './pages/superadmin/QuotaDashboard';
+>>>>>>> origin/main
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public site routes */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
@@ -63,17 +64,13 @@ export default function App() {
           <Route path="get-started" element={<PublicOnboarding />} />
         </Route>
         
-        {/* Auth routes */}
         <Route path="/client/login" element={<Login loginRole="client" />} />
         <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
         <Route path="/activate" element={<Activate />} />
         <Route path="/setup" element={<Setup />} />
+        <Route path="/chatbot-mini" element={<ChatbotMini />} />
         <Route path="/onboarding/:token" element={<Onboarding />} />
         
-        {/* Standalone pages */}
-        <Route path="/chatbot-mini" element={<ChatbotMini />} />
-        
-        {/* Client dashboard routes */}
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="nexus" element={<OperationsNexus />} />
@@ -83,16 +80,13 @@ export default function App() {
           <Route path="tickets" element={<TicketingNexus />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />
-          <Route path="headless" element={<HeadlessManager />} />
           <Route path="developer" element={<HeadlessDocs />} />
           <Route path="settings" element={<SettingsManager />} />
           <Route path="website" element={<WebsiteManager />} />
         </Route>
 
-        {/* Super admin routes */}
         <Route path="/superadmin" element={<SuperAdminLayout />}>
-          <Route index element={<AdminHub />} />
-          <Route path="stats" element={<GlobalStats />} />
+          <Route index element={<GlobalStats />} />
           <Route path="hub" element={<MissionControl />} />
           <Route path="clients" element={<ClientsManager />} />
           <Route path="leads" element={<LeadsManager />} />
@@ -106,11 +100,14 @@ export default function App() {
           <Route path="health" element={<SystemHealth />} />
           <Route path="notifications" element={<NotificationsManager />} />
           <Route path="settings" element={<PlatformSettings />} />
+<<<<<<< HEAD
           <Route path="ai-training" element={<AITrainingManager />} />
+=======
+          <Route path="quotas" element={<QuotaDashboard />} />
+>>>>>>> origin/main
         </Route>
-        
-        {/* Catch-all for SPA - must be last */}
-        <Route path="*" element={<Layout />} />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

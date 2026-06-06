@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useClientId } from '../../lib/useClientId';
 import { motion, AnimatePresence } from 'motion/react';
+import QuotaStatusWidget from '../../components/QuotaStatusWidget';
 
 interface ClientContainer {
   id: string;
@@ -164,7 +165,7 @@ export default function DashboardHome() {
   // Fetch Dashboard Stats and Raw metadata
   useEffect(() => {
     const headers = { 'x-client-id': cidHook };
-    fetch(`/v1/dashboard/stats?t=${Date.now()}`, { headers })
+    fetch(`/v1/stats?t=${Date.now()}`, { headers })
       .then(async res => {
          const contentType = res.headers.get('content-type');
          if (!res.ok) {
@@ -191,16 +192,23 @@ export default function DashboardHome() {
       .then(data => {
          console.log('Dashboard stats response:', data);
          if (data?.meta) setRawMeta(data.meta);
-         const statsPayload = (data?.success && data?.data) ? data.data : data;
+         const statsPayload = (data?.success && data?.data !== undefined) ? data.data : data;
          
-         if (statsPayload && (statsPayload.totalBookings !== undefined || statsPayload.usage)) {
-           setStats(statsPayload);
-         } else {
-           console.error('Invalid stats data structure:', data);
-           const diagnostic = JSON.stringify(data).substring(0, 100);
-           setErrorStatus(`Invalid API Structure: ${diagnostic}`);
-           setError(true);
-         }
+         const validatedStats = {
+           businessName: statsPayload?.businessName || 'Business Operator',
+           totalBookings: statsPayload?.totalBookings ?? 0,
+           pendingBookings: statsPayload?.pendingBookings ?? 0,
+           totalContacts: statsPayload?.totalContacts ?? 0,
+           unreadContacts: statsPayload?.unreadContacts ?? 0,
+           totalLeads: statsPayload?.totalLeads ?? 0,
+           usage: {
+             aiMessagesUsed: statsPayload?.usage?.aiMessagesUsed ?? 0,
+             aiMessagesLimit: statsPayload?.usage?.aiMessagesLimit ?? 1000,
+             storageBytesUsed: statsPayload?.usage?.storageBytesUsed ?? 0,
+             storageBytesLimit: statsPayload?.usage?.storageBytesLimit ?? 52428800
+           }
+         };
+         setStats(validatedStats);
       })
       .catch(err => {
          console.error('Fetch error:', err);
@@ -214,7 +222,7 @@ export default function DashboardHome() {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (cidHook) headers['x-client-id'] = cidHook;
-      await fetch('/v1/dashboard/logs', {
+      await fetch('/v1/logs', {
         method: 'POST',
         headers,
         body: JSON.stringify({ action, target: targetKey, metadata })
@@ -423,6 +431,8 @@ export default function DashboardHome() {
             ))}
           </div>
         </div>
+
+        <QuotaStatusWidget />
       </div>
 
       {/* Main KPI Stats Block */}
@@ -465,7 +475,7 @@ export default function DashboardHome() {
           </p>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4 overflow-hidden">
             <div 
-              style={{ width: `${stats?.usage?.aiMessagesLimit > 1000000 ? 5 : Math.min(100, ((stats?.usage?.aiMessagesUsed ?? 0) / (stats?.usage?.aiMessagesLimit ?? 1)) * 100)}%` }}
+              style={{ width: `${stats?.usage?.aiMessagesLimit > 1000000 ? 5 : Math.min(100, ((stats?.usage?.aiMessagesUsed || 0) / (stats?.usage?.aiMessagesLimit || 1)) * 100)}%` }}
               className="bg-emerald-500 h-full rounded-full" 
             />
           </div>

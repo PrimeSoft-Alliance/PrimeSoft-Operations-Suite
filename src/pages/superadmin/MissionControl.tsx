@@ -107,7 +107,7 @@ export default function MissionControl() {
       try {
         const [leadsRes, bookingsRes] = await Promise.all([
           fetch('/v1/sys-admin/leads'),
-          fetch('/v1/sys-admin/platform-bookings')
+          fetch('/v1/sys-admin/bookings')
         ]);
 
         const leads = await leadsRes.json();
@@ -500,7 +500,7 @@ export default function MissionControl() {
                            <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
                               <motion.div 
                                 initial={{ width: 0 }}
-                                animate={{ width: `${(stage.count / 30) * 100}%` }}
+                                animate={{ width: `${((stage.count || 0) / 30) * 100}%` }}
                                 transition={{ delay: 1, duration: 1 }}
                                 className={cn("h-full rounded-full transition-all", stage.color)} 
                               />

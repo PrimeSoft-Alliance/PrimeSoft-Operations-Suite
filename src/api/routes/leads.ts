@@ -59,6 +59,7 @@ router.get('/', async (req, res) => {
     const combined = [
       ...leadsRaw.map((l: any) => ({
         ...l,
+        stage: l.stage || 'New',
         type: 'lead'
       })),
       ...bookings.map((b: any) => ({
@@ -69,6 +70,7 @@ router.get('/', async (req, res) => {
         contactEmail: b.email || b.customerEmail,
         contactPhone: b.phoneNumber || b.customerPhone,
         status: b.status || 'new',
+        stage: 'New', // Ensure bookings show up in Kanban
         source: 'booking',
         location: { city: 'Unknown', country: 'Unknown' },
         createdAt: b.createdAt,

@@ -23,10 +23,15 @@ export default function LeadsManager() {
   const fetchLeads = async () => {
     try {
       const targetCid = isSuperAdminPath ? 'all' : cidHook;
-      const res = await fetch('/v1/leads', { headers: { 'x-client-id': targetCid } });
+      const apiPath = isSuperAdminPath ? '/v1/sys-admin/leads' : '/v1/leads';
+      const res = await fetch(apiPath, { headers: { 'x-client-id': targetCid } });
       const data = await res.json();
-      if (data.success) {
-         setLeads(data.data.map((l:any) => ({...l, stage: l.stage || 'New'})));
+      
+      const isEnveloped = data && typeof data === 'object' && 'success' in data;
+      const leadsList = (isEnveloped && data.data !== undefined) ? data.data : data;
+      
+      if (Array.isArray(leadsList)) {
+         setLeads(leadsList.map((l:any) => ({...l, stage: l.stage || 'New'})));
       }
     } catch(err) {}
   };

@@ -3,8 +3,23 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { Client, Settings } from '../models';
+import { assignTierToClient } from '../services/quotaService';
+import { EnvelopeResponse } from '../middlewares/envelope';
 
 const router = express.Router();
+
+router.post('/assign-tier', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const { clientId, tier } = req.body;
+  if (!clientId || !tier) return envRes.sendError(400, 'VALIDATION_FAILED', 'Missing clientId or tier');
+
+  try {
+    const quota = await assignTierToClient(clientId, tier);
+    envRes.sendSuccess({ quota });
+  } catch (err: any) {
+    envRes.sendError(500, 'SERVER_ERROR', err.message);
+  }
+});
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
 // Initial SuperAdmin setup logic
@@ -169,6 +184,24 @@ router.post('/logout', (req, res) => {
     path: '/'
   });
   res.json({ success: true });
+});
+
+router.post('/assign-tier', async (req, res) => {
+  try {
+    const { clientId, tier } = req.body;
+    if (!clientId || !tier) return res.status(400).json({ error: 'Missing parameters' });
+    
+    const { assignTierToClient } = await import('../services/quotaService');
+    const success = await assignTierToClient(clientId, tier);
+    
+    if (success) {
+      res.json({ success: true, tier });
+    } else {
+      res.status(500).json({ error: 'Failed' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update tier' });
+  }
 });
 
 router.get('/check', async (req, res) => {

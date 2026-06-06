@@ -553,7 +553,7 @@ export default function GlobalStats() {
                   <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-800">
                     <motion.div 
                       className="h-full rounded-full bg-indigo-500" 
-                      animate={{ width: selectedContainer.status === 'restarting' ? '0%' : `${(selectedContainer.memoryUsed / selectedContainer.memoryMax) * 100}%` }}
+                      animate={{ width: selectedContainer.status === 'restarting' ? '0%' : `${((selectedContainer.memoryUsed || 0) / (selectedContainer.memoryMax || 1)) * 100}%` }}
                     />
                   </div>
                 </div>

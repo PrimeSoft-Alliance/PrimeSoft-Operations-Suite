@@ -41,10 +41,14 @@ export default function Booking() {
         return res.json();
       })
       .then(data => {
-        if (data && data.services) {
-          setServices(data.services);
-          if (!selectedService && data.services.length > 0) {
-            setSelectedService(data.services[0].name);
+        // Robust fallback checking
+        const isEnveloped = data && typeof data === 'object' && 'success' in data;
+        const payload = (isEnveloped && data.data !== undefined) ? data.data : data;
+
+        if (payload && payload.services) {
+          setServices(payload.services);
+          if (!selectedService && payload.services.length > 0) {
+            setSelectedService(payload.services[0].name);
           }
         }
         setLoadingServices(false);
@@ -84,7 +88,11 @@ export default function Booking() {
       return res.json();
     })
     .then(data => {
-      setAvailableSlots(data.availableSlots || []);
+      // Robust fallback checking
+      const isEnveloped = data && typeof data === 'object' && 'success' in data;
+      const payload = (isEnveloped && data.data !== undefined) ? data.data : data;
+
+      setAvailableSlots(payload?.availableSlots || []);
       setLoadingSlots(false);
     })
     .catch(err => {
@@ -110,7 +118,10 @@ export default function Booking() {
     try {
       const res = await fetch('/v1/booking', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-client-id': clientId || '' 
+        },
         body: JSON.stringify({
           ...formData,
           serviceSelection: selectedService,
@@ -129,7 +140,14 @@ export default function Booking() {
         throw new Error('Booking failed: Invalid server response');
       }
 
-      if (!res.ok) throw new Error(data.error || 'Failed to book');
+      // Robust fallback checking for submission success
+      const isEnveloped = data && typeof data === 'object' && 'success' in data;
+      const success = isEnveloped ? data.success : res.ok;
+
+      if (!success) {
+        const errMsg = isEnveloped ? (data.error?.message || data.error) : data.error;
+        throw new Error(errMsg || 'Failed to book');
+      }
       
       setSuccess(true);
     } catch (err: any) {
@@ -258,20 +276,51 @@ export default function Booking() {
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
-                  <input required title="Full Name" type="text" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} />
+                  <input 
+                    required 
+                    name="fullName"
+                    title="Full Name" 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" 
+                    value={formData.fullName} 
+                    onChange={e => setFormData(prev => ({...prev, fullName: e.target.value}))} 
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
-                  <input required title="Phone" type="tel" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" value={formData.phoneNumber} onChange={e => setFormData({...formData, phoneNumber: e.target.value})} />
+                  <input 
+                    required 
+                    name="phoneNumber"
+                    title="Phone" 
+                    type="tel" 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" 
+                    value={formData.phoneNumber} 
+                    onChange={e => setFormData(prev => ({...prev, phoneNumber: e.target.value}))} 
+                  />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
-                <input required title="Email" type="email" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                <input 
+                  required 
+                  name="email"
+                  title="Email" 
+                  type="email" 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" 
+                  value={formData.email} 
+                  onChange={e => setFormData(prev => ({...prev, email: e.target.value}))} 
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes / Describe the issue (Optional)</label>
-                <textarea title="Notes" rows={4} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
+                <textarea 
+                  name="notes"
+                  title="Notes" 
+                  rows={4} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3" 
+                  value={formData.notes} 
+                  onChange={e => setFormData(prev => ({...prev, notes: e.target.value}))}
+                ></textarea>
               </div>
               <button 
                 type="submit" 

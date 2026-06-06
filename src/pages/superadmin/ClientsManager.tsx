@@ -10,12 +10,17 @@ export default function ClientsManager() {
   const [showDomains, setShowDomains] = useState(false);
   const [allDomains, setAllDomains] = useState<any[]>([]);
   const [showTokenModal, setShowTokenModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [selectedToken, setSelectedToken] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedClientName, setSelectedClientName] = useState('');
   const [editingClient, setEditingClient] = useState<any | null>(null);
   const [websiteBuilderPrompt, setWebsiteBuilderPrompt] = useState('');
   const [error, setError] = useState('');
+  const [newClient, setNewClient] = useState({
+    clientId: '', businessName: '', email: '', password: '', 
+    aiMessageLimit: 1000, storageLimitBytes: 1073741824
+  });
   const [updating, setUpdating] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean;
@@ -38,10 +43,11 @@ export default function ClientsManager() {
 
   const fetchDomains = async () => {
     try {
-      const res = await fetch('\/v1\/sys-admin/domains');
+      const res = await fetch('/v1/sys-admin/domains');
       const data = await res.json();
-      if (data?.success && Array.isArray(data.data)) setAllDomains(data.data);
-    } catch (err) { console.error('Domains fetch error'); }
+      const domainList = data?.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+      setAllDomains(domainList);
+    } catch (err) { console.error('Domains fetch error:', err); }
   };
 
   const generateBuilderPrompt = async (clientId: string) => {
@@ -68,9 +74,10 @@ export default function ClientsManager() {
       const res = await fetch(`/v1/sys-admin/clients?t=${Date.now()}`);
       if (!res.ok) throw new Error('fetch failed');
       const data = await res.json();
-      setClients(data?.success && Array.isArray(data.data) ? data.data : []);
+      const clientList = data?.success && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+      setClients(clientList);
     } catch (err) {
-      console.error(err);
+      console.error('Clients fetch error:', err);
       setClients([]);
     } finally {
       setLoading(false);
@@ -119,7 +126,8 @@ export default function ClientsManager() {
           email: editingClient.email,
           aiMessageLimit: editingClient.aiMessageLimit,
           storageLimitBytes: editingClient.storageLimitBytes,
-          status: editingClient.status
+          status: editingClient.status,
+          isActivated: editingClient.isActivated
         })
       });
       const data = await res.json();
@@ -192,6 +200,31 @@ export default function ClientsManager() {
     }
   };
 
+  const handleAddClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUpdating(true);
+    setError('');
+    try {
+      const res = await fetch('/v1/sys-admin/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newClient)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddModal(false);
+        setNewClient({ clientId: '', businessName: '', email: '', password: '', aiMessageLimit: 1000, storageLimitBytes: 1073741824 });
+        fetchClients();
+      } else {
+        setError(data.error || 'Creation failed');
+      }
+    } catch (err) {
+      setError('Error creating client');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   if (loading) return <div>Loading clients...</div>;
 
   return (
@@ -201,6 +234,13 @@ export default function ClientsManager() {
           <h2 className="text-2xl font-black text-gray-900 tracking-tight">System Clients</h2>
           <p className="text-sm font-medium text-gray-500 mt-1">Manage business accounts, allocate platform storage, & configure usage policies</p>
         </div>
+        <button 
+          onClick={() => setShowAddModal(true)}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
+          Provision Client
+        </button>
       </div>
 
       {allDomains.length > 0 && (
@@ -255,47 +295,58 @@ export default function ClientsManager() {
               </tr>
             </thead>
             <tbody>
-              {clients.map((client) => (
-                <tr key={client.clientId} className="border-b border-gray-100 hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 font-mono text-sm text-indigo-600">{client.clientId}</td>
+              {clients.map((client, idx) => (
+                <tr 
+                  key={client.clientId || client._id || `client-${idx}`} 
+                  onClick={() => setEditingClient({ ...client })}
+                  className="border-b border-gray-100 hover:bg-slate-50/80 cursor-pointer transition"
+                  title="Click anywhere on the client row to manage"
+                >
+                  <td className="px-6 py-4 font-mono text-sm text-indigo-600 font-bold">{client.clientId}</td>
                   <td className="px-6 py-4">
-                    <div className="font-medium">{client.businessName}</div>
+                    <div className="font-semibold text-gray-900">{client.businessName}</div>
                     <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{client.email}</div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 text-[10px] font-black rounded-full uppercase tracking-widest ${client.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <span 
+                      onClick={() => handleToggleStatus(client.clientId, client.status)}
+                      className={`px-2 py-1 text-[10px] font-black rounded-full uppercase tracking-widest cursor-pointer ${client.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}
+                      title="Click to toggle status"
+                    >
                       {(client.status || 'active')}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                     {client.isActivated ? (
                       <div className="flex items-center gap-1.5 text-emerald-600 font-black uppercase text-[10px] tracking-widest">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Activated
                       </div>
                     ) : (
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest">Pending</span>
-                        <div className="flex items-center gap-2 group">
-                          <code className="text-[10px] font-mono font-black text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                            {client.activationToken || 'NO-TOKEN'}
-                          </code>
-                          <button 
-                            onClick={() => {
-                              navigator.clipboard.writeText(client.activationToken);
-                              alert('Token copied!');
-                            }}
-                            className="bg-slate-100 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Copy className="w-2.5 h-2.5 text-slate-500" />
-                          </button>
-                        </div>
+                        <button 
+                          onClick={async () => {
+                            if (!confirm(`Are you sure you want to INSTANTLY activate ${client.businessName}? This bypasses license key verification.`)) return;
+                            try {
+                              const res = await fetch(`/v1/sys-admin/clients/${client.clientId}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ isActivated: true })
+                              });
+                              if (res.ok) fetchClients();
+                            } catch (err) { alert('Activation failed'); }
+                          }}
+                          className="block text-[9px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-tight"
+                        >
+                          Manual Activate
+                        </button>
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-600">{client.aiMessageLimit} <span className="text-[10px] uppercase text-slate-400">msgs</span></td>
-                  <td className="px-6 py-4 text-sm font-bold text-slate-600">{(client.storageLimitBytes / 1024 / 1024).toFixed(0)}<span className="text-[10px] uppercase text-slate-400">MB</span></td>
-                  <td className="px-6 py-4 text-right space-x-1">
+                  <td className="px-6 py-4 text-sm font-bold text-slate-600">{client.aiMessageLimit || 0} <span className="text-[10px] uppercase text-slate-400">msgs</span></td>
+                  <td className="px-6 py-4 text-sm font-bold text-slate-600">{(((client.storageLimitBytes || 0) / 1024) / 1024).toFixed(0)}<span className="text-[10px] uppercase text-slate-400">MB</span></td>
+                  <td className="px-6 py-4 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
                     <button 
                       onClick={() => regenerateActivationToken(client.clientId)}
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition"
@@ -349,7 +400,148 @@ export default function ClientsManager() {
         </div>
       </div>
 
-      {/* Manual client addition is replaced by URL onboarding / client invite flows */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowAddModal(false)}
+                className="absolute top-4 right-4 p-2 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <Plus className="w-6 h-6 text-indigo-600" />
+                Add New Client
+              </h3>
+              
+              {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-sm font-medium border border-red-100">{error}</div>}
+              
+              <form onSubmit={handleAddClient} className="space-y-6">
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Client ID (Unique)</label>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newClient.businessName.trim()) {
+                          setError('Please fill in Business Name first to generate an ID');
+                          return;
+                        }
+                        try {
+                          const res = await fetch(`/v1/sys-admin/clients/generate-id?name=${encodeURIComponent(newClient.businessName)}`);
+                          const d = await res.json();
+                          const isEnveloped = d && typeof d === 'object' && 'success' in d;
+                          const payload = isEnveloped ? d.data : d;
+                          if (payload && payload.clientId) {
+                            setNewClient(prev => ({ ...prev, clientId: payload.clientId }));
+                            setError('');
+                          } else {
+                            setError(d.error?.message || d.error || 'Failed to generate ID');
+                          }
+                        } catch (err) {
+                          setError('Connection error generating client ID');
+                        }
+                      }}
+                      className="text-[10px] text-indigo-600 font-bold hover:underline"
+                    >
+                      Auto-Generate Description Slug
+                    </button>
+                  </div>
+                  <input 
+                    required
+                    value={newClient.clientId}
+                    onChange={e => setNewClient({...newClient, clientId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
+                    placeholder="e.g. acme-corp"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Business Name</label>
+                  <input 
+                    required
+                    value={newClient.businessName}
+                    onChange={e => setNewClient({...newClient, businessName: e.target.value})}
+                    placeholder="Acme Corporation"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Email Address</label>
+                  <input 
+                    required
+                    type="email"
+                    value={newClient.email}
+                    onChange={e => setNewClient({...newClient, email: e.target.value})}
+                    placeholder="admin@acme.example.com"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Temporary Password</label>
+                  <input 
+                    required
+                    type="password"
+                    value={newClient.password}
+                    onChange={e => setNewClient({...newClient, password: e.target.value})}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">AI Message Limit</label>
+                    <input 
+                      required
+                      type="number"
+                      value={newClient.aiMessageLimit}
+                      onChange={e => setNewClient({...newClient, aiMessageLimit: parseInt(e.target.value)})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Storage (Bytes)</label>
+                    <input 
+                      required
+                      type="number"
+                      value={newClient.storageLimitBytes}
+                      onChange={e => setNewClient({...newClient, storageLimitBytes: parseInt(e.target.value)})}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 py-4 bg-slate-50 text-slate-500 font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-slate-100 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={updating}
+                    className="flex-1 py-4 bg-indigo-600 text-white font-black uppercase tracking-widest text-xs rounded-2xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2"
+                  >
+                    {updating ? 'Creating...' : 'Create Client'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* AI Prompt Modal */}
       <AnimatePresence>
@@ -558,14 +750,30 @@ export default function ClientsManager() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Direct Activation Status</label>
+                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-4 rounded-xl">
+                    <input 
+                      type="checkbox"
+                      id="isActivated"
+                      checked={editingClient.isActivated || false}
+                      onChange={e => setEditingClient({...editingClient, isActivated: e.target.checked})}
+                      className="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <label htmlFor="isActivated" className="text-sm font-bold text-slate-700 select-none cursor-pointer flex-1">
+                      {editingClient.isActivated ? 'Activated (Ready for instant dashboard login)' : 'Pending Activation (License verification pending)'}
+                    </label>
+                  </div>
+                </div>
+
+                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">AI Limit</label>
                     <input 
                       required
                       type="number"
-                      value={editingClient.aiMessageLimit}
-                      onChange={e => setEditingClient({...editingClient, aiMessageLimit: parseInt(e.target.value)})}
+                      value={editingClient.aiMessageLimit || 0}
+                      onChange={e => setEditingClient({...editingClient, aiMessageLimit: parseInt(e.target.value) || 0})}
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
@@ -574,8 +782,8 @@ export default function ClientsManager() {
                     <input 
                       required
                       type="number"
-                      value={Math.round(editingClient.storageLimitBytes / (1024 * 1024))}
-                      onChange={e => setEditingClient({...editingClient, storageLimitBytes: parseInt(e.target.value) * 1024 * 1024})}
+                      value={Math.round((editingClient.storageLimitBytes || 0) / (1024 * 1024))}
+                      onChange={e => setEditingClient({...editingClient, storageLimitBytes: (parseInt(e.target.value) || 0) * 1024 * 1024})}
                       className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>

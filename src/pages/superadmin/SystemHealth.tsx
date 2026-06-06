@@ -650,7 +650,7 @@ export default function SystemHealth() {
                     <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
                       <motion.div 
                         className="h-full rounded-full bg-blue-500" 
-                        animate={{ width: selectedContainer.status === 'restarting' ? '0%' : `${(selectedContainer.memoryUsed / selectedContainer.memoryMax) * 100}%` }}
+                        animate={{ width: selectedContainer.status === 'restarting' ? '0%' : `${((selectedContainer.memoryUsed || 0) / (selectedContainer.memoryMax || 1)) * 100}%` }}
                       />
                     </div>
                     <p className="text-[10px] font-medium text-slate-400">Garbage collection triggers automatically at 85% threshold capacity.</p>

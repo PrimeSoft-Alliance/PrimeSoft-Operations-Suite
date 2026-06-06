@@ -8,7 +8,7 @@ export default function EmailTemplatesManager() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    fetch(`/v1/dashboard/settings?t=${Date.now()}`)
+    fetch(`/v1/settings?t=${Date.now()}`)
       .then(res => res.json())
       .then(data => {
         const settingsData = data?.success && data.data ? data.data : data;
@@ -23,7 +23,7 @@ export default function EmailTemplatesManager() {
     setSaveSuccess(false);
     
     try {
-      const res = await fetch('/v1/dashboard/settings', {
+      const res = await fetch('/v1/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
