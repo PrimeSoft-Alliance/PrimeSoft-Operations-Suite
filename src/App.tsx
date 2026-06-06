@@ -45,6 +45,7 @@ import PlatformSettings from './pages/superadmin/PlatformSettings';
 import MissionControl from './pages/superadmin/MissionControl';
 import SuperAdminInquiries from './pages/superadmin/Inquiries';
 import SuperAdminBookings from './pages/superadmin/Bookings';
+import AITrainingManager from './pages/superadmin/AITrainingManager';
 
 export default function App() {
   return (
@@ -105,6 +106,7 @@ export default function App() {
           <Route path="health" element={<SystemHealth />} />
           <Route path="notifications" element={<NotificationsManager />} />
           <Route path="settings" element={<PlatformSettings />} />
+          <Route path="ai-training" element={<AITrainingManager />} />
         </Route>
         
         {/* Catch-all for SPA - must be last */}

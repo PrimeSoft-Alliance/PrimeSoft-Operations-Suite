@@ -3,7 +3,7 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, Quota } from '../models';
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, Quota, AITrainingKnowledge } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { resolveClientId as resolveClientUtil } from '../utils/resolveClient';
@@ -861,6 +861,119 @@ router.post('/ai/chat/identify', async (req, res) => {
     envRes.sendSuccess({ success: true, leadId: lead._id });
   } catch (err: any) {
     envRes.sendError(500, 'API_ERROR', 'Identification failed: ' + err.message);
+  }
+});
+
+// AI TRAINING ENDPOINTS - Exclusively for superadmin tenant 'platform-prime'
+
+// Get all AI training knowledge
+router.get('/ai/training/knowledge', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const superadminId = 'platform-prime';
+    const knowledge = await AITrainingKnowledge.find({ 
+      clientId: superadminId, 
+      status: 'active' 
+    }).sort({ category: 1, createdAt: -1 }).lean();
+    envRes.sendSuccess(knowledge);
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
+  }
+});
+
+// Get AI training knowledge by category
+router.get('/ai/training/knowledge/:category', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const superadminId = 'platform-prime';
+    const { category } = req.params;
+    const knowledge = await AITrainingKnowledge.find({ 
+      clientId: superadminId, 
+      category,
+      status: 'active' 
+    }).sort({ createdAt: -1 }).lean();
+    envRes.sendSuccess(knowledge);
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
+  }
+});
+
+// Create new AI training knowledge entry - requires superadmin auth
+router.post('/ai/training/knowledge', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { title, content, category, tags } = req.body;
+    
+    if (!title || !content || !category) {
+      return envRes.sendError(400, 'VALIDATION_ERROR', 'title, content, and category are required');
+    }
+
+    const superadminId = 'platform-prime';
+    const knowledge = await AITrainingKnowledge.create({
+      clientId: superadminId,
+      title,
+      content,
+      category,
+      tags: tags || [],
+      status: 'active'
+    });
+
+    envRes.sendSuccess(knowledge, 'Training knowledge created');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to create knowledge: ' + err.message);
+  }
+});
+
+// Update AI training knowledge - requires superadmin auth
+router.put('/ai/training/knowledge/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { id } = req.params;
+    const { title, content, category, tags, status } = req.body;
+    const superadminId = 'platform-prime';
+
+    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
+      { _id: id, clientId: superadminId },
+      { 
+        ...(title && { title }),
+        ...(content && { content }),
+        ...(category && { category }),
+        ...(tags && { tags }),
+        ...(status && { status })
+      },
+      { new: true }
+    );
+
+    if (!knowledge) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
+    }
+
+    envRes.sendSuccess(knowledge, 'Knowledge updated');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to update knowledge: ' + err.message);
+  }
+});
+
+// Delete AI training knowledge - requires superadmin auth
+router.delete('/ai/training/knowledge/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { id } = req.params;
+    const superadminId = 'platform-prime';
+
+    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
+      { _id: id, clientId: superadminId },
+      { status: 'archived' },
+      { new: true }
+    );
+
+    if (!knowledge) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
+    }
+
+    envRes.sendSuccess({ success: true }, 'Knowledge archived');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to archive knowledge: ' + err.message);
   }
 });
 
