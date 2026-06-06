@@ -577,4 +577,19 @@ const tierDefinitionSchema = new mongoose.Schema({
 
 export const TierDefinition = mongoose.models.TierDefinition || mongoose.model<any>('TierDefinition', tierDefinitionSchema);
 
+<<<<<<< HEAD
+// AI Training Knowledge Base - exclusively for superadmin tenant 'platform-prime'
+const aiTrainingKnowledgeSchema = new mongoose.Schema({
+  clientId: { type: String, required: true, default: 'platform-prime' }, // Always superadmin
+  category: { type: String, required: true }, // e.g., 'business', 'services', 'process', 'faq'
+  title: { type: String, required: true },
+  content: { type: String, required: true }, // Knowledge content
+  tags: [{ type: String }],
+  status: { type: String, enum: ['active', 'archived'], default: 'active' },
+  source: { type: String, default: 'manual' } // 'manual' or 'import'
+}, { timestamps: true, indexes: [{ clientId: 1, status: 1 }, { clientId: 1, category: 1 }] });
+
+export const AITrainingKnowledge = mongoose.models.AITrainingKnowledge || mongoose.model<any>('AITrainingKnowledge', aiTrainingKnowledgeSchema);
+=======
+>>>>>>> origin/main
 

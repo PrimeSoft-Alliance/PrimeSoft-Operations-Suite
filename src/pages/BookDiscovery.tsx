@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { useClientId } from '../lib/useClientId';
 import { ArrowRight, Calendar, Clock, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function BookDiscovery() {
-  const { clientId } = useClientId();
+  // Landing page booking is exclusively for superadmin tenant
+  const superadminClientId = 'platform-prime';
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -33,7 +33,7 @@ export default function BookDiscovery() {
           serviceSelection: 'Discovery Call',
           preferredDate: format(new Date(), 'yyyy-MM-dd'), // Default to today for lead capture
           preferredStartTime: format(new Date(), 'HH:mm'),
-          clientId
+          clientId: superadminClientId
         })
       });
 

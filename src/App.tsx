@@ -43,7 +43,11 @@ import PlatformSettings from './pages/superadmin/PlatformSettings';
 import MissionControl from './pages/superadmin/MissionControl';
 import SuperAdminInquiries from './pages/superadmin/Inquiries';
 import SuperAdminBookings from './pages/superadmin/Bookings';
+<<<<<<< HEAD
+import AITrainingManager from './pages/superadmin/AITrainingManager';
+=======
 import QuotaDashboard from './pages/superadmin/QuotaDashboard';
+>>>>>>> origin/main
 
 export default function App() {
   return (
@@ -96,7 +100,11 @@ export default function App() {
           <Route path="health" element={<SystemHealth />} />
           <Route path="notifications" element={<NotificationsManager />} />
           <Route path="settings" element={<PlatformSettings />} />
+<<<<<<< HEAD
+          <Route path="ai-training" element={<AITrainingManager />} />
+=======
           <Route path="quotas" element={<QuotaDashboard />} />
+>>>>>>> origin/main
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -3,7 +3,7 @@ import { Groq } from 'groq-sdk';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { EnvelopeResponse } from '../middlewares/envelope';
-import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings } from '../models';
+import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings, AITrainingKnowledge } from '../models';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
@@ -194,6 +194,24 @@ router.post('/', async (req, res) => {
       ? `The user's name is ${userFirstName}. You MUST refer to them by their first name frequently (e.g. "Sure, ${userFirstName}...", "Great question, ${userFirstName}") to maintain a personalized technical session.` 
       : 'The user has not provided a name yet.';
 
+    // Load AI training knowledge for superadmin landing page
+    let trainingKnowledgeSection = '';
+    if (clientId === 'platform-prime') {
+      const trainingData = await AITrainingKnowledge.find({ clientId, status: 'active' }).lean();
+      if (trainingData && trainingData.length > 0) {
+        const groupedByCategory = trainingData.reduce((acc: any, item: any) => {
+          if (!acc[item.category]) acc[item.category] = [];
+          acc[item.category].push(`- ${item.title}: ${item.content}`);
+          return acc;
+        }, {});
+        
+        trainingKnowledgeSection = '\n\n## SUPERADMIN AI TRAINING KNOWLEDGE\n';
+        Object.entries(groupedByCategory).forEach(([category, items]: [string, any]) => {
+          trainingKnowledgeSection += `\n### ${category}\n${(items as string[]).join('\n')}`;
+        });
+      }
+    }
+
     const systemPrompt = `
       # SYSTEM INSTRUCTIONS — ${clientRecord.businessName} AI ASSISTANT
 
@@ -244,6 +262,7 @@ router.post('/', async (req, res) => {
       - Business Bio: ${settings.branding?.aboutText || settings.aboutText || "Professional business dedicated to excellence."}
       - Services Offered: ${settings.services.map((s: any) => `${s.name} ($${s.price}): ${s.description}`).join(' | ')}
       - FAQs: ${settings.faqs.map((f: any) => `Q: ${f.question} -> A: ${f.answer}`).join('\n')}
+      ${trainingKnowledgeSection}
       
       Page Context:
       - Page: ${pageContext?.page || 'Home'}

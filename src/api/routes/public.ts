@@ -3,7 +3,11 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+<<<<<<< HEAD
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, Quota, AITrainingKnowledge } from '../models';
+=======
 import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, PlatformNotification } from '../models';
+>>>>>>> origin/main
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { startOfDay, addMinutes, format } from 'date-fns';
@@ -457,7 +461,7 @@ router.post('/onboarding/:token', async (req, res) => {
     const { token } = req.params;
     const { 
       businessName, businessType, subdomain, email, password, 
-      contactPhone, contactEmail, workingHours, customFields = {} 
+      contactPhone, contactEmail, workingHours, customFields = {}, tier = 'starter'
     } = req.body;
 
     const link = await Invite.findOne({ token, status: 'pending' });
@@ -477,7 +481,11 @@ router.post('/onboarding/:token', async (req, res) => {
         email,
         password: hash,
         customFields,
+<<<<<<< HEAD
+        tier: tier || 'starter',
+=======
         isActivated: true,
+>>>>>>> origin/main
         apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
       });
     } else {
@@ -489,9 +497,14 @@ router.post('/onboarding/:token', async (req, res) => {
       client.password = hash;
       client.isActivated = true;
       client.customFields = { ...client.customFields, ...customFields };
+<<<<<<< HEAD
+      if (tier) client.tier = tier;
+      if (email) client.email = email;
+=======
       if (email) {
         client.email = email;
       }
+>>>>>>> origin/main
       await client.save();
     }
 
@@ -524,6 +537,31 @@ router.post('/onboarding/:token', async (req, res) => {
           });
         }
       }
+    }
+
+    // Create quota record based on tier
+    const tierLimits: Record<string, any> = {
+      starter: { aiTokensLimit: 10000, chatMessagesLimit: 1000, storageLimit: 1073741824 },
+      professional: { aiTokensLimit: 100000, chatMessagesLimit: 10000, storageLimit: 10737418240 },
+      enterprise: { aiTokensLimit: null, chatMessagesLimit: null, storageLimit: null }
+    };
+    
+    const tierConfig = tierLimits[tier] || tierLimits.starter;
+    const existingQuota = await Quota.findOne({ clientId: link.clientId });
+    if (!existingQuota) {
+      await Quota.create({
+        clientId: link.clientId,
+        tier: tier || 'starter',
+        aiTokensLimit: tierConfig.aiTokensLimit || 999999999,
+        chatMessagesLimit: tierConfig.chatMessagesLimit || 999999999,
+        storageLimit: tierConfig.storageLimit || 1099511627776,
+        enabledFeatures: {
+          webChat: true,
+          telegram: tier === 'professional' || tier === 'enterprise',
+          whatsapp: tier === 'enterprise',
+          aiAssistant: true
+        }
+      });
     }
 
     const currentMonth = format(new Date(), 'yyyy-MM');
@@ -981,6 +1019,118 @@ router.post('/ai/chat/identify', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
+// AI TRAINING ENDPOINTS - Exclusively for superadmin tenant 'platform-prime'
+
+// Get all AI training knowledge
+router.get('/ai/training/knowledge', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const superadminId = 'platform-prime';
+    const knowledge = await AITrainingKnowledge.find({ 
+      clientId: superadminId, 
+      status: 'active' 
+    }).sort({ category: 1, createdAt: -1 }).lean();
+    envRes.sendSuccess(knowledge);
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
+  }
+});
+
+// Get AI training knowledge by category
+router.get('/ai/training/knowledge/:category', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const superadminId = 'platform-prime';
+    const { category } = req.params;
+    const knowledge = await AITrainingKnowledge.find({ 
+      clientId: superadminId, 
+      category,
+      status: 'active' 
+    }).sort({ createdAt: -1 }).lean();
+    envRes.sendSuccess(knowledge);
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
+  }
+});
+
+// Create new AI training knowledge entry - requires superadmin auth
+router.post('/ai/training/knowledge', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { title, content, category, tags } = req.body;
+    
+    if (!title || !content || !category) {
+      return envRes.sendError(400, 'VALIDATION_ERROR', 'title, content, and category are required');
+    }
+
+    const superadminId = 'platform-prime';
+    const knowledge = await AITrainingKnowledge.create({
+      clientId: superadminId,
+      title,
+      content,
+      category,
+      tags: tags || [],
+      status: 'active'
+    });
+
+    envRes.sendSuccess(knowledge, 'Training knowledge created');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to create knowledge: ' + err.message);
+  }
+});
+
+// Update AI training knowledge - requires superadmin auth
+router.put('/ai/training/knowledge/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { id } = req.params;
+    const { title, content, category, tags, status } = req.body;
+    const superadminId = 'platform-prime';
+
+    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
+      { _id: id, clientId: superadminId },
+      { 
+        ...(title && { title }),
+        ...(content && { content }),
+        ...(category && { category }),
+        ...(tags && { tags }),
+        ...(status && { status })
+      },
+      { new: true }
+    );
+
+    if (!knowledge) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
+    }
+
+    envRes.sendSuccess(knowledge, 'Knowledge updated');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to update knowledge: ' + err.message);
+  }
+});
+
+// Delete AI training knowledge - requires superadmin auth
+router.delete('/ai/training/knowledge/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { id } = req.params;
+    const superadminId = 'platform-prime';
+
+    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
+      { _id: id, clientId: superadminId },
+      { status: 'archived' },
+      { new: true }
+    );
+
+    if (!knowledge) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
+    }
+
+    envRes.sendSuccess({ success: true }, 'Knowledge archived');
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to archive knowledge: ' + err.message);
+=======
 // Check public quota
 router.get('/quota-check', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -1001,6 +1151,7 @@ router.get('/quota-check', async (req, res) => {
     });
   } catch (err: any) {
     envRes.sendError(500, 'API_ERROR', 'Failed to check quota: ' + err.message);
+>>>>>>> origin/main
   }
 });
 

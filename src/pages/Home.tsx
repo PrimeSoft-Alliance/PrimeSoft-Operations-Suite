@@ -4,22 +4,22 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 
-import { useClientId } from '../lib/useClientId';
-
 export default function Home() {
   const [settings, setSettings] = useState<any>(null);
-  const { clientId } = useClientId();
+  
+  // Landing page is exclusively for superadmin tenant
+  const superadminClientId = 'platform-prime';
 
   useEffect(() => {
-    // For the main company site, we prioritize the Platform Admin profile.
-    fetch(`/v1/public/settings?clientId=${clientId}`)
+    // Fetch superadmin settings for landing page
+    fetch(`/v1/public/settings?clientId=${superadminClientId}`)
       .then(res => res.json())
       .then(data => {
         if (data?.success) setSettings(data.data);
         else setSettings(data);
       })
       .catch(console.error);
-  }, [clientId]);
+  }, []);
 
   const businessName = settings?.businessName || '';
   const heroTitle = settings?.heroTitle || 'Architecting Tomorrow';

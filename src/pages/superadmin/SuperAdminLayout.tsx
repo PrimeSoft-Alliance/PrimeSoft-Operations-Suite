@@ -52,6 +52,7 @@ export default function SuperAdminLayout() {
     { icon: LayoutDashboard, label: 'Overview', path: '/superadmin' },
     { icon: Users, label: 'Clients', path: '/superadmin/clients' },
     { icon: UserCheck, label: 'Onboarding', path: '/superadmin/onboarding' },
+    { icon: Sparkles, label: 'AI Training Hub', path: '/superadmin/ai-training' },
     { icon: Sparkles, label: 'Prompt Engine', path: '/superadmin/prompts' },
     { icon: Mail, label: 'Inquiries', path: '/superadmin/inquiries' },
     { icon: Calendar, label: 'Bookings', path: '/superadmin/bookings' },

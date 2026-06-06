@@ -5,7 +5,8 @@ import { useClientId } from '../lib/useClientId';
 import { cn } from '../lib/utils';
 
 export default function Contact() {
-  const { clientId } = useClientId();
+  // Landing page contact is exclusively for superadmin tenant
+  const superadminClientId = 'platform-prime';
   const [settings, setSettings] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -25,7 +26,7 @@ export default function Contact() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/v1/public/settings?clientId=${clientId}`)
+    fetch(`/v1/public/settings?clientId=${superadminClientId}`)
       .then(async res => {
         if (!res.ok) throw new Error('Failed to load profile');
         return res.json();
@@ -41,7 +42,7 @@ export default function Contact() {
         setError('Failed to initialize session. Please check your connection.');
       })
       .finally(() => setLoading(false));
-  }, [clientId]);
+  }, []);
 
   const businessName = settings?.businessName || 'Business Hub';
   const businessEmail = settings?.contactEmail || settings?.email || 'admin@example.com';
@@ -104,11 +105,16 @@ export default function Contact() {
     try {
       const res = await fetch('/v1/contact', {
         method: 'POST',
+<<<<<<< HEAD
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, clientId: superadminClientId })
+=======
         headers: { 
           'Content-Type': 'application/json',
           'x-client-id': clientId || '' 
         },
         body: JSON.stringify({ ...formData, clientId })
+>>>>>>> origin/main
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
