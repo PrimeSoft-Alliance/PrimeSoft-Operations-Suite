@@ -42,10 +42,10 @@ export default function AdminHub() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [selectedClientModal, setSelectedClientModal] = useModal();
-  const [clientsModal, setClientsModal] = useModal();
-  const [bookingsModal, setBookingsModal] = useModal();
-  const [contactsModal, setContactsModal] = useModal();
+  const setSelectedClientModal = useModal();
+  const setClientsModal = useModal();
+  const setBookingsModal = useModal();
+  const setContactsModal = useModal();
 
   useEffect(() => {
     fetchStats();

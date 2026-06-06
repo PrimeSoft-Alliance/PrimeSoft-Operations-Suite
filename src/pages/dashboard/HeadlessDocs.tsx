@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Terminal, Copy, Check, Globe, MessageSquare, Calendar, Database, Key, Zap, Shield, Code, Palette, Share2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export default function HeadlessDocs() {
   const [apiKey, setApiKey] = useState('loading...');
