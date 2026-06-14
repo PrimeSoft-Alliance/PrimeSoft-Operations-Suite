@@ -268,16 +268,6 @@ const clientSchema = new mongoose.Schema({
 
 export const Client = mongoose.models.Client || mongoose.model<any>('Client', clientSchema);
 
-const domainSchema = new mongoose.Schema({
-  clientId: { type: String, required: true },
-  host: { type: String, required: true, unique: true },
-  type: { type: String, enum: ['subdomain', 'custom-domain'], required: true },
-  status: { type: String, enum: ['active', 'suspended', 'pending'], default: 'active' },
-  verified: { type: Boolean, default: true }
-}, { timestamps: true });
-
-export const Domain = mongoose.models.Domain || mongoose.model<any>('Domain', domainSchema);
-
 const usageStatsSchema = new mongoose.Schema({
   clientId: { type: String, required: true },
   month: { type: String, required: true }, // YYYY-MM
@@ -286,30 +276,6 @@ const usageStatsSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const UsageStats = mongoose.models.UsageStats || mongoose.model<any>('UsageStats', usageStatsSchema);
-
-const inviteSchema = new mongoose.Schema({
-  inviteId: { type: String, required: true, unique: true },
-  clientId: { type: String, required: true },
-  token: { type: String, required: true, unique: true },
-  expiresAt: { type: Date, required: true },
-  status: { type: String, enum: ['pending', 'used', 'revoked', 'expired'], default: 'pending' },
-  customFields: [{ name: String, type: { type: String } }],
-  onboardedEmail: { type: String },
-}, { timestamps: true });
-
-export const Invite = mongoose.models.Invite || mongoose.model<any>('Invite', inviteSchema);
-
-const onboardingRequestSchema = new mongoose.Schema({
-  requestId: { type: String, required: true, unique: true },
-  businessName: { type: String, required: true },
-  email: { type: String, required: true },
-  phone: { type: String },
-  businessType: { type: String },
-  details: { type: Map, of: String },
-  status: { type: String, enum: ['pending', 'reviewing', 'approved', 'rejected', 'info_needed'], default: 'pending' }
-}, { timestamps: true });
-
-export const OnboardingRequest = mongoose.models.OnboardingRequest || mongoose.model<any>('OnboardingRequest', onboardingRequestSchema);
 
 const auditLogSchema = new mongoose.Schema({
   actor: { type: String, required: true }, // admin email or ID
@@ -321,17 +287,6 @@ const auditLogSchema = new mongoose.Schema({
 
 export const AuditLog = mongoose.models.AuditLog || mongoose.model<any>('AuditLog', auditLogSchema);
 
-const platformNotificationSchema = new mongoose.Schema({
-  type: { type: String, enum: ['info', 'warning', 'error', 'success'], default: 'info' },
-  title: { type: String, required: true },
-  message: { type: String, required: true },
-  read: { type: Boolean, default: false },
-  link: { type: String },
-  clientId: { type: String }
-}, { timestamps: true });
-
-export const PlatformNotification = mongoose.models.PlatformNotification || mongoose.model<any>('PlatformNotification', platformNotificationSchema);
-
 const promptHistorySchema = new mongoose.Schema({
   clientId: { type: String, required: true },
   promptType: { type: String, required: true },
@@ -341,82 +296,13 @@ const promptHistorySchema = new mongoose.Schema({
 
 export const PromptHistory = mongoose.models.PromptHistory || mongoose.model<any>('PromptHistory', promptHistorySchema);
 
-const platformSettingsSchema = new mongoose.Schema({
-  platformName: { type: String, default: 'System Platform' },
-  supportEmail: { type: String, default: 'admin@platform.com' },
-  maintenanceMode: { type: Boolean, default: false },
-  defaultAiLimit: { type: Number, default: 1000 },
-  defaultStorageMB: { type: Number, default: 50 },
-  allowAnonymousContact: { type: Boolean, default: true },
-  enforceMfa: { type: Boolean, default: false },
-  restrictSubdomains: { type: Boolean, default: true },
-  detailedAuditLogging: { type: Boolean, default: true },
-  homepageClientId: { type: String, default: 'platform-prime' },
-  masterDns: { type: String, default: 'your-platform.com' },
-  smtpVerified: { type: Boolean, default: true }
-}, { timestamps: true });
-
-export const PlatformSettings = mongoose.models.PlatformSettings || mongoose.model<any>('PlatformSettings', platformSettingsSchema);
-
 // Additional Entities for Unified Architecture
-
-const formSchema = new mongoose.Schema({
-  clientId: { type: String, required: true },
-  name: { type: String, required: true },
-  description: { type: String },
-  fields: [{
-    id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
-    name: { type: String, required: true },
-    label: { type: String, required: true },
-    type: { type: String, enum: ['text', 'email', 'phone', 'number', 'date', 'select', 'checkbox', 'radio', 'textarea', 'heading', 'content-text', 'page-break', 'file', 'rating', 'signature'], required: true },
-    required: { type: Boolean, default: false },
-    options: [{ type: String }],
-    placeholder: { type: String },
-    helpText: { type: String },
-    logic: {
-       action: { type: String, enum: ['show', 'hide'] },
-       condition: { type: String, enum: ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'any'] },
-       dependentFieldId: { type: String },
-       value: { type: String }
-    },
-    validation: {
-        min: Number,
-        max: Number,
-        pattern: String,
-        customErrorMessage: String
-    },
-    contentData: { type: String }
-  }],
-  tags: [{ type: String }],
-  expiresAt: { type: Date },
-  settings: {
-     submitText: { type: String, default: 'Submit' },
-     successMessage: { type: String, default: 'Thank you for your submission.' },
-     redirectUrl: { type: String },
-     notifyEmails: [{ type: String }],
-     webhookUrl: { type: String }
-  },
-  theme: {
-    primaryColor: { type: String, default: '#4f46e5' },
-    backgroundColor: { type: String, default: '#f8fafc' },
-    fontFamily: { type: String, default: 'Inter' },
-    buttonStyle: { type: String, default: 'rounded-xl' },
-    layout: { type: String, enum: ['classic', 'modern', 'minimal'], default: 'modern' }
-  },
-  status: { type: String, enum: ['active', 'inactive', 'draft'], default: 'active' },
-  stats: {
-     views: { type: Number, default: 0 },
-     submissions: { type: Number, default: 0 }
-  }
-}, { timestamps: true });
-
-export const Form = mongoose.models.Form || mongoose.model<any>('Form', formSchema);
 
 const leadSchema = new mongoose.Schema({
   clientId: { type: String, required: true },
   formId: { type: String },
   formName: { type: String },
-  source: { type: String, enum: ['form', 'booking', 'contact', 'manual', 'api'], default: 'form' },
+  source: { type: String, enum: ['form', 'booking', 'contact', 'manual', 'api', 'chatbot'], default: 'form' },
   contactFirst: { type: String },
   contactLast: { type: String },
   contactEmail: { type: String },
@@ -435,7 +321,7 @@ const leadSchema = new mongoose.Schema({
     ip: String
   },
   activities: [{
-     type: { type: String, enum: ['note', 'email', 'call', 'meeting', 'system', 'status_change'] },
+     type: { type: String, enum: ['note', 'email', 'whatsapp', 'call', 'meeting', 'system', 'status_change'] },
      description: { type: String },
      date: { type: Date, default: Date.now },
      metadata: { type: mongoose.Schema.Types.Mixed }
@@ -596,6 +482,18 @@ const visitSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 export const Visit = mongoose.models.Visit || mongoose.model<any>('Visit', visitSchema);
+ 
+const notificationSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  type: { type: String, enum: ['system', 'lead', 'booking', 'alert'], default: 'system' },
+  isRead: { type: Boolean, default: false },
+  link: { type: String },
+  relatedId: { type: String }
+}, { timestamps: true });
+
+export const Notification = mongoose.models.Notification || mongoose.model<any>('Notification', notificationSchema);
 
 
 

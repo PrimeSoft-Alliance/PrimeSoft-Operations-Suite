@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Client, PlatformSettings } from './models';
+import { Client } from './models';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
@@ -40,21 +40,18 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     (req as any).user = decoded;
     (req as any).clientId = decoded.clientId;
 
-    // Global maintenance check
-    const platformSettings = null;
-    if (platformSettings?.maintenanceMode) {
-      const envRes = res as any;
-      if (typeof envRes.sendError === 'function') {
-        return envRes.sendError(503, 'MAINTENANCE', 'System is under maintenance');
-      }
-      res.status(503).json({ error: 'System is under maintenance' });
-      return;
-    }
-
     // Check suspension status for clients
     if (decoded.role === 'client' || decoded.clientId) {
       const client = await Client.findOne({ clientId: decoded.clientId });
-      if (client?.status === 'suspended') {
+      if (!client) {
+        const envRes = res as any;
+        if (typeof envRes.sendError === 'function') {
+          return envRes.sendError(401, 'INVALID_SESSION', 'Session client not found');
+        }
+        res.status(401).json({ error: 'Session client not found' });
+        return;
+      }
+      if (client.status === 'suspended') {
         const envRes = res as any;
         if (typeof envRes.sendError === 'function') {
           return envRes.sendError(401, 'SUSPENDED', 'Account suspended');

@@ -2,7 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { EnvelopeResponse } from '../middlewares/envelope';
-import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest } from '../models';
+import { Settings, UsageStats, AILog, Booking, Client } from '../models';
 import { getGroqClient, DEFAULT_MODEL } from '../utils/ai';
 
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
@@ -222,30 +222,12 @@ router.post('/', async (req, res) => {
       {
         type: "function",
         function: {
-          name: "submit_onboarding_request",
-          description: "Onboard a new business. Only use if serving the main platform client.",
-          parameters: {
-            type: "object",
-            properties: {
-              businessName: { type: "string" },
-              email: { type: "string" },
-              phone: { type: "string" },
-              businessType: { type: "string" },
-              details: { type: "object" }
-            },
-            required: ["businessName", "email"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
           name: "check_status",
-          description: "Check the status of a previous booking or onboarding application.",
+          description: "Check the status of a previous booking.",
           parameters: {
             type: "object",
             properties: {
-              type: { type: "string", enum: ["onboarding", "booking"] },
+              type: { type: "string", enum: ["booking"] },
               email: { type: "string" }
             },
             required: ["type", "email"]
@@ -454,52 +436,19 @@ router.post('/', async (req, res) => {
           }).catch(e => console.error('AI Lead sync error:', e));
 
           return JSON.stringify({ success: true, message: "Lead captured successfully." });
-        } else if (name === 'submit_onboarding_request') {
-          const { businessName, email, phone, businessType, details } = args;
-          const requestId = `req_${Math.random().toString(36).substring(7)}`;
-          const request = await OnboardingRequest.create({
-            requestId,
-            businessName,
-            email,
-            phone,
-            businessType,
-            details,
-            status: 'pending'
-          });
-
-          sendEmail(email, 'Application Received', 
-            `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
-            undefined, clientId
-          );
-
-          return JSON.stringify({ success: true, requestId, status: 'pending', nextStep: 'Wait for review' });
         } else if (name === 'check_status') {
           const { type, email } = args;
-          if (type === 'onboarding') {
-            const reqs = await OnboardingRequest.find({ email }).sort({ createdAt: -1 });
-            if (reqs.length === 0) {
-              return JSON.stringify({ error: "No onboarding requests found for this email." });
-            } else {
-              const latest = reqs[0];
-              return JSON.stringify({ 
-                status: latest.status, 
-                businessName: latest.businessName,
-                submittedAt: latest.createdAt
-              });
-            }
+          const bookings = await Booking.find({ email, clientId }).sort({ createdAt: -1 });
+          if (bookings.length === 0) {
+            return JSON.stringify({ error: "No bookings found for this email." });
           } else {
-            const bookings = await Booking.find({ email, clientId }).sort({ createdAt: -1 });
-            if (bookings.length === 0) {
-              return JSON.stringify({ error: "No bookings found for this email." });
-            } else {
-              const latest = bookings[0];
-              return JSON.stringify({ 
-                status: latest.status, 
-                service: latest.serviceSelection,
-                date: latest.preferredDate,
-                time: latest.preferredStartTime
-              });
-            }
+            const latest = bookings[0];
+            return JSON.stringify({ 
+              status: latest.status, 
+              service: latest.serviceSelection,
+              date: latest.preferredDate,
+              time: latest.preferredStartTime
+            });
           }
         } else if (name === 'query_external_db') {
           const { query } = args;

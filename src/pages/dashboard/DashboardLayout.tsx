@@ -1,23 +1,59 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Home, User, Mail, Clock, Brain, BarChart3 } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Home, User, Mail, Clock, Brain, BarChart3, Bell } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import ProfileModal from '../../components/ProfileModal';
+import { useClientId } from '../../lib/useClientId';
+import { getSocket, disconnectSocket } from '../../lib/socket';
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { clientId: cidHook } = useClientId();
   const [loading, setLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+     if (cidHook) {
+        const socket = getSocket(cidHook);
+        socket.on('notification', () => {
+           setNotificationCount(prev => prev + 1);
+        });
+        return () => {
+           // We don't necessarily want to disconnect here if the component re-renders, 
+           // but we should cleanup listeners
+           socket.off('notification');
+        }
+     }
+  }, [cidHook]);
+
+  useEffect(() => {
+    if (cidHook) {
+      fetch('/v1/notifications', { headers: { 'x-client-id': cidHook } })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setNotificationCount(data.data.filter((n: any) => !n.isRead).length);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [cidHook, location.pathname]);
 
   useEffect(() => {
     fetch('/v1/auth/check')
-      .then(res => {
+      .then(async res => {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return res.json();
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error('API returned dynamic content instead of JSON');
+        }
       })
       .then(data => {
         if (!data.authenticated) navigate('/client/login');
@@ -158,6 +194,14 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
+             <Link to="/dashboard/notifications" className="relative p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all group">
+               <Bell className="w-5 h-6 group-hover:scale-110 transition-transform" />
+               {notificationCount > 0 && (
+                 <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-rose-200">
+                   {notificationCount}
+                 </span>
+               )}
+             </Link>
              <div 
                onClick={() => setIsProfileOpen(true)}
                className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-indigo-50 hover:border-indigo-100 transition-all group"

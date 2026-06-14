@@ -1,23 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Search, MessageSquare, CheckCircle2, Clock, X, Eye, Loader2, User, Phone, MapPin, Globe } from 'lucide-react';
+import { Mail, Search, MessageSquare, CheckCircle2, Clock, X, Eye, Loader2, User, Phone, MapPin, Globe, Users, Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { format } from 'date-fns';
+import { useClientId } from '../../lib/useClientId';
+import { useNavigate } from 'react-router-dom';
 
 export default function ClientInquiries() {
+  const { clientId: cidHook } = useClientId();
+  const navigate = useNavigate();
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInquiry, setSelectedInquiry] = useState<any>(null);
 
   useEffect(() => {
-    fetchInquiries();
-  }, []);
+    if (cidHook) {
+      fetchInquiries();
+    }
+  }, [cidHook]);
 
   const fetchInquiries = async () => {
     try {
-      const res = await fetch('/v1/contacts');
+      const res = await fetch('/v1/contacts', {
+        headers: { 'x-client-id': cidHook || '' }
+      });
       const data = await res.json();
-      if (data.success) setInquiries(data.data);
+      if (data.success) {
+        setInquiries(data.data);
+      } else if (Array.isArray(data)) {
+        setInquiries(data);
+      }
     } catch (err) {
       console.error('Failed to fetch inquiries:', err);
     } finally {
@@ -29,7 +41,10 @@ export default function ClientInquiries() {
     try {
       await fetch(`/v1/contacts/${id}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-client-id': cidHook || ''
+        },
         body: JSON.stringify({ status: 'resolved' })
       });
       fetchInquiries();
@@ -40,10 +55,32 @@ export default function ClientInquiries() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">Customer Inquiries</h1>
         <p className="text-sm font-medium text-slate-500 mt-1">Manage all incoming messages from your website and technical assets.</p>
+
+        {/* Cross-pointing navigation links */}
+        <div className="flex flex-wrap gap-2 pt-3">
+          <button 
+             onClick={() => navigate('/dashboard/leads')}
+             className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+          >
+             <Users className="w-3.5 h-3.5" />
+             CRM Leads
+          </button>
+          <button 
+             onClick={() => navigate('/dashboard/bookings')}
+             className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+          >
+             <Calendar className="w-3.5 h-3.5" />
+             Bookings Page
+          </button>
+          <span className="text-xs bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+             <Mail className="w-3.5 h-3.5" />
+             Public Inquiries Page
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

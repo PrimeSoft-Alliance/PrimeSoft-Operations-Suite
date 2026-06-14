@@ -2,17 +2,15 @@ export function validateEnvironment(): void {
   const missing: string[] = [];
   
   if (!process.env.MONGODB_URI) missing.push('MONGODB_URI');
-  // Add other required env vars if needed
   
   if (missing.length > 0) {
-    console.error('\n🚨 FATAL: Missing required environment variables:');
+    console.error('\n⚠️ WARNING: Missing recommended environment variables:');
     missing.forEach(v => console.error(`  - ${v}`));
-    process.exit(1);
+    console.warn('Some features will not work until these are configured.');
   }
   
   const mongoUri = process.env.MONGODB_URI || '';
-  if (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://')) {
-    console.error('\n🚨 FATAL: MONGODB_URI must start with mongodb:// or mongodb+srv://\n');
-    process.exit(1);
+  if (mongoUri && !mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://')) {
+    console.error('\n⚠️ WARNING: MONGODB_URI format seems invalid. It should start with mongodb:// or mongodb+srv://\n');
   }
 }

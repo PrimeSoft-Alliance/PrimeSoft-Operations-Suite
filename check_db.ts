@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { Client, Contact, Booking, OnboardingRequest } from './src/api/models';
+import { Client, Contact, Booking } from './src/api/models';
 
 async function run() {
   const uri = process.env.MONGODB_URI;
@@ -22,10 +22,6 @@ async function run() {
   const bookings = await Booking.find({}, { clientId: 1, customerEmail: 1, status: 1 });
   console.log(`\nFound ${bookings.length} Bookings:`);
   console.log(JSON.stringify(bookings, null, 2));
-
-  const onboarding = await OnboardingRequest.find({}, { businessName: 1, email: 1, status: 1 });
-  console.log(`\nFound ${onboarding.length} Onboarding Requests:`);
-  console.log(JSON.stringify(onboarding, null, 2));
 
   process.exit(0);
 }

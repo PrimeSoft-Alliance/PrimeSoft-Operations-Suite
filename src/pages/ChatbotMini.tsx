@@ -111,6 +111,35 @@ export default function ChatbotMini() {
     }
   }, [botConfig.greeting, botConfig.configTimestamp]);
 
+  // Register visit tracking once client session details map
+  useEffect(() => {
+    if (!clientId) return;
+    
+    // Check session storage to prevent double tracking in the same session
+    const visitTracked = sessionStorage.getItem(`tracked_visit_${sessionId}`);
+    if (visitTracked) return;
+
+    fetch('/v1/public/track', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': clientId
+      },
+      body: JSON.stringify({
+        page: 'Chatbot Mini',
+        route: window.location.pathname + window.location.search,
+        referrer: document.referrer || 'direct',
+        sessionId,
+        interactedWithBot: sessionStorage.getItem('bot_interacted') === 'true'
+      })
+    })
+    .then(res => res.json())
+    .then(() => {
+      sessionStorage.setItem(`tracked_visit_${sessionId}`, 'true');
+    })
+    .catch(err => console.error('[TRACKING_ERROR]', err));
+  }, [clientId, sessionId]);
+
   // Scroll to bottom
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -125,6 +154,22 @@ export default function ChatbotMini() {
 
     // Track interaction for analytics
     sessionStorage.setItem('bot_interacted', 'true');
+    
+    // Send event update to tracking
+    fetch('/v1/public/track', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': clientId || ''
+      },
+      body: JSON.stringify({
+        page: 'Chatbot Mini',
+        route: window.location.pathname + window.location.search,
+        referrer: document.referrer || 'direct',
+        sessionId,
+        interactedWithBot: true
+      })
+    }).catch(() => {});
 
     const userMsg = input.trim();
     setInput('');

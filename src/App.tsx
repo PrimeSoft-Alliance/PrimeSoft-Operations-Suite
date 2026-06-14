@@ -6,7 +6,6 @@ import ChatbotMini from './pages/ChatbotMini';
 // Existing imports
 import Home from './pages/Home';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import Onboarding from './pages/Onboarding';
 import Activate from './pages/Activate';
 
 import DashboardLayout from './pages/dashboard/DashboardLayout';
@@ -20,6 +19,7 @@ import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
 import KnowledgeManager from './pages/dashboard/KnowledgeManager';
 import Analytics from './pages/dashboard/Analytics';
+import Notifications from './pages/dashboard/Notifications';
 import ClientInquiries from './pages/dashboard/Inquiries';
 import ClientBookings from './pages/dashboard/Bookings';
 import Login from './pages/Login';
@@ -33,47 +33,6 @@ export default function App() {
 }
 
 function AppContent() {
-  const location = useLocation();
-
-  useEffect(() => {
-    // Visitor Tracking Logic
-    const track = async () => {
-      try {
-        let sessionId = localStorage.getItem('v_session');
-        if (!sessionId) {
-          sessionId = 'sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-          localStorage.setItem('v_session', sessionId);
-        }
-
-        const isDashboard = location.pathname.startsWith('/dashboard');
-        const clientId = isDashboard 
-          ? localStorage.getItem('ps_client_id') 
-          : (new URLSearchParams(window.location.search).get('clientId') || 'platform-prime');
-
-        if (!clientId) return;
-
-        await fetch('/v1/public/track', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-client-id': String(clientId)
-          },
-          body: JSON.stringify({
-            page: document.title || 'App',
-            route: location.pathname,
-            referrer: document.referrer,
-            sessionId,
-            interactedWithBot: sessionStorage.getItem('bot_interacted') === 'true'
-          })
-        });
-      } catch (e) {
-        // Silently fail tracking
-      }
-    };
-
-    track();
-  }, [location.pathname]);
-
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -83,7 +42,6 @@ function AppContent() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/activate" element={<Activate />} />
         <Route path="/chatbot-mini" element={<ChatbotMini />} />
-        <Route path="/onboarding/:token" element={<Onboarding />} />
         
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
@@ -91,6 +49,7 @@ function AppContent() {
           <Route path="inquiries" element={<ClientInquiries />} />
           <Route path="leads" element={<LeadsManager />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="tickets" element={<Tickets />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />

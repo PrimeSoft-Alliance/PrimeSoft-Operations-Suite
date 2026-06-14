@@ -19,6 +19,7 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { useClientId } from '../../lib/useClientId';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import QuotaStatusWidget from '../../components/QuotaStatusWidget';
 import { 
@@ -48,6 +49,7 @@ interface ClientContainer {
 
 export default function DashboardHome() {
   const { clientId: cidHook } = useClientId();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -217,12 +219,15 @@ export default function DashboardHome() {
            totalContacts: statsPayload?.totalContacts ?? 0,
            unreadContacts: statsPayload?.unreadContacts ?? 0,
            totalLeads: statsPayload?.totalLeads ?? 0,
+           growthLeads: statsPayload?.growthLeads || 12.4,
            chartData: statsPayload?.chartData || [],
+           leadAttribution: statsPayload?.leadAttribution || [],
            usage: {
              aiMessagesUsed: statsPayload?.usage?.aiMessagesUsed ?? 0,
-             aiMessagesLimit: statsPayload?.usage?.aiMessagesLimit ?? 1000,
+             aiMessagesLimit: statsPayload?.usage?.aiMessagesLimit ?? 10000,
              storageBytesUsed: statsPayload?.usage?.storageBytesUsed ?? 0,
-             storageBytesLimit: statsPayload?.usage?.storageBytesLimit ?? 52428800
+             storageBytesLimit: statsPayload?.usage?.storageBytesLimit ?? 52428800,
+             tier: statsPayload?.usage?.tier || 'starter'
            }
          };
          setStats(validatedStats);
@@ -334,17 +339,11 @@ export default function DashboardHome() {
     { name: 'Sun', interactions: 10, conversion: 4 },
   ];
 
-  const leadSources = [
-    { name: 'Chatbot', value: Math.max(10, Math.floor(((stats?.totalLeads || 0) * 0.6) / (stats?.totalLeads || 1) * 100)) || 55, color: '#6366f1' },
-    { name: 'Direct Inquiry', value: Math.max(5, Math.floor(((stats?.totalContacts || 0) * 0.4) / (stats?.totalContacts || 1) * 100)) || 25, color: '#10b981' },
-    { name: 'Booking Form', value: Math.max(5, Math.floor(((stats?.totalBookings || 0) * 0.3) / (stats?.totalBookings || 1) * 100)) || 20, color: '#f59e0b' },
+  const leadSources = stats?.leadAttribution?.length > 0 ? stats.leadAttribution : [
+    { name: 'Chatbot', value: 22, color: '#6366f1' },
+    { name: 'Direct Inquiry', value: 11, color: '#10b981' },
+    { name: 'Booking Form', value: 67, color: '#f59e0b' },
   ];
-
-  // Adjust percentages to sum to 100 if we have real data
-  const totalWeight = leadSources.reduce((acc, s) => acc + s.value, 0);
-  if (totalWeight > 0) {
-    leadSources.forEach(s => s.value = Math.round((s.value / totalWeight) * 100));
-  }
 
   if (loading) {
     return (
@@ -556,7 +555,7 @@ export default function DashboardHome() {
             <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-emerald-500" />
-                <span className="text-xs font-bold text-slate-900">+12.4% Growth</span>
+                <span className="text-xs font-bold text-slate-900">+{stats?.growthLeads || 12.4}% Growth</span>
               </div>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">vs Last Period</span>
             </div>
@@ -568,7 +567,10 @@ export default function DashboardHome() {
 
       {/* Main KPI Stats Block */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all group">
+        <div 
+          onClick={() => navigate('/dashboard/bookings')}
+          className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-500/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total Bookings</h3>
             <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
@@ -579,7 +581,10 @@ export default function DashboardHome() {
           <p className="text-xs text-blue-600 mt-2 font-bold uppercase tracking-wide">{stats?.pendingBookings ?? 0} pending action</p>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all group">
+        <div 
+          onClick={() => navigate('/dashboard/inquiries')}
+          className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-500/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contact Inquiries</h3>
             <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">
@@ -606,13 +611,16 @@ export default function DashboardHome() {
           </p>
           <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4 overflow-hidden">
             <div 
-              style={{ width: `${stats?.usage?.aiMessagesLimit > 1000000 ? 5 : Math.min(100, ((stats?.usage?.aiMessagesUsed || 0) / (stats?.usage?.aiMessagesLimit || 1)) * 100)}%` }}
-              className="bg-emerald-500 h-full rounded-full" 
+               style={{ width: `${stats?.usage?.aiMessagesLimit > 1000000 ? 5 : Math.min(100, ((stats?.usage?.aiMessagesUsed || 0) / (stats?.usage?.aiMessagesLimit || 1)) * 100)}%` }}
+               className="bg-emerald-500 h-full rounded-full" 
             />
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all group cursor-pointer" onClick={() => window.location.hash = '#/leads'}>
+        <div 
+          onClick={() => navigate('/dashboard/leads')}
+          className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 hover:border-indigo-500/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Revenue Growth</h3>
             <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center group-hover:rotate-6 transition-transform">

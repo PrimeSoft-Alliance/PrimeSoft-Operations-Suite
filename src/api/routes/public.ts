@@ -3,7 +3,7 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformNotification, PlatformSettings, Visit } from '../models';
+import { Settings, Booking, Contact, Client, UsageStats, Lead, Visit } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { startOfDay, addMinutes, format } from 'date-fns';
@@ -12,20 +12,7 @@ const router = express.Router();
 
 // Middleware to check maintenance mode
 router.use(async (req, res, next) => {
-  try {
-    const pSettings = null;
-    if (pSettings?.maintenanceMode) {
-      // Allow only check and resolve paths
-      const allowedPaths = ['/headless/config', '/tenant/resolve', '/v1/public/settings'];
-      const isAllowed = allowedPaths.some(path => req.path.includes(path));
-      if (!isAllowed) {
-        return (res as any as EnvelopeResponse).sendError(503, 'MAINTENANCE', 'System is currently under maintenance. Please try again later.');
-      }
-    }
-    next();
-  } catch (err) {
-    next();
-  }
+  next();
 });
 
 // Helper to fetch geo-location from IP
@@ -83,15 +70,7 @@ async function resolveClientId(req: express.Request): Promise<string | null> {
   // Fallback for Platform Main Site
   const host = req.hostname;
   
-  // Fetch Platform Settings for homepageClientId fallback
-  let pSettings = null;
-  try {
-    pSettings = await PlatformSettings.findOne();
-  } catch (e) {
-    console.error('[RESOLVE] Error fetching PlatformSettings:', e);
-  }
-
-  const homepageId = pSettings?.homepageClientId || 'platform-prime';
+  const homepageId = 'platform-prime';
 
   if (host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0' || host.includes('127.0.0.1')) {
     console.log(`[RESOLVE] Platform domain detected (${host}), defaulting to ${homepageId}`);
@@ -125,13 +104,6 @@ async function resolveClientId(req: express.Request): Promise<string | null> {
     return homepageId;
   }
 
-  // Check database for domain mapping match
-  const domainMapping = await Domain.findOne({ host, status: 'active' });
-  if (domainMapping) {
-    console.log(`[RESOLVE] Resolved via Domain mapping: ${domainMapping.clientId}`);
-    return domainMapping.clientId;
-  }
-
   const customClient = await Client.findOne({ customDomain: host });
   if (customClient) {
     console.log(`[RESOLVE] Resolved via customDomain field: ${customClient.clientId}`);
@@ -163,12 +135,6 @@ router.get('/headless/config', async (req, res) => {
     if (apiKey) {
       const client = await Client.findOne({ apiKey });
       clientId = client?.clientId;
-    }
-
-    if (!clientId) {
-      // Check Domain mappings first
-      let domain = await Domain.findOne({ host: host.toString(), status: 'active' });
-      clientId = domain?.clientId;
     }
 
     if (!clientId) {
@@ -330,12 +296,6 @@ router.get('/tenant/resolve', async (req, res) => {
     const { host } = req.query;
     if (!host) return envRes.sendError(400, 'API_ERROR', 'Host is required');
 
-    // Check custom domains collection
-    const domain = await Domain.findOne({ host, status: 'active' });
-    if (domain) {
-      return envRes.sendSuccess({ clientId: domain.clientId });
-    }
-
     // Check client subdomain or customDomain
     const client = await Client.findOne({
       $or: [
@@ -352,228 +312,6 @@ router.get('/tenant/resolve', async (req, res) => {
     envRes.sendError(404, 'API_ERROR', 'Tenant not found');
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Resolution failed');
-  }
-});
-
-// Create a public onboarding request
-router.post('/onboarding-request', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { name, email, phone, businessType, message } = req.body;
-    console.log('[DEBUG_ONBOARDING] Body received:', { name, email, phone, businessType, message });
-    if (!name || !email) {
-      return envRes.sendError(400, 'API_ERROR', 'Business name and email are required');
-    }
-
-    // Auto-generate unique requestId
-    const clientId = await resolveClientId(req) || 'platform-prime';
-    const requestId = 'req_' + crypto.randomBytes(6).toString('hex');
-
-    const request = await OnboardingRequest.create({
-      requestId,
-      businessName: name,
-      email,
-      phone: phone || '',
-      businessType: businessType || 'service',
-      details: { message: message || 'Applied via website get-started form.' },
-      status: 'pending'
-    });
-
-    // Create a notification for Superadmin
-    try {
-      await PlatformNotification.create({
-        type: 'info',
-        title: 'New Onboarding Request',
-        message: `Business "${name}" has submitted an onboarding request application.`,
-        link: '/dashboard',
-        clientId: 'platform-prime'
-      });
-    } catch (notifErr) {
-      console.error('[NOTIF] Failed to create onboarding request notification:', notifErr);
-    }
-
-    // Create an inquiry/contact record
-    await Contact.create({
-      clientId,
-      name,
-      email,
-      phone,
-      subject: 'Onboarding Inquiry',
-      message: message || 'Applied via website get-started form.',
-      preferredContactMethod: 'email',
-      status: 'unread'
-    });
-
-    try {
-      await sendEmail(email, 'Onboarding Application Received', 
-        `Hello ${name},\n\nWe have received your onboarding application! Our team will review your application and send you an invite link shortly.\n\nThank you for choosing us!`,
-        undefined, 'system-onboarding'
-      );
-    } catch (err) {
-      console.error('Email notify error:', err);
-    }
-
-    envRes.sendSuccess({ success: true, requestId: request.requestId });
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', err.message || 'Onboarding request failed');
-  }
-});
-
-// Get onboarding link details
-router.get('/onboarding/:token', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { token } = req.params;
-    const link = await Invite.findOne({ token, status: 'pending' });
-    
-    if (!link) return envRes.sendError(404, 'API_ERROR', 'Link not found or already used');
-    if (new Date() > link.expiresAt) {
-      link.status = 'expired';
-      await link.save();
-      return envRes.sendError(400, 'API_ERROR', 'Link expired');
-    }
-
-    const client = await Client.findOne({ clientId: link.clientId });
-    const settings = await Settings.findOne({ clientId: link.clientId });
-
-    envRes.sendSuccess({ 
-      clientId: link.clientId, 
-      expiresAt: link.expiresAt,
-      customFields: link.customFields || [],
-      prefill: {
-        businessName: client?.businessName || '',
-        businessType: client?.businessType || '',
-        email: client?.email || '',
-        subdomain: client?.subdomain || '',
-        contactEmail: settings?.contactEmail || client?.email || '',
-        contactPhone: settings?.contactPhone || '',
-        businessDescription: settings?.aboutText || ''
-      }
-    });
-  } catch (err) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch onboarding');
-  }
-});
-
-// Submit onboarding form
-router.post('/onboarding/:token', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { token } = req.params;
-    const { 
-      businessName, businessType, subdomain, email, password, 
-      contactPhone, contactEmail, workingHours, customFields = {} 
-    } = req.body;
-
-    const link = await Invite.findOne({ token, status: 'pending' });
-    if (!link || new Date() > link.expiresAt) return envRes.sendError(400, 'API_ERROR', 'Invalid or expired link');
-
-    // Create or update the account/settings
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
-
-    let client = await Client.findOne({ clientId: link.clientId });
-    if (!client) {
-      client = await Client.create({
-        clientId: link.clientId,
-        businessName,
-        businessType,
-        ...(subdomain ? { subdomain } : {}),
-        email,
-        password: hash,
-        customFields,
-        isActivated: true,
-        apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
-      });
-    } else {
-      client.businessName = businessName || client.businessName;
-      client.businessType = businessType || client.businessType;
-      if (subdomain) {
-        client.subdomain = subdomain;
-      }
-      client.password = hash;
-      client.isActivated = true;
-      client.customFields = { ...client.customFields, ...customFields };
-      if (email) {
-        client.email = email;
-      }
-      await client.save();
-    }
-
-    try {
-      await PlatformNotification.create({
-        type: 'success',
-        title: 'New Onboarding Completed',
-        message: `${businessName || client.businessName} has completed their onboarding registration successfully!`,
-        link: '/dashboard',
-        clientId: 'platform-prime'
-      });
-    } catch (notifErr) {
-      console.error('[NOTIF] Failed to create onboarding notification:', notifErr);
-    }
-
-    if (subdomain) {
-      const pSettings = null;
-      if (pSettings?.restrictSubdomains) {
-        // If restricted, we don't automatically create the subdomain domain mapping
-        // but we still store it in the client record for potential later approval
-      } else {
-        const host = `${String(subdomain).trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}.client.com`;
-        const existingDomain = await Domain.findOne({ host });
-        if (!existingDomain) {
-          await Domain.create({
-            clientId: link.clientId,
-            host,
-            type: 'subdomain',
-            status: 'active'
-          });
-        }
-      }
-    }
-
-    const currentMonth = format(new Date(), 'yyyy-MM');
-    const existingUsage = await UsageStats.findOne({ clientId: link.clientId, month: currentMonth });
-    if (!existingUsage) {
-      await UsageStats.create({
-        clientId: link.clientId,
-        month: currentMonth,
-        aiMessagesUsed: 0,
-        storageBytesUsed: 0,
-      });
-    }
-
-    let settings = await Settings.findOne({ clientId: link.clientId });
-    if (!settings) {
-      await Settings.create({
-        clientId: link.clientId,
-        businessName,
-        contactPhone,
-        contactEmail,
-        aboutText: req.body.businessDescription || '',
-        workingHours: workingHours || Array.from({ length: 7 }, (_, i) => ({
-          day: i,
-          isOpen: i > 0 && i < 6,
-          openTime: '08:00',
-          closeTime: '17:00'
-        }))
-      });
-    } else {
-      settings.businessName = businessName || settings.businessName;
-      settings.contactPhone = contactPhone || settings.contactPhone;
-      settings.contactEmail = contactEmail || settings.contactEmail;
-      settings.aboutText = req.body.businessDescription || settings.aboutText;
-      if (workingHours) Object.assign(settings, { workingHours });
-      await settings.save();
-    }
-
-    link.status = 'used';
-    link.onboardedEmail = email;
-    await link.save();
-
-    envRes.sendSuccess({ success: true });
-  } catch (err: any) {
-    if (err.code === 11000) return envRes.sendError(400, 'API_ERROR', 'Email or Client ID already in use');
-    envRes.sendError(500, 'API_ERROR', 'Onboarding failed' + ': ' + err.message);
   }
 });
 
@@ -788,80 +526,6 @@ router.post('/contact', async (req, res) => {
   }
 });
 
-
-// Public Form Fetching
-router.get('/forms/:formId', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { formId } = req.params;
-    const form = await mongoose.models.Form.findOne({ _id: formId, status: 'active' });
-    if (!form) return envRes.sendError(404, 'API_ERROR', 'Form not found');
-
-    if (form.expiresAt && new Date() > form.expiresAt) {
-      return envRes.sendError(400, 'API_ERROR', 'This form has expired');
-    }
-
-    envRes.sendSuccess(form);
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch form: ' + err.message);
-  }
-});
-
-// Public Lead Submission
-router.post('/forms/:formId/submit', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { formId } = req.params;
-    const form = await mongoose.models.Form.findOne({ _id: formId, status: 'active' });
-    if (!form) return envRes.sendError(404, 'API_ERROR', 'Form not found');
-
-    if (form.expiresAt && new Date() > form.expiresAt) {
-      return envRes.sendError(400, 'API_ERROR', 'This form has expired');
-    }
-
-    const data = req.body;
-    let contactFirst = data.firstName || data.first_name || '';
-    let contactLast = data.lastName || data.last_name || '';
-    
-    // Fallback parsing name if only full name is given
-    if (!contactFirst && data.name) {
-      const parts = data.name.split(' ');
-      contactFirst = parts[0];
-      contactLast = parts.slice(1).join(' ');
-    }
-
-    const contactEmail = data.email || data.emailAddress || '';
-    const contactPhone = data.phone || data.phoneNumber || '';
-
-    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
-    const location = await getGeoLocation(ip.split(',')[0].trim());
-
-    // Upsert Lead with deduplication
-    const lead = await upsertLead({
-      clientId: form.clientId,
-      email: contactEmail,
-      phone: contactPhone,
-      name: `${contactFirst} ${contactLast}`.trim(),
-      source: 'form',
-      location,
-      tags: [...(form.tags || []), 'form-submission'],
-      data: {
-        ...data,
-        formId: form._id,
-        formName: form.name
-      }
-    });
-
-    const settings = await Settings.findOne({ clientId: form.clientId });
-    if (settings && settings.contactEmail) {
-      sendEmail(settings.contactEmail, `New Lead: ${form.name}`, `A new lead has been submitted to your form "${form.name}".\n\nName: ${contactFirst} ${contactLast}\nEmail: ${contactEmail}\nPhone: ${contactPhone}\n\nView more details in your dashboard.`);
-    }
-
-    envRes.sendSuccess({ leadId: lead._id });
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Lead submission failed: ' + err.message);
-  }
-});
 
 // Check public quota
 router.get('/quota-check', async (req, res) => {

@@ -65,7 +65,7 @@ router.post('/', async (req, res) => {
     }
     
     // Save to Contact model for Inquiries View
-    await Contact.create({
+    const contact = await Contact.create({
       clientId,
       name,
       email,
@@ -76,6 +76,19 @@ router.post('/', async (req, res) => {
       location,
       status: 'unread'
     });
+
+    try {
+      const { Notification } = await import('../models');
+      await Notification.create({
+        clientId,
+        title: 'New Inquiry Message',
+        message: `${name} has sent a new message: "${subject || 'General Inquiry'}"`,
+        type: 'alert',
+        relatedId: contact._id
+      });
+      const io = req.app.get('io');
+      if (io) io.to(clientId).emit('notification', { title: 'New Inquiry Message', type: 'alert' });
+    } catch (err) {}
 
     // Sync to Leads logic
     let savedLead = null;

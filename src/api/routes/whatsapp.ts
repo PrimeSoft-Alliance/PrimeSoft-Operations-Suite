@@ -1,12 +1,12 @@
 import express from 'express';
 import crypto from 'crypto';
-import { Client } from '../models';
+import { Client, Settings, Lead, Notification } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { checkAIQuota, recordAIUsage } from '../services/quotaService';
 import { authMiddleware } from '../auth';
 import { tenantContextMiddleware } from '../middlewares/tenantContext';
 import { getGroqClient, DEFAULT_MODEL } from '../utils/ai';
-import { Settings } from '../models'; // Assuming Settings is here or needs to be properly imported
+import { emitToClient } from '../utils/socket';
 import axios from 'axios';
 
 const router = express.Router();
@@ -14,9 +14,9 @@ const groq = getGroqClient();
 
 // Function to send WhatsApp message
 async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, to: string, message: string) {
-  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`; 
   try {
-    await axios.post(url, {
+    const response = await axios.post(url, {
       messaging_product: 'whatsapp',
       recipient_type: 'individual',
       to: to,
@@ -26,10 +26,18 @@ async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, t
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 20000
     });
-  } catch (error) {
-    console.error(`Failed to send WhatsApp message to ${to}:`, error);
+    console.log(`[WhatsApp Outbound] Successfully sent to ${to}. ID: ${response.data.messages?.[0]?.id}`);
+    return true;
+  } catch (error: any) {
+    const errorData = error.response?.data || error.message;
+    console.error(`[WhatsApp Outbound] FAILED to send to ${to}:`, JSON.stringify(errorData));
+    if (error.response?.data?.error?.code === 100 && error.response?.data?.error?.error_subcode === 2494010) {
+      console.warn('CRITICAL: Recipient number not verified in Meta Dashboard.');
+    }
+    return false;
   }
 }
 
@@ -74,22 +82,32 @@ const verifySignature = (req: any, res: express.Response, next: express.NextFunc
   const signature = req.headers['x-hub-signature-256'];
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  if (!appSecret) {
-    console.warn('WHATSAPP_APP_SECRET is not configured, skipping signature verification.');
+  if (!appSecret || process.env.NODE_ENV !== 'production') {
+    if (!appSecret) console.warn('WHATSAPP_APP_SECRET is not configured, skipping signature verification.');
     return next();
   }
 
   if (!signature) {
+    console.warn('Incoming WhatsApp webhook missing x-hub-signature-256 header.');
     return res.status(401).send('Missing signature');
   }
 
-  // Use the raw body captured by the express.json verify callback
-  const hmac = crypto.createHmac('sha256', appSecret);
-  const digest = Buffer.from(signature.toString().split('=')[1], 'hex');
-  const checksum = hmac.update(req.rawBody).digest();
+  try {
+    // Use the raw body captured by the express.json verify callback
+    const hmac = crypto.createHmac('sha256', appSecret);
+    const signatureParts = signature.toString().split('=');
+    if (signatureParts.length < 2) return res.status(400).send('Invalid signature format');
+    
+    const digest = Buffer.from(signatureParts[1], 'hex');
+    const checksum = hmac.update(req.rawBody).digest();
 
-  if (!crypto.timingSafeEqual(digest, checksum)) {
-    return res.status(403).send('Invalid signature');
+    if (!crypto.timingSafeEqual(digest, checksum)) {
+      console.warn('Invalid WhatsApp signature detected.');
+      return res.status(403).send('Invalid signature');
+    }
+  } catch (err) {
+    console.error('Error verifying WhatsApp signature:', err);
+    return res.status(500).send('Signature verification error');
   }
   next();
 };
@@ -97,62 +115,103 @@ const verifySignature = (req: any, res: express.Response, next: express.NextFunc
 router.post('/webhook', verifySignature, async (req: any, res) => {
   const { entry } = req.body;
 
-  if (!entry || !entry[0] || !entry[0].changes || !entry[0].changes[0].value.metadata) {
-    return res.status(200).send('OK'); // Ignore non-message events
+  if (!entry || !entry[0] || !entry[0].changes || !entry[0].changes[0].value) {
+    return res.status(200).send('OK');
   }
 
   const value = entry[0].changes[0].value;
-  const phoneNumberId = value.metadata.phone_number_id;
+  const metadata = value.metadata;
+  
+  if (!metadata || !metadata.phone_number_id) {
+    return res.status(200).send('OK');
+  }
 
-  if (!value.messages) {
+  const phoneNumberId = metadata.phone_number_id;
+  
+  if (!value.messages || !value.messages[0]) {
       return res.status(200).send('OK');
   }
 
   const message = value.messages[0];
   const senderPhoneNumber = message.from;
-  const messageText = message.text.body;
-
-  console.log(`Received WhatsApp message from ${senderPhoneNumber} to ${phoneNumberId}: ${messageText}`);
-
-  // Find the tenant by their linked phone number ID
-  const client = await Client.findOne({ whatsappPhoneNumberId: phoneNumberId });
-  if (!client || !client.whatsappAccessToken) {
-    console.warn(`No client found for WhatsApp phone number ID: ${phoneNumberId}`);
+  
+  if (message.type !== 'text' || !message.text) {
     return res.status(200).send('OK');
   }
 
-  const clientId = client.clientId;
-  console.log(`Client found: ${clientId}`);
-  
-  const quota = await checkAIQuota(clientId, 1, 'chat');
-  if (!quota.allowed) {
-    console.warn(`WhatsApp message dropped for ${clientId} due to quota`);
-    return res.status(200).send('OK'); 
-  }
+  const messageText = message.text.body;
 
-  try {
-    const settings = await Settings.findOne({ clientId });
-    const knowledgeBase = settings?.knowledgeBase || '';
-
-    const { processChatRequest } = await import('../services/chatService');
-    const aiResponse = await processChatRequest({
-      clientId,
-      sessionId: senderPhoneNumber,
-      message: messageText,
-      userName: senderPhoneNumber,
-      knowledgeBase
-    });
-    
-    console.log(`AI response: ${aiResponse}`);
-    // Send back to user
-    await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
-    await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
-    console.log(`Response sent to ${senderPhoneNumber}`);
-  } catch (err) {
-      console.error('AI chat error in WhatsApp:', err);
-  }
-
+  // 1. Send immediate 200 OK to Meta to prevent timeout/retries
   res.status(200).send('OK');
+
+  // 2. Process AI and reply in the background
+  (async () => {
+    try {
+      console.log(`[WhatsApp BG] Processing message from ${senderPhoneNumber}...`);
+      
+      const client = await Client.findOne({ whatsappPhoneNumberId: phoneNumberId });
+      if (!client || !client.whatsappAccessToken) {
+        console.error(`[WhatsApp BG] No client found for WhatsApp ID: ${phoneNumberId}`);
+        return;
+      }
+
+      const clientId = client.clientId;
+      const quota = await checkAIQuota(clientId, 1, 'chat');
+      if (!quota.allowed) {
+        console.warn(`[WhatsApp BG] Quota reached for ${clientId}. Message dropped.`);
+        return; 
+      }
+
+      const settings = await Settings.findOne({ clientId });
+      const knowledgeBase = settings?.knowledgeBase || '';
+
+      console.log(`[WhatsApp BG] Invoking AI for ${clientId}...`);
+      const { processChatRequest } = await import('../services/chatService');
+      const aiResponse = await processChatRequest({
+        clientId,
+        sessionId: senderPhoneNumber,
+        message: messageText,
+        userName: senderPhoneNumber,
+        knowledgeBase
+      });
+      
+      console.log(`[WhatsApp BG] AI response success. Sending outbound...`);
+      const sent = await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
+      if (sent) {
+        await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
+        
+        // Log activity if it's a lead
+        try {
+          const lead = await Lead.findOne({ clientId, contactPhone: { $regex: new RegExp(senderPhoneNumber.replace('+', ''), 'i') } });
+          if (lead) {
+            lead.activities.push({
+              type: 'whatsapp',
+              description: `WhatsApp Message Received: ${messageText}`,
+              date: new Date(),
+              metadata: { body: messageText, incoming: true, platform: 'whatsapp' }
+            });
+            lead.activities.push({
+              type: 'whatsapp',
+              description: `AI Response Sent: ${aiResponse}`,
+              date: new Date(),
+              metadata: { body: aiResponse, incoming: false, bot: true, platform: 'whatsapp' }
+            });
+            lead.lastActivity = new Date();
+            await lead.save();
+
+            const mockReq = { app: req.app, clientId } as any;
+            emitToClient(mockReq, 'activity_update', { leadId: lead._id, activity: lead.activities[lead.activities.length - 1] });
+          }
+        } catch (err) {}
+
+        console.log(`[WhatsApp BG] Successfully replied to ${senderPhoneNumber}`);
+      } else {
+        console.error(`[WhatsApp BG] Failed to send reply to ${senderPhoneNumber}`);
+      }
+    } catch (err) {
+        console.error('[WhatsApp BG] Background Processing Error:', err);
+    }
+  })();
 });
 
 router.post('/send', authMiddleware, tenantContextMiddleware, async (req, res) => {
@@ -170,8 +229,27 @@ router.post('/send', authMiddleware, tenantContextMiddleware, async (req, res) =
   }
 
   try {
-    await sendWhatsAppMessage(client.whatsappPhoneNumberId, client.whatsappAccessToken, to, message);
+    const sent = await sendWhatsAppMessage(client.whatsappPhoneNumberId, client.whatsappAccessToken, to, message);
+    if (!sent) throw new Error('WhatsApp delivery failed');
+
     await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { manual: true });
+    
+    // Log activity if lead exists
+    try {
+      const lead = await Lead.findOne({ clientId, contactPhone: { $regex: new RegExp(to.replace('+', ''), 'i') } });
+      if (lead) {
+        lead.activities.push({
+          type: 'whatsapp',
+          description: `WhatsApp Message Sent: ${message.substring(0, 50)}...`,
+          date: new Date(),
+          metadata: { body: message, incoming: false, platform: 'whatsapp' }
+        });
+        lead.lastActivity = new Date();
+        await lead.save();
+        emitToClient(req, 'activity_update', { leadId: lead._id, activity: lead.activities[lead.activities.length - 1] });
+      }
+    } catch (err) {}
+
     envRes.sendSuccess({ status: 'sent' });
   } catch (err) {
     console.error('Error sending WhatsApp message:', err);

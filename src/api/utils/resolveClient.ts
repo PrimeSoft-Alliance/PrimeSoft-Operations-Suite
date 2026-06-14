@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { Client, Domain, PlatformSettings } from '../models';
+import { Client } from '../models';
 
 async function validateClientIdExists(clientId: string): Promise<boolean> {
   if (clientId === 'platform-prime') return true;
@@ -48,15 +48,12 @@ export async function resolveClientId(req: Request): Promise<string | null> {
     else console.warn('[RESOLVE] Direct ID validation failed:', cid);
   }
 
-  // 3. Resolve via Domain Mapping
+  // 3. Resolve via Custom Domain in Client
   try {
-    const domainMapping = await Domain.findOne({ host, status: 'active' });
-    if (domainMapping) return domainMapping.clientId;
-
     const customClient = await Client.findOne({ customDomain: host });
     if (customClient) return customClient.clientId;
   } catch (e) {
-    console.error('[RESOLVE] Domain resolution error:', e);
+    console.error('[RESOLVE] Custom domain resolution error:', e);
   }
 
   // 4. Default for Platform Domains
@@ -73,13 +70,8 @@ export async function resolveClientId(req: Request): Promise<string | null> {
     host.includes('fly.dev');
 
   if (isPlatform) {
-    try {
-      const pSettings = await PlatformSettings.findOne();
-      const homepageId = pSettings?.homepageClientId || 'platform-prime';
-      if (await validateClientIdExists(homepageId)) return homepageId;
-    } catch (e) {
-      console.error('[RESOLVE] Platform fallback error:', e);
-    }
+    const homepageId = 'platform-prime';
+    if (await validateClientIdExists(homepageId)) return homepageId;
   }
 
   return null;

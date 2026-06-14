@@ -7,55 +7,6 @@ import { Settings } from '../models';
 const router = express.Router();
 const groq = getGroqClient();
 
-// AI Form Generator
-router.post('/generate-form', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { prompt } = req.body;
-    if (!prompt) return envRes.sendError(400, 'BAD_REQUEST', 'Prompt is required');
-
-    const response = await groq.chat.completions.create({
-      model: AI_MODEL,
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert lead generation strategist and technical form architect. 
-          Generate a high-converting lead funnel structure.
-          Return ONLY a valid JSON object that defines a form. 
-          The object must have:
-          - name: A catchy title for the form
-          - description: A value-driven description
-          - fields: An array of field objects, each with:
-            - id: random string
-            - type: one of [text, textarea, email, select, rating, checkbox, radio, file]
-            - label: clear, friendly label
-            - name: camelCase identifier
-            - required: boolean
-            - placeholder: optional text
-            - helpText: optional guidance
-            - options: array of strings (only for select, radio, checkbox)
-          - theme: object with primaryColor (hex)`
-        },
-        { role: 'user', content: `Generate a lead funnel for: "${prompt}"` }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1
-    });
-
-    const clientId = (req as any).clientId;
-    if (clientId) {
-      await incrementAiUsage(clientId, 'form-gen', 'assistant', `AI Form Generation: ${prompt}`);
-    }
-
-    const content = response.choices[0]?.message?.content || '{}';
-    const result = JSON.parse(content);
-    envRes.sendSuccess(result);
-  } catch (error: any) {
-    console.error('AI Form Generation Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate form structure. Ensure you have a valid Groq API key.');
-  }
-});
-
 // AI Brand Generator
 router.post('/generate-branding', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;

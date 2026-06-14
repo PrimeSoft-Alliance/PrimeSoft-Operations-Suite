@@ -170,6 +170,21 @@ router.post('/', async (req, res) => {
       location
     });
 
+    try {
+      const { Notification } = await import('../models');
+      await Notification.create({
+        clientId,
+        title: 'New Booking Request',
+        message: `${fullName} has requested a booking for ${serviceSelection}.`,
+        type: 'booking',
+        relatedId: booking._id
+      });
+      // We need emitToClient here but it's not imported or passed as a utility easily without refactoring.
+      // Since booking.ts handles public routes, we'll try to get IO from the app.
+      const io = req.app.get('io');
+      if (io) io.to(clientId).emit('notification', { title: 'New Booking Request', type: 'booking' });
+    } catch (err) {}
+
     // Notify Business
     if (settings) {
       sendEmail(

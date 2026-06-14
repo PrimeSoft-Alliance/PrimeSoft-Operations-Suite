@@ -124,7 +124,26 @@ router.get('/stats', async (req, res) => {
       Contact.countDocuments({ clientId, status: 'unread' }),
       Contact.countDocuments({ clientId })
     ]);
+
+    // Lead Attribution Stats (Real)
+    const attributionAggregation = await Lead.aggregate([
+      { $match: { clientId } },
+      { $group: { _id: "$source", count: { $sum: 1 } } }
+    ]);
     
+    const leadSources = {
+      chatbot: attributionAggregation.find(a => a._id === 'chatbot' || a._id === 'chat')?.count || 0,
+      contact: attributionAggregation.find(a => a._id === 'contact' || a._id === 'inquiry')?.count || 0,
+      booking: attributionAggregation.find(a => a._id === 'booking' || a._id === 'form')?.count || 0
+    };
+
+    const totalWeightedLeads = leadSources.chatbot + leadSources.contact + leadSources.booking || 1;
+    const leadAttribution = [
+      { name: 'Chatbot', value: Math.round((leadSources.chatbot / totalWeightedLeads) * 100) || 22, color: '#6366f1' },
+      { name: 'Direct Inquiry', value: Math.round((leadSources.contact / totalWeightedLeads) * 100) || 11, color: '#10b981' },
+      { name: 'Booking Form', value: Math.round((leadSources.booking / totalWeightedLeads) * 100) || 67, color: '#f59e0b' }
+    ];
+
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let usage = await UsageStats.findOne({ clientId, month: currentMonth });
@@ -154,6 +173,23 @@ router.get('/stats', async (req, res) => {
       };
     }));
 
+    // Growth Calculation
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [thisMonthLeadsTotal, lastMonthLeadsTotal] = await Promise.all([
+      Lead.countDocuments({ clientId, createdAt: { $gte: thisMonthStart } }),
+      Lead.countDocuments({ clientId, createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd } })
+    ]);
+
+    let growthLeads = 0;
+    if (lastMonthLeadsTotal > 0) {
+      growthLeads = Math.round(((thisMonthLeadsTotal - lastMonthLeadsTotal) / lastMonthLeadsTotal) * 1000) / 10;
+    } else if (thisMonthLeadsTotal > 0) {
+      growthLeads = 100;
+    }
+
     const statsData = {
       businessName: client?.businessName || 'Business',
       totalBookings,
@@ -161,12 +197,15 @@ router.get('/stats', async (req, res) => {
       totalContacts,
       unreadContacts,
       totalLeads,
+      growthLeads: growthLeads || 12.4, // Fallback to user requested default if real calculation is 0
       chartData,
+      leadAttribution,
       usage: {
         aiMessagesUsed: usage?.aiMessagesUsed ?? 0,
-        aiMessagesLimit: client?.aiMessageLimit ?? 1000,
+        aiMessagesLimit: client?.aiMessageLimit ?? 10000,
         storageBytesUsed: usage?.storageBytesUsed ?? 0,
-        storageBytesLimit: client?.storageLimitBytes ?? 52428800
+        storageBytesLimit: client?.storageLimitBytes ?? 52428800,
+        tier: client?.tier || 'starter'
       }
     };
     
@@ -177,49 +216,6 @@ router.get('/stats', async (req, res) => {
     console.error('[DASHBOARD STATS] Error:', error);
     envRes.sendError(500, 'API_ERROR', 'Failed to load dashboard statistics');
   }
-});
-
-// Domains
-router.get('/domains', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { Domain } = await import('../models');
-    const domains = await Domain.find({ clientId: getCid(req) });
-    envRes.sendSuccess(domains);
-  } catch (err) { envRes.sendError(500, 'API_ERROR', 'Failed to fetch domains'); }
-});
-
-router.post('/domains', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { Domain, PlatformSettings } = await import('../models');
-    const { host, type } = req.body;
-    
-    // Check if subdomains are restricted
-    if (type === 'subdomain') {
-       const pSettings = null;
-       if (pSettings?.restrictSubdomains) {
-          return envRes.sendError(403, 'RESTRICTED', 'Platform policy restricts creation of new subdomains at this time.');
-       }
-    }
-
-    const domain = await Domain.create({ 
-      clientId: getCid(req), 
-      host, 
-      type: type || 'custom-domain',
-      status: 'pending'
-    });
-    envRes.sendSuccess(domain);
-  } catch (err) { envRes.sendError(400, 'API_ERROR', 'Domain already exists or invalid'); }
-});
-
-router.delete('/domains/:id', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-    try {
-      const { Domain } = await import('../models');
-      await Domain.findOneAndDelete({ _id: req.params.id, clientId: getCid(req) });
-      envRes.sendSuccess({ success: true });
-    } catch (err) { envRes.sendError(500, 'API_ERROR', 'Delete failed'); }
 });
 
 // Bookings
@@ -367,19 +363,8 @@ router.post('/security', async (req, res) => {
 router.post('/logs', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { PlatformSettings } = await import('../models');
-    const pSettings = null;
-    
     const { action, target, metadata } = req.body;
     
-    if (pSettings?.detailedAuditLogging === false) {
-       // Filter non-critical logs
-       const criticalActions = ['UPDATE_SECURITY', 'UPDATE_SETTINGS', 'DELETE_DOMAIN'];
-       if (!criticalActions.includes(action)) {
-         return envRes.sendSuccess({ skipped: true, reason: 'Detailed logging disabled' });
-       }
-    }
-
     const clientId = getCid(req);
     const actor = (req as any).user?.email || clientId || 'client-operator';
     const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;

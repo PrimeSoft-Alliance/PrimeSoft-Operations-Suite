@@ -1,7 +1,9 @@
 import express from 'express';
-import { Lead, Booking, Contact, Client } from '../models';
+import { Lead, Booking, Contact, Client, Notification } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { authMiddleware } from '../auth';
+import { sendEmail } from '../email';
+import { emitToClient } from '../utils/socket';
 
 const router = express.Router();
 
@@ -186,6 +188,163 @@ router.put('/:id', async (req, res) => {
     envRes.sendSuccess(lead);
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to update lead');
+  }
+});
+
+router.post('/:id/reply', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = getCid(req);
+  const { message, subject } = req.body;
+
+  if (!message) return envRes.sendError(400, 'BAD_REQUEST', 'Message is required');
+
+  try {
+    // 1. Find the lead (or create if it's a booking/contact)
+    let lead = await Lead.findOne({ _id: req.params.id, clientId });
+    
+    // If not found by ID, it might be an email/phone from a booking/contact passed as ID if we are clever, 
+    // but usually front-end sends the ID it has. 
+    // For simplicity, let's assume the frontend sends the Lead ID if it has it, or we handle it.
+    
+    if (!lead) {
+       // Check if ID is from Booking or Contact
+       const b = await Booking.findOne({ _id: req.params.id, clientId });
+       const c = await Contact.findOne({ _id: req.params.id, clientId });
+       
+       const email = b?.email || c?.email;
+       const name = b?.fullName || c?.name;
+       
+       if (email) {
+          lead = await Lead.create({
+            clientId,
+            contactEmail: email,
+            contactFirst: name?.split(' ')[0],
+            contactLast: name?.split(' ').slice(1).join(' '),
+            source: b ? 'booking' : 'contact',
+            stage: 'New'
+          });
+       }
+    }
+
+    if (!lead || !lead.contactEmail) return envRes.sendError(404, 'NOT_FOUND', 'Lead or contact email not found');
+
+    // 2. Send the actual email
+    const finalSubject = subject || `Reply regarding your inquiry`;
+    await sendEmail(lead.contactEmail, finalSubject, message, undefined, clientId);
+
+    // 3. Record activity
+    lead.activities.push({
+      type: 'email',
+      description: `Sent email: ${finalSubject}`,
+      date: new Date(),
+      metadata: { body: message }
+    });
+    lead.stage = (lead.stage === 'New') ? 'Contacted' : lead.stage;
+    lead.lastActivity = new Date();
+    await lead.save();
+
+    emitToClient(req, 'activity_update', { leadId: lead._id, activity: lead.activities[lead.activities.length - 1] });
+    envRes.sendSuccess({ success: true });
+  } catch (err: any) {
+    console.error('[LEAD_REPLY] Error:', err);
+    envRes.sendError(500, 'API_ERROR', 'Failed to send reply');
+  }
+});
+
+router.post('/:id/status', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = getCid(req);
+  const { stage } = req.body;
+
+  try {
+    let lead = await Lead.findOne({ _id: req.params.id, clientId });
+    
+    if (!lead) {
+        // Handle conversion from booking/contact to lead if needed
+        const b = await Booking.findOne({ _id: req.params.id, clientId });
+        const c = await Contact.findOne({ _id: req.params.id, clientId });
+
+        const email = b?.email || c?.email;
+        const name = b?.fullName || c?.name;
+
+        if (email) {
+           lead = await Lead.create({
+              clientId,
+              contactEmail: email,
+              contactFirst: name?.split(' ')[0],
+              contactLast: name?.split(' ').slice(1).join(' '),
+              source: b ? 'booking' : 'contact',
+              stage: 'New'
+           });
+        }
+    }
+
+    if (!lead) return envRes.sendError(404, 'NOT_FOUND', 'Lead not found');
+
+    const oldStage = lead.stage;
+    lead.stage = stage;
+    lead.activities.push({
+      type: 'status_change',
+      description: `Changed stage from ${oldStage} to ${stage}`,
+      date: new Date()
+    });
+    lead.lastActivity = new Date();
+    await lead.save();
+
+    emitToClient(req, 'lead_update', lead);
+
+    // Notify if Won
+    if (stage === 'Closed Won') {
+       const notif = await Notification.create({
+         clientId,
+         title: 'Deal Closed! 🎉',
+         message: `Congratulations! ${lead.contactFirst} ${lead.contactLast} has been marked as WON.`,
+         type: 'lead',
+         relatedId: lead._id
+       });
+       emitToClient(req, 'notification', notif);
+    }
+
+    envRes.sendSuccess(lead);
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to update status');
+  }
+});
+
+router.post('/:id/simulate-reply', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = getCid(req);
+  const { message, type = 'email' } = req.body;
+
+  try {
+    const lead = await Lead.findOne({ _id: req.params.id, clientId });
+    if (!lead) return envRes.sendError(404, 'NOT_FOUND', 'Lead not found');
+
+    const incomingMessage = message || (type === 'whatsapp' ? "Simulated WhatsApp reply." : "This is a simulated reply from the customer.");
+
+    lead.activities.push({
+      type: type,
+      description: `${type === 'whatsapp' ? 'WhatsApp' : 'Email'} Received: ${incomingMessage.substring(0, 50)}...`,
+      date: new Date(),
+      metadata: { body: incomingMessage, incoming: true, platform: type }
+    });
+    lead.lastActivity = new Date();
+    await lead.save();
+
+    const notif = await Notification.create({
+      clientId,
+      title: `New ${type === 'whatsapp' ? 'WhatsApp' : 'Reply'} Received`,
+      message: `${lead.contactFirst} replied: "${incomingMessage.substring(0, 30)}..."`,
+      type: 'lead',
+      relatedId: lead._id
+    });
+
+    emitToClient(req, 'activity_update', { leadId: lead._id, activity: lead.activities[lead.activities.length - 1] });
+    emitToClient(req, 'notification', notif);
+
+    envRes.sendSuccess({ success: true });
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Simulation failed');
   }
 });
 

@@ -1,23 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Search, Clock, CheckCircle2, X, Eye, Loader2, User, Phone, MapPin, Globe, Briefcase, ChevronRight, Ban } from 'lucide-react';
+import { Calendar, Search, Clock, CheckCircle2, X, Eye, Loader2, User, Phone, MapPin, Globe, Briefcase, ChevronRight, Ban, Users, Mail } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { format } from 'date-fns';
+import { useClientId } from '../../lib/useClientId';
+import { useNavigate } from 'react-router-dom';
 
 export default function ClientBookings() {
+  const { clientId: cidHook } = useClientId();
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
 
   useEffect(() => {
-    fetchBookings();
-  }, []);
+    if (cidHook) {
+      fetchBookings();
+    }
+  }, [cidHook]);
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch('/v1/bookings');
+      const res = await fetch('/v1/bookings', {
+        headers: { 'x-client-id': cidHook || '' }
+      });
       const data = await res.json();
-      if (data.success) setBookings(data.data);
+      if (data.success) {
+        setBookings(data.data);
+      } else if (Array.isArray(data)) {
+        setBookings(data);
+      }
     } catch (err) {
       console.error('Failed to fetch bookings:', err);
     } finally {
@@ -29,7 +41,10 @@ export default function ClientBookings() {
     try {
       await fetch(`/v1/bookings/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-client-id': cidHook || ''
+        },
         body: JSON.stringify({ status })
       });
       fetchBookings();
@@ -47,10 +62,32 @@ export default function ClientBookings() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-black text-slate-900 tracking-tight">Service Appointments</h1>
         <p className="text-sm font-medium text-slate-500 mt-1">Real-time scheduling management for your ecosystem services.</p>
+        
+        {/* Cross-pointing navigation links */}
+        <div className="flex flex-wrap gap-2 pt-3">
+          <button 
+             onClick={() => navigate('/dashboard/leads')}
+             className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+          >
+             <Users className="w-3.5 h-3.5" />
+             CRM Leads
+          </button>
+          <span className="text-xs bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+             <Calendar className="w-3.5 h-3.5" />
+             Bookings Page
+          </span>
+          <button 
+             onClick={() => navigate('/dashboard/inquiries')}
+             className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5"
+          >
+             <Mail className="w-3.5 h-3.5" />
+             Public Inquiries Page
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

@@ -222,10 +222,6 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check Platform MFA Enforcement
-    const { PlatformSettings } = await import('../models');
-    const pSettings = await PlatformSettings.findOne();
-
     const token = jwt.sign(
       { 
         clientId: client.clientId, 
@@ -290,12 +286,25 @@ router.get('/check', async (req, res) => {
   if (!token) return res.json({ authenticated: false });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
-    res.json({ 
-      authenticated: true, 
-      role: decoded.role, 
-      clientId: decoded.clientId,
-      businessName: decoded.businessName
-    });
+    if (decoded.role === 'client' || decoded.clientId) {
+      const client = await Client.findOne({ clientId: decoded.clientId });
+      if (!client) {
+        return res.json({ authenticated: false });
+      }
+      res.json({ 
+        authenticated: true, 
+        role: client.role || decoded.role, 
+        clientId: client.clientId,
+        businessName: client.businessName
+      });
+    } else {
+      res.json({ 
+        authenticated: true, 
+        role: decoded.role, 
+        clientId: decoded.clientId,
+        businessName: decoded.businessName
+      });
+    }
   } catch (e) {
     res.json({ authenticated: false });
   }

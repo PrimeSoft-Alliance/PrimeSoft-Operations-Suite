@@ -1,6 +1,9 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 console.log('--- SERVER.TS LOADED ---');
 
@@ -16,11 +19,11 @@ import chatRoutes from './src/api/routes/chat';
 import authRoutes from './src/api/routes/auth';
 import dashboardRoutes from './src/api/routes/dashboard';
 import aiRoutes from './src/api/routes/ai';
-import formsRoutes from './src/api/routes/forms';
 import leadsRoutes from './src/api/routes/leads';
 import contentRoutes from './src/api/routes/content';
 import mediaRoutes from './src/api/routes/media';
 import webhookRoutes from './src/api/routes/webhooks';
+import notificationsRoutes from './src/api/routes/notifications';
 import ticketsRoutes from './src/api/routes/tickets';
 import telegramRoutes from './src/api/routes/telegram';
 import whatsappRoutes from './src/api/routes/whatsapp';
@@ -36,11 +39,42 @@ import { validateEnvironment } from './src/api/utils/validateEnv';
 import { initializeTierDefinitions } from './src/api/services/quotaService';
 import fs from 'fs';
 
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+
 validateEnvironment();
+
+let io: Server;
 
 async function startServer() {
   const app = express();
+  const httpServer = createServer(app);
   const PORT = 3000;
+
+  io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
+
+  // Make io accessible via app.set
+  app.set('io', io);
+
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    
+    socket.on('join', (clientId) => {
+      if (clientId) {
+        socket.join(clientId);
+        console.log(`Socket ${socket.id} joined room: ${clientId}`);
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
+  });
 
   app.get('/health-check', (req, res) => res.json({ status: 'ok' }));
   
@@ -165,31 +199,9 @@ async function startServer() {
   }
   app.use('/uploads', express.static(uploadsPath));
 
-  const mongoUri = process.env.MONGODB_URI;
-  if (!mongoUri || (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))) {
-    console.error('\n⚠️  FATAL: MongoDB URI is missing or invalid. Please set MONGODB_URI to a valid MongoDB connection string.\n');
-    process.exit(1);
-  } else {
-    try {
-      await mongoose.connect(mongoUri);
-      console.log('Connected to MongoDB');
-      await initializeTierDefinitions();
-      console.log('Tier definitions initialized');
-      try {
-        await mongoose.connection.db?.collection('clients').dropIndex('apiKey_1');
-        console.log('Dropped legacy apiKey_1 index');
-      } catch (e) {
-        // ignore
-      }
-    } catch (err) {
-      console.error('\n⚠️  FATAL: Failed to connect to MongoDB:\n', err);
-      process.exit(1);
-    }
-  }
-
   // API Routes
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date() });
+    res.json({ status: 'ok', time: new Date(), db: mongoose.connection.readyState });
   });
 
   // Apply common middlewares to all /v1 routes
@@ -205,11 +217,11 @@ async function startServer() {
   app.use('/v1/contact', (req, res, next) => { if (req.method === 'POST') return next(); next('route'); }, tenantContextMiddleware, contactRoutes);
   app.use('/v1/contacts', (req, res, next) => { if (req.method === 'POST') return next(); next('route'); }, tenantContextMiddleware, contactRoutes);
   app.use('/v1/chat', tenantContextMiddleware, aiUsageTracking, chatRoutes);
-  app.use('/v1/forms', tenantContextMiddleware, formsRoutes);
   app.use('/v1/leads', tenantContextMiddleware, leadsRoutes);
   app.use('/v1/content', tenantContextMiddleware, contentRoutes);
   app.use('/v1/media', tenantContextMiddleware, mediaRoutes);
   app.use('/v1/webhooks', tenantContextMiddleware, webhookRoutes);
+  app.use('/v1/notifications', tenantContextMiddleware, notificationsRoutes);
   app.use('/v1/tickets', tenantContextMiddleware, ticketsRoutes);
   app.use('/v1/telegram', telegramRoutes);
   app.use('/v1/whatsapp', whatsappRoutes);
@@ -234,7 +246,7 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'spa' as any,
     });
     app.use(vite.middlewares);
   } else {
@@ -245,9 +257,28 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  // START SERVER FIRST
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
   });
+
+  // Then connect to MongoDB connection asynchronously
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri || (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))) {
+    console.warn('\n⚠️ WARNING: MongoDB URI is missing or invalid. Set MONGODB_URI to enable database features.\n');
+  } else {
+    mongoose.connect(mongoUri)
+      .then(async () => {
+        console.log('✅ Connected to MongoDB');
+        await initializeTierDefinitions().catch(e => console.error('Failed to init tiers:', e));
+        try {
+          await mongoose.connection.db?.collection('clients').dropIndex('apiKey_1');
+        } catch (e) {}
+      })
+      .catch(err => {
+        console.error('\n⚠️ ERROR: Failed to connect to MongoDB:\n', err);
+      });
+  }
 }
 
 startServer();

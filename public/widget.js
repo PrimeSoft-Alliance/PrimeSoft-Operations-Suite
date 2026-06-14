@@ -16,6 +16,52 @@
   // Define the base URL dynamically based on where the script is hosted
   const BASE_URL = script ? new URL(script.src).origin : window.location.origin;
 
+  // Track the visit on client website (excluding sandbox environments)
+  let sessionId = '';
+  try {
+    const hostname = window.location.hostname;
+    const isSandbox = hostname === 'localhost' || 
+                      hostname === '127.0.0.1' || 
+                      hostname.includes('googleusercontent.com') || 
+                      hostname.includes('google.com') ||
+                      hostname.includes('webcontainer.io') ||
+                      hostname.includes('run.app');
+
+    if (!isSandbox) {
+      sessionId = localStorage.getItem('ominics_v_session');
+      if (!sessionId) {
+        sessionId = 'sess_w_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        localStorage.setItem('ominics_v_session', sessionId);
+      }
+
+      fetch(`${BASE_URL}/v1/public/track`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-id': clientId
+        },
+        body: JSON.stringify({
+          page: document.title || 'Client Website',
+          route: window.location.pathname + window.location.search,
+          referrer: document.referrer,
+          sessionId: sessionId,
+          interactedWithBot: false
+        })
+      }).catch(err => {
+        // Silently capture any network/CORS issues
+      });
+    } else {
+      console.log('[Ominics AI] Sandbox/Localhost detected - tracking disabled.');
+    }
+  } catch (e) {
+    // Silently ignore
+  }
+
+  // If we couldn't set or use localStorage, produce a transient one
+  if (!sessionId) {
+    sessionId = 'sess_temp_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  }
+
   // 1. Inject CSS for the widget styling
   const style = document.createElement('style');
   style.textContent = `
@@ -30,12 +76,12 @@
   `;
   document.head.appendChild(style);
 
-  // 2. Build the DOM structure
+  // 2. Build the DOM structure with the session ID passed to the mini-chatbot
   const root = document.createElement('div');
   root.id = 'ominicsr';
   root.innerHTML = `
     <div class="ominics-chat-window" id="ominics-chat-window">
-      <iframe src="${BASE_URL}/chatbot-mini?clientId=${clientId}&embed=true" width="100%" height="100%" frameborder="0" style="border:none; width:100%; height:100%; border-radius:16px;"></iframe>
+      <iframe src="${BASE_URL}/chatbot-mini?clientId=${clientId}&embed=true&sessionId=${sessionId}" width="100%" height="100%" frameborder="0" style="border:none; width:100%; height:100%; border-radius:16px;"></iframe>
     </div>
     <div class="ominics-chat-bubble" id="ominics-chat-bubble" aria-label="Toggle AI Assistant" role="button">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>

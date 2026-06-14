@@ -11,7 +11,15 @@ export default function Login() {
 
   useEffect(() => {
     fetch('/v1/auth/check')
-      .then(res => res?.json())
+      .then(async res => {
+        if (!res.ok) return { authenticated: false };
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { authenticated: false };
+        }
+      })
       .then(data => {
         if (data?.authenticated) {
           navigate('/dashboard', { replace: true });

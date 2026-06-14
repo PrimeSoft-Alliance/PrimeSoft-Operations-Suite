@@ -1,4 +1,4 @@
-import { Settings, UsageStats, AILog, Booking, OnboardingRequest } from '../models';
+import { Settings, UsageStats, AILog, Booking } from '../models';
 import { getGroqClient, DEFAULT_MODEL } from '../utils/ai';
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
