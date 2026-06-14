@@ -25,7 +25,7 @@ router.get('/webhook-url', authMiddleware, tenantContextMiddleware, async (req, 
   const baseUrl = process.env.APP_URL || 'https://primesoft-operation-suite.onrender.com';
   
   envRes.sendSuccess({
-    webhookUrl: `${baseUrl}/api/whatsapp/webhook`
+    webhookUrl: `${baseUrl}/v1/whatsapp/webhook`
   });
 });
 
