@@ -253,6 +253,7 @@ const clientSchema = new mongoose.Schema({
   telegramBotToken: { type: String },
   telegramChatIds: [{ type: String }],
   whatsappPhoneNumber: { type: String },
+  whatsappPhoneNumberId: { type: String },
   whatsappBusinessAccountId: { type: String },
   whatsappAccessToken: { type: String },
   apiKey: { type: String, default: () => 'api_' + crypto.randomUUID() },
