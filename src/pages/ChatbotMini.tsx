@@ -347,7 +347,7 @@ export default function ChatbotMini() {
             </div>
             <div className="bg-slate-100 p-4 rounded-2xl rounded-tl-none flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
-              <span className="text-xs font-semibold text-slate-400">Thinking...</span>
+              <span className="text-xs font-semibold text-slate-400">Typing...</span>
             </div>
           </div>
         )}

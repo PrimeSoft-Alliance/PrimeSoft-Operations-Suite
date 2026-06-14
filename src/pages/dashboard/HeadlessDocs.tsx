@@ -157,25 +157,6 @@ export default function HeadlessDocs() {
         </div>
       </div>
 
-       <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white p-10 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl group-hover:bg-indigo-600/20 transition-all duration-1000"></div>
-        <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center text-center md:text-left">
-          <div className="flex-1 space-y-4">
-            <h2 className="text-3xl font-extrabold tracking-tight">Need a Bespoke Integration?</h2>
-            <p className="text-lg text-indigo-100/70 max-w-xl italic">
-              "We don't just provide APIs, we provide strategic digital partnerships. Let's build your next innovation together."
-            </p>
-          </div>
-          <div className="shrink-0 flex flex-col sm:flex-row gap-4">
-            <button className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2 justify-center">
-              Partner with our Engineers
-            </button>
-            <button className="bg-white/10 text-white border border-white/20 backdrop-blur-md px-8 py-4 rounded-2xl font-bold hover:bg-white/20 transition-all flex items-center gap-2 justify-center">
-              Review API Docs v1.2
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -103,10 +103,9 @@ export default function DashboardLayout() {
   const links = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
-    { name: 'Inquiries', path: '/dashboard/inquiries', icon: Mail },
+    { name: 'Support Suite', path: '/dashboard/support', icon: MessageSquare },
     { name: 'Bookings', path: '/dashboard/bookings', icon: CalendarDays },
     { name: 'Leads Stream', path: '/dashboard/leads', icon: Users },
-    { name: 'Ticketing', path: '/dashboard/tickets', icon: MessageSquare },
     { name: 'Availability', path: '/dashboard/availability', icon: Clock },
     { name: 'API Docs', path: '/dashboard/developer', icon: Cpu },
     { name: 'AI Knowledge', path: '/dashboard/knowledge', icon: Brain },

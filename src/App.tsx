@@ -12,7 +12,6 @@ import DashboardLayout from './pages/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
 import BookingsManager from './pages/dashboard/BookingsManager';
 import LeadsManager from './pages/dashboard/LeadsManager';
-import Tickets from './pages/dashboard/Tickets';
 import SettingsManager from './pages/dashboard/SettingsManager';
 import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
@@ -20,7 +19,7 @@ import HeadlessDocs from './pages/dashboard/HeadlessDocs';
 import KnowledgeManager from './pages/dashboard/KnowledgeManager';
 import Analytics from './pages/dashboard/Analytics';
 import Notifications from './pages/dashboard/Notifications';
-import ClientInquiries from './pages/dashboard/Inquiries';
+import SupportSuite from './pages/dashboard/SupportSuite';
 import ClientBookings from './pages/dashboard/Bookings';
 import Login from './pages/Login';
 
@@ -46,11 +45,12 @@ function AppContent() {
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="bookings" element={<ClientBookings />} />
-          <Route path="inquiries" element={<ClientInquiries />} />
+          <Route path="support" element={<SupportSuite />} />
+          <Route path="inquiries" element={<Navigate to="/dashboard/support" replace />} />
+          <Route path="tickets" element={<Navigate to="/dashboard/support" replace />} />
           <Route path="leads" element={<LeadsManager />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="notifications" element={<Notifications />} />
-          <Route path="tickets" element={<Tickets />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />
           <Route path="developer" element={<HeadlessDocs />} />
