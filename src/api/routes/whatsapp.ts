@@ -86,6 +86,8 @@ router.post('/webhook', async (req, res) => {
   const senderPhoneNumber = message.from;
   const messageText = message.text.body;
 
+  console.log(`Received WhatsApp message from ${senderPhoneNumber} to ${phoneNumberId}: ${messageText}`);
+
   // Find the tenant by their linked phone number ID
   const client = await Client.findOne({ whatsappPhoneNumberId: phoneNumberId });
   if (!client || !client.whatsappAccessToken) {
@@ -94,6 +96,7 @@ router.post('/webhook', async (req, res) => {
   }
 
   const clientId = client.clientId;
+  console.log(`Client found: ${clientId}`);
   
   const quota = await checkAIQuota(clientId, 1, 'chat');
   if (!quota.allowed) {
@@ -104,9 +107,11 @@ router.post('/webhook', async (req, res) => {
   // --- Process AI Chat ---
   // For simplicity, we directly invoke AI logic similar to the chat route
   const settings = await Settings.findOne({ clientId });
+  console.log(`Settings found: ${!!settings}`);
   if (settings) {
     // Call the Groq AI API directly
     try {
+        console.log(`Calling Groq for ${clientId}...`);
         const response = await groq.chat.completions.create({
             model: DEFAULT_MODEL,
             messages: [
@@ -117,12 +122,16 @@ router.post('/webhook', async (req, res) => {
         });
         const aiResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that.";
         
+        console.log(`AI response: ${aiResponse}`);
         // Send back to user
         await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
         await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
+        console.log(`Response sent to ${senderPhoneNumber}`);
     } catch (err) {
         console.error('AI chat error in WhatsApp:', err);
     }
+  } else {
+    console.warn(`No settings found for client ${clientId}`);
   }
 
   res.status(200).send('OK');
