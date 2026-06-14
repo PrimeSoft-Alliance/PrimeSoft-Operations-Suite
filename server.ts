@@ -49,13 +49,14 @@ let io: Server;
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000');
 
   io = new Server(httpServer, {
     cors: {
       origin: "*",
       methods: ["GET", "POST"]
-    }
+    },
+    transports: ['websocket', 'polling'] // Ensure multiple transports are available
   });
 
   // Make io accessible via app.set
@@ -250,10 +251,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // In production, server.cjs is IN the dist folder
+    // Use __dirname for absolute reliability
+    const staticPath = __dirname; 
+    app.use(express.static(staticPath, {
+      index: false,
+      maxAge: 86400000 // 1 day in milliseconds
+    }));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      // Fallback to index.html for SPA routing
+      res.sendFile(path.join(staticPath, 'index.html'));
     });
   }
 
@@ -267,7 +274,10 @@ async function startServer() {
   if (!mongoUri || (!mongoUri.startsWith('mongodb://') && !mongoUri.startsWith('mongodb+srv://'))) {
     console.warn('\n⚠️ WARNING: MongoDB URI is missing or invalid. Set MONGODB_URI to enable database features.\n');
   } else {
-    mongoose.connect(mongoUri)
+    mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of hanging
+      connectTimeoutMS: 10000,
+    })
       .then(async () => {
         console.log('✅ Connected to MongoDB');
         await initializeTierDefinitions().catch(e => console.error('Failed to init tiers:', e));
