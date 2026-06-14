@@ -14,7 +14,8 @@ export async function processChatRequest({
   message,
   userName = '',
   userEmail = '',
-  overrideHistory = null
+  overrideHistory = null,
+  knowledgeBase = ''
 }: {
   clientId: string;
   sessionId: string;
@@ -22,6 +23,7 @@ export async function processChatRequest({
   userName?: string;
   userEmail?: string;
   overrideHistory?: {role: string, content: string}[];
+  knowledgeBase?: string;
 }): Promise<string> {
   let clientRecord = await Client.findOne({ clientId });
   if (!clientRecord) {
@@ -61,6 +63,7 @@ export async function processChatRequest({
     ## BUSINESS KNOWLEDGE
     - Client Name: ${settings.businessName}
     - Bio: ${settings.branding?.aboutText || settings.aboutText || "Professional business dedicated to excellence."}
+    - Knowledge Base: ${knowledgeBase || settings.knowledgeBase || "No specific knowledge base provided."}
     - Contact: ${settings.contactEmail}, ${settings.contactPhone}
     - Services: ${settings.services?.map((s: any) => `${s.name} ($${s.price}): ${s.description}`).join(' | ') || 'None listed'}
     - FAQs: ${settings.faqs?.map((f: any) => `Q: ${f.question} -> A: ${f.answer}`).join('\n') || 'None'}

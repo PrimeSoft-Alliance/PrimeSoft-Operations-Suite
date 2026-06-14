@@ -18,7 +18,7 @@ router.post('/setup', authMiddleware, tenantContextMiddleware, async (req, res) 
   if (!clientId || !botToken) return envRes.sendError(400, 'VALIDATION_FAILED', 'Missing token');
 
   // Register the webhook with Telegram
-  const baseUrl = process.env.APP_URL || 'https://primesoft-operation-suite.onrender.com';
+  const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
   try {
     await axios.post(`https://api.telegram.org/bot${botToken}/setWebhook`, {
       url: `${baseUrl}/v1/telegram/webhook/${clientId}`
@@ -52,26 +52,23 @@ router.post('/webhook/:clientId', async (req, res) => {
     return res.status(200).send('OK'); // Don't fail webhook
   }
 
-  const settings = await Settings.findOne({ clientId });
-  if (settings) {
-    try {
-      const { processChatRequest } = await import('../services/chatService');
-      const aiResponse = await processChatRequest({
-        clientId,
-        sessionId: String(chatId),
-        message: userMessage,
-        userName: String(chatId) // Fallback name
-      });
+  try {
+    const { processChatRequest } = await import('../services/chatService');
+    const aiResponse = await processChatRequest({
+      clientId,
+      sessionId: String(chatId),
+      message: userMessage,
+      userName: String(chatId) // Fallback name
+    });
 
-      await axios.post(`https://api.telegram.org/bot${client.telegramBotToken}/sendMessage`, {
-        chat_id: chatId,
-        text: aiResponse
-      });
+    await axios.post(`https://api.telegram.org/bot${client.telegramBotToken}/sendMessage`, {
+      chat_id: chatId,
+      text: aiResponse
+    });
 
-      await recordAIUsage(clientId, 'chat', 'telegram', 'telegram', 1, { webhook: true });
-    } catch (err) {
-      console.error('AI chat error in Telegram:', err);
-    }
+    await recordAIUsage(clientId, 'chat', 'telegram', 'telegram', 1, { webhook: true });
+  } catch (err) {
+    console.error('AI chat error in Telegram:', err);
   }
 
   res.status(200).send('OK');

@@ -29,7 +29,7 @@ export default function Analytics() {
     }
     setLoading(true);
     try {
-      const res = await fetch('/v1/analytics', {
+      const res = await fetch('/v1/insights', {
         headers: { 'x-client-id': clientId }
       });
       
@@ -67,7 +67,7 @@ export default function Analytics() {
     if (!stats) return;
     setAnalyzing(true);
     try {
-      const res = await fetch('/v1/analytics/analyze', {
+      const res = await fetch('/v1/insights/analyze', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

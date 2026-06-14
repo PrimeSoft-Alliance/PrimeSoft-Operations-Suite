@@ -126,7 +126,7 @@ export default function HeadlessDocs() {
                 <p className="text-gray-600">The easiest way to add an intelligent AI Chatbot Assistant powered by Gemini to any external HTML site or CMS (WordPress, Wix, Webflow).</p>
                 <CodeBlock 
                   title="Include in <body>"
-                  code={`<div id="ominicsr" client_id="${clientId}"></div>\n\n<script src="${window.location.origin}/widget.js" async></script>`} 
+                  code={`<script src="${window.location.origin}/widget.js" data-client-id="${clientId}" async></script>`} 
                 />
                 <div className="grid grid-cols-2 gap-4 text-xs font-medium text-gray-500 pt-2">
                   <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Auto-Theme Matching</div>

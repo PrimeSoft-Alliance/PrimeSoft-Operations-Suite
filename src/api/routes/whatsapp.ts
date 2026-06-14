@@ -48,7 +48,7 @@ router.post('/setup', authMiddleware, tenantContextMiddleware, async (req, res) 
 
 router.get('/webhook-url', authMiddleware, tenantContextMiddleware, async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  const baseUrl = process.env.APP_URL || 'https://primesoft-operation-suite.onrender.com';
+  const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
   
   envRes.sendSuccess({
     webhookUrl: `${baseUrl}/v1/whatsapp/webhook`
@@ -130,15 +130,17 @@ router.post('/webhook', verifySignature, async (req: any, res) => {
     return res.status(200).send('OK'); 
   }
 
-  const settings = await Settings.findOne({ clientId });
-  console.log(`Settings found: ${!!settings}`);
   try {
+    const settings = await Settings.findOne({ clientId });
+    const knowledgeBase = settings?.knowledgeBase || '';
+
     const { processChatRequest } = await import('../services/chatService');
     const aiResponse = await processChatRequest({
       clientId,
       sessionId: senderPhoneNumber,
       message: messageText,
-      userName: senderPhoneNumber
+      userName: senderPhoneNumber,
+      knowledgeBase
     });
     
     console.log(`AI response: ${aiResponse}`);

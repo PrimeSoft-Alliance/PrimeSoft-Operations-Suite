@@ -144,7 +144,7 @@ export default function ChatbotMini() {
         content: m.content
       }));
 
-      const res = await fetch('/v1/public/ai/chat', {
+      const res = await fetch('/v1/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -165,7 +165,7 @@ export default function ChatbotMini() {
         let errDetails = `HTTP_${res.status}`;
         try {
           const errData = await res.json();
-          errDetails = errData.message || errData.error || errDetails;
+          errDetails = errData.message || (errData.error?.message) || errData.error || errDetails;
         } catch (e) {
           // Fallback if not JSON
         }
@@ -175,9 +175,13 @@ export default function ChatbotMini() {
       const resData = await res.json();
       if (resData.success && resData.data?.text) {
         setMessages([...updatedMessages, { role: 'assistant', content: resData.data.text }]);
+      } else if (resData.text) {
+        setMessages([...updatedMessages, { role: 'assistant', content: resData.text }]);
+      } else if (resData.message) {
+        setMessages([...updatedMessages, { role: 'assistant', content: resData.message }]);
       } else {
         console.error('[CHATBOT] Unexpected API response structure:', resData);
-        throw new Error(`The assistant is having trouble phrasing a response right now. Please try asking your question again.`);
+        throw new Error(`Unexpected server response formatting.`);
       }
     } catch (err: any) {
       console.error('Chat error:', err);

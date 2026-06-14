@@ -109,7 +109,7 @@ export default function SettingsManager() {
   };
 
   const copyEmbedCode = () => {
-    const code = `<div id="ai-assistant-widget" client_id="${settings?.clientId}"></div>\n<script src="${window.location.origin}/widget.js" async></script>`;
+    const code = `<script src="${window.location.origin}/widget.js" data-client-id="${settings?.clientId}" async></script>`;
     navigator.clipboard.writeText(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -350,7 +350,7 @@ export default function SettingsManager() {
                   </button>
                 </div>
                 <pre className="text-[10px] font-mono text-indigo-250 leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                  {`<div id="ai-assistant-widget" client_id="${settings.clientId}"></div>\n<script src="${window.location.origin}/widget.js" async></script>`}
+                  {`<script src="${window.location.origin}/widget.js" data-client-id="${settings.clientId}" async></script>`}
                 </pre>
                 <div className="mt-4 pt-4 border-t border-white/10 flex items-center gap-3 text-[10px] text-white/50">
                   <span>Lightweight execution. Zero layout shifting. Dynamic color detection.</span>

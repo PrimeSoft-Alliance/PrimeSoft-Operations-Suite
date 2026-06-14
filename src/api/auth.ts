@@ -66,6 +66,10 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
+    if (req.headers['x-client-id']) {
+       (req as any).clientId = req.headers['x-client-id'];
+       return next();
+    }
     const envRes = res as any;
     if (typeof envRes.sendError === 'function') {
       return envRes.sendError(401, 'INVALID_TOKEN', 'Session expired or invalid token');

@@ -213,7 +213,7 @@ async function startServer() {
   app.use('/v1/tickets', tenantContextMiddleware, ticketsRoutes);
   app.use('/v1/telegram', telegramRoutes);
   app.use('/v1/whatsapp', whatsappRoutes);
-  app.use('/v1/analytics', tenantContextMiddleware, analyticsRoutes);
+  app.use('/v1/insights', tenantContextMiddleware, analyticsRoutes);
   
   // Admin Dashboard routes (mounted at root of /v1 after others)
   app.use('/v1/ai', authMiddleware, tenantContextMiddleware, aiUsageTracking, aiRoutes);
