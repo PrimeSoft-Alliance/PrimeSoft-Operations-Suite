@@ -74,8 +74,13 @@ const verifySignature = (req: any, res: express.Response, next: express.NextFunc
   const signature = req.headers['x-hub-signature-256'];
   const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  if (!signature || !appSecret) {
-    return res.status(401).send('Missing signature or app secret');
+  if (!appSecret) {
+    console.warn('WHATSAPP_APP_SECRET is not configured, skipping signature verification.');
+    return next();
+  }
+
+  if (!signature) {
+    return res.status(401).send('Missing signature');
   }
 
   // Use the raw body captured by the express.json verify callback
@@ -89,10 +94,7 @@ const verifySignature = (req: any, res: express.Response, next: express.NextFunc
   next();
 };
 
-router.post('/webhook', express.json({
-  verify: (req: any, res, buf) => { req.rawBody = buf; }
-}), verifySignature, // Call the middleware here
-async (req: any, res) => {
+router.post('/webhook', verifySignature, async (req: any, res) => {
   const { entry } = req.body;
 
   if (!entry || !entry[0] || !entry[0].changes || !entry[0].changes[0].value.metadata) {
@@ -128,42 +130,51 @@ async (req: any, res) => {
     return res.status(200).send('OK'); 
   }
 
-  // --- Process AI Chat ---
-  // For simplicity, we directly invoke AI logic similar to the chat route
   const settings = await Settings.findOne({ clientId });
   console.log(`Settings found: ${!!settings}`);
-  if (settings) {
-    // Call the Groq AI API directly
-    try {
-        console.log(`Calling Groq for ${clientId}...`);
-        const response = await groq.chat.completions.create({
-            model: DEFAULT_MODEL,
-            messages: [
-                { role: 'system', content: `You are the AI assistant for ${client.businessName || 'our business'}. ${settings.aiBehaviorInstructions || 'Be professional and helpful.'}` },
-                { role: 'user', content: messageText }
-            ],
-            temperature: 0.1
-        });
-        const aiResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that.";
-        
-        console.log(`AI response: ${aiResponse}`);
-        // Send back to user
-        await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
-        await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
-        console.log(`Response sent to ${senderPhoneNumber}`);
-    } catch (err) {
-        console.error('AI chat error in WhatsApp:', err);
-    }
-  } else {
-    console.warn(`No settings found for client ${clientId}`);
+  try {
+    const { processChatRequest } = await import('../services/chatService');
+    const aiResponse = await processChatRequest({
+      clientId,
+      sessionId: senderPhoneNumber,
+      message: messageText,
+      userName: senderPhoneNumber
+    });
+    
+    console.log(`AI response: ${aiResponse}`);
+    // Send back to user
+    await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
+    await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
+    console.log(`Response sent to ${senderPhoneNumber}`);
+  } catch (err) {
+      console.error('AI chat error in WhatsApp:', err);
   }
 
   res.status(200).send('OK');
 });
 
-router.post('/send', async (req, res) => {
+router.post('/send', authMiddleware, tenantContextMiddleware, async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
-  envRes.sendSuccess({ status: 'mock_sent' });
+  const clientId = (req as any).clientId;
+  const { to, message } = req.body;
+
+  if (!clientId || !to || !message) {
+    return envRes.sendError(400, 'VALIDATION_FAILED', 'Missing required fields');
+  }
+
+  const client = await Client.findOne({ clientId });
+  if (!client || !client.whatsappPhoneNumberId || !client.whatsappAccessToken) {
+    return envRes.sendError(404, 'NOT_FOUND', 'WhatsApp credentials not configured for this client');
+  }
+
+  try {
+    await sendWhatsAppMessage(client.whatsappPhoneNumberId, client.whatsappAccessToken, to, message);
+    await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { manual: true });
+    envRes.sendSuccess({ status: 'sent' });
+  } catch (err) {
+    console.error('Error sending WhatsApp message:', err);
+    envRes.sendError(500, 'INTERNAL_ERROR', 'Failed to send message');
+  }
 });
 
 export default router;

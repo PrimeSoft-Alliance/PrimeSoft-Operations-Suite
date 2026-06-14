@@ -24,7 +24,9 @@ export default function Analytics() {
   const { clientId } = useClientId();
 
   const fetchAnalytics = async () => {
-    if (!clientId) return;
+    if (!clientId) {
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/v1/analytics', {
@@ -56,8 +58,10 @@ export default function Analytics() {
   };
 
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    if (clientId) {
+      fetchAnalytics();
+    }
+  }, [clientId]);
 
   const runAIAnalysis = async () => {
     if (!stats) return;

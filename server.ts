@@ -61,7 +61,12 @@ async function startServer() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-client-id', 'idempotency-key', 'x-api-version', 'x-request-id', 'x-api-key']
   }));
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ 
+    limit: '50mb',
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf;
+    }
+  }));
   app.use(cookieParser());
 
   // Domain & Theme Middleware
@@ -69,99 +74,16 @@ async function startServer() {
     res.sendFile(path.join(process.cwd(), 'themes', 'platform-sdk.js'));
   });
 
+  // Serve widget.js explicitly just in case public folder isn't statically mounted yet
   app.get('/widget.js', (req, res) => {
-    const host = req.get('host');
-    const protocol = host?.includes('localhost') ? 'http' : 'https';
-    const baseUrl = `${protocol}://${host}`;
+    const p = path.join(process.cwd(), 'public', 'widget.js');
+    if (fs.existsSync(p)) return res.sendFile(p);
     
-    const script = `
-(function() {
-  const scriptTag = document.currentScript;
-  const targetDiv = document.getElementById('ai-assistant-widget') || document.getElementById('ominicsr');
-  const clientId = targetDiv?.getAttribute('client_id') || targetDiv?.getAttribute('client-id') || scriptTag?.getAttribute('data-client-id') || (new URLSearchParams(window.location.search)).get('clientId') || '';
-  
-  let detectedBaseUrl = '${baseUrl}';
-  if (scriptTag && scriptTag.src) {
-    try {
-      const url = new URL(scriptTag.src);
-      detectedBaseUrl = url.origin;
-    } catch(e) {}
-  }
-
-  const container = document.createElement('div');
-  container.id = 'ai-chat-widget';
-  
-  if (targetDiv) {
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.minHeight = '500px';
-    container.style.position = 'relative';
-    container.style.borderRadius = '16px';
-    container.style.overflow = 'hidden';
-    container.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
-    container.style.border = '1px solid #e5e7eb';
+    // Fallback if built
+    const pDist = path.join(process.cwd(), 'dist', 'widget.js');
+    if (fs.existsSync(pDist)) return res.sendFile(pDist);
     
-    const iframe = document.createElement('iframe');
-    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.minHeight = '500px';
-    iframe.style.border = 'none';
-    iframe.style.display = 'block';
-    
-    container.appendChild(iframe);
-    targetDiv.appendChild(container);
-  } else {
-    container.style.position = 'fixed';
-    container.style.bottom = '20px';
-    container.style.right = '20px';
-    container.style.zIndex = '999999';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'flex-end';
-    
-    const iframe = document.createElement('iframe');
-    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
-    iframe.style.width = '380px';
-    iframe.style.height = '500px';
-    iframe.style.border = 'none';
-    iframe.style.borderRadius = '16px';
-    iframe.style.boxShadow = '0 10px 25px rgba(0,0,0,0.12)';
-    iframe.style.display = 'none';
-    iframe.style.marginBottom = '10px';
-    
-    const toggle = document.createElement('button');
-    toggle.innerHTML = 'AI Assistant';
-    toggle.style.padding = '0 20px';
-    toggle.style.height = '50px';
-    toggle.style.borderRadius = '25px';
-    toggle.style.background = '#6366f1';
-    toggle.style.color = 'white';
-    toggle.style.border = 'none';
-    toggle.style.fontSize = '14px';
-    toggle.style.fontWeight = 'bold';
-    toggle.style.textTransform = 'uppercase';
-    toggle.style.letterSpacing = '0.05em';
-    toggle.style.cursor = 'pointer';
-    toggle.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
-    toggle.style.outline = 'none';
-    
-    toggle.onclick = () => {
-      if (iframe.style.display === 'none') {
-        iframe.style.display = 'block';
-      } else {
-        iframe.style.display = 'none';
-      }
-    };
-    
-    container.appendChild(iframe);
-    container.appendChild(toggle);
-    document.body.appendChild(container);
-  }
-})();
-    `;
-    res.set('Content-Type', 'application/javascript');
-    res.send(script);
+    res.status(404).send('Widget script not found');
   });
 
   app.use(async (req, res, next) => {

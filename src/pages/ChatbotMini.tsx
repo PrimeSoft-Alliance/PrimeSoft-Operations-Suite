@@ -222,13 +222,25 @@ export default function ChatbotMini() {
           </div>
         </div>
 
-        <button 
-          onClick={handleReset}
-          title="Reset chat"
-          className="p-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-xl transition-all"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleReset}
+            title="Reset chat"
+            className="p-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-xl transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+          
+          {window.self !== window.top && (
+            <button 
+              onClick={() => window.parent.postMessage('close-chat-widget', '*')}
+              title="Close chat"
+              className="p-2 bg-white/10 hover:bg-red-500/80 active:scale-95 text-white rounded-xl transition-all"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Messages */}

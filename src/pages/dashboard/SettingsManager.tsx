@@ -214,6 +214,7 @@ export default function SettingsManager() {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <h4 className="font-bold text-sm text-gray-800">Telegram Channel Setup</h4>
+              <p className="text-xs text-gray-500 mb-2">Create a bot on Telegram using BotFather, then paste the HTTP API Token here. The webhook will be registered automatically upon saving.</p>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bot Secret Token</label>
                 <input type="password" placeholder="123456:ABC-DEF..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.telegramBotToken || ''} onChange={e => updateField('telegramBotToken', e.target.value)} />
@@ -221,6 +222,7 @@ export default function SettingsManager() {
             </div>
             <div className="space-y-4">
               <h4 className="font-bold text-sm text-gray-800">WhatsApp Business API Setup</h4>
+              <p className="text-xs text-gray-500 mb-2">Provide your Meta Developer App credentials. Your shared Webhook URL is <strong>{window.location.origin}/v1/whatsapp/webhook</strong></p>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number ID</label>
                 <input type="text" placeholder="e.g. 1160962507103323" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.whatsappPhoneNumberId || ''} onChange={e => updateField('whatsappPhoneNumberId', e.target.value)} />

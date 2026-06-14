@@ -307,6 +307,20 @@ router.put('/settings', async (req, res) => {
     if (update.telegramBotToken !== undefined) {
       botUpdates.telegramBotToken = update.telegramBotToken;
       delete update.telegramBotToken;
+      
+      // Attempt to register webhook
+      if (botUpdates.telegramBotToken) {
+        try {
+          const axios = require('axios');
+          const baseUrl = process.env.APP_URL || ('https://' + req.get('host'));
+          await axios.post(`https://api.telegram.org/bot${botUpdates.telegramBotToken}/setWebhook`, {
+            url: `${baseUrl}/v1/telegram/webhook/${clientId}`
+          });
+          console.log(`Telegram webhook registered for ${clientId}`);
+        } catch (err: any) {
+          console.error(`Failed to register Telegram webhook for ${clientId}:`, err.response?.data || err.message);
+        }
+      }
     }
     if (update.whatsappPhoneNumberId !== undefined) {
       botUpdates.whatsappPhoneNumberId = update.whatsappPhoneNumberId;
