@@ -176,7 +176,8 @@ export default function ChatbotMini() {
       if (resData.success && resData.data?.text) {
         setMessages([...updatedMessages, { role: 'assistant', content: resData.data.text }]);
       } else {
-        throw new Error(`[Logic Error] ${resData.message || resData.error || 'Malformatted response from knowledge hub.'}`);
+        console.error('[CHATBOT] Unexpected API response structure:', resData);
+        throw new Error(`The assistant is having trouble phrasing a response right now. Please try asking your question again.`);
       }
     } catch (err: any) {
       console.error('Chat error:', err);
