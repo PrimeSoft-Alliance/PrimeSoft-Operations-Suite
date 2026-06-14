@@ -223,7 +223,7 @@ export default function SettingsManager() {
               <h4 className="font-bold text-sm text-gray-800">WhatsApp Business API Setup</h4>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number ID</label>
-                <input type="text" placeholder="e.g. 101234567890123" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.whatsappBusinessAccountId || ''} onChange={e => updateField('whatsappBusinessAccountId', e.target.value)} />
+                <input type="text" placeholder="e.g. 1160962507103323" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.whatsappPhoneNumberId || ''} onChange={e => updateField('whatsappPhoneNumberId', e.target.value)} />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Meta Permanent Access Token</label>

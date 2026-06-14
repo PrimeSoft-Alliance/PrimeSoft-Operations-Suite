@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { Client } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { checkAIQuota, recordAIUsage } from '../services/quotaService';
@@ -68,7 +69,30 @@ router.get('/webhook', async (req, res) => {
   }
 });
 
-router.post('/webhook', async (req, res) => {
+// Middleware to verify Meta signature
+const verifySignature = (req: any, res: express.Response, next: express.NextFunction) => {
+  const signature = req.headers['x-hub-signature-256'];
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
+
+  if (!signature || !appSecret) {
+    return res.status(401).send('Missing signature or app secret');
+  }
+
+  // Use the raw body captured by the express.json verify callback
+  const hmac = crypto.createHmac('sha256', appSecret);
+  const digest = Buffer.from(signature.toString().split('=')[1], 'hex');
+  const checksum = hmac.update(req.rawBody).digest();
+
+  if (!crypto.timingSafeEqual(digest, checksum)) {
+    return res.status(403).send('Invalid signature');
+  }
+  next();
+};
+
+router.post('/webhook', express.json({
+  verify: (req: any, res, buf) => { req.rawBody = buf; }
+}), verifySignature, // Call the middleware here
+async (req: any, res) => {
   const { entry } = req.body;
 
   if (!entry || !entry[0] || !entry[0].changes || !entry[0].changes[0].value.metadata) {

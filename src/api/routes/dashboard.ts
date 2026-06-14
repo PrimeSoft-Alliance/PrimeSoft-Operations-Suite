@@ -308,6 +308,10 @@ router.put('/settings', async (req, res) => {
       botUpdates.telegramBotToken = update.telegramBotToken;
       delete update.telegramBotToken;
     }
+    if (update.whatsappPhoneNumberId !== undefined) {
+      botUpdates.whatsappPhoneNumberId = update.whatsappPhoneNumberId;
+      delete update.whatsappPhoneNumberId;
+    }
     if (update.whatsappBusinessAccountId !== undefined) {
       botUpdates.whatsappBusinessAccountId = update.whatsappBusinessAccountId;
       delete update.whatsappBusinessAccountId;
