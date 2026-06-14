@@ -102,7 +102,7 @@ export default function Home() {
           <div className="font-black text-xl tracking-tighter text-white mb-6">OminiCSR</div>
           <p className="text-sm font-medium mb-6">Empowering businesses to make a difference.</p>
           <div className="flex justify-center gap-6 text-sm font-bold opacity-80">
-            <a href="#" className="hover:text-white transition-colors">Privacy</a>
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
             <a href="#" className="hover:text-white transition-colors">Terms</a>
             <a href="#" className="hover:text-white transition-colors">Contact</a>
           </div>

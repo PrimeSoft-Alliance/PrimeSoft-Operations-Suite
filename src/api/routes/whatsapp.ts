@@ -4,8 +4,33 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import { checkAIQuota, recordAIUsage } from '../services/quotaService';
 import { authMiddleware } from '../auth';
 import { tenantContextMiddleware } from '../middlewares/tenantContext';
+import { getGroqClient, DEFAULT_MODEL } from '../utils/ai';
+import { Settings } from '../models'; // Assuming Settings is here or needs to be properly imported
+import axios from 'axios';
 
 const router = express.Router();
+const groq = getGroqClient();
+
+// Function to send WhatsApp message
+async function sendWhatsAppMessage(phoneNumberId: string, accessToken: string, to: string, message: string) {
+  const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
+  try {
+    await axios.post(url, {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to,
+      type: 'text',
+      text: { body: message }
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (error) {
+    console.error(`Failed to send WhatsApp message to ${to}:`, error);
+  }
+}
 
 router.post('/setup', authMiddleware, tenantContextMiddleware, async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -50,7 +75,16 @@ router.post('/webhook', async (req, res) => {
     return res.status(200).send('OK'); // Ignore non-message events
   }
 
-  const phoneNumberId = entry[0].changes[0].value.metadata.phone_number_id;
+  const value = entry[0].changes[0].value;
+  const phoneNumberId = value.metadata.phone_number_id;
+
+  if (!value.messages) {
+      return res.status(200).send('OK');
+  }
+
+  const message = value.messages[0];
+  const senderPhoneNumber = message.from;
+  const messageText = message.text.body;
 
   // Find the tenant by their linked phone number ID
   const client = await Client.findOne({ whatsappPhoneNumberId: phoneNumberId });
@@ -67,7 +101,29 @@ router.post('/webhook', async (req, res) => {
     return res.status(200).send('OK'); 
   }
 
-  await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
+  // --- Process AI Chat ---
+  // For simplicity, we directly invoke AI logic similar to the chat route
+  const settings = await Settings.findOne({ clientId });
+  if (settings) {
+    // Call the Groq AI API directly
+    try {
+        const response = await groq.chat.completions.create({
+            model: DEFAULT_MODEL,
+            messages: [
+                { role: 'system', content: `You are the AI assistant for ${client.businessName || 'our business'}. ${settings.aiBehaviorInstructions || 'Be professional and helpful.'}` },
+                { role: 'user', content: messageText }
+            ],
+            temperature: 0.1
+        });
+        const aiResponse = response.choices[0].message.content || "I'm sorry, I couldn't process that.";
+        
+        // Send back to user
+        await sendWhatsAppMessage(phoneNumberId, client.whatsappAccessToken, senderPhoneNumber, aiResponse);
+        await recordAIUsage(clientId, 'chat', 'whatsapp', 'whatsapp', 1, { webhook: true });
+    } catch (err) {
+        console.error('AI chat error in WhatsApp:', err);
+    }
+  }
 
   res.status(200).send('OK');
 });

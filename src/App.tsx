@@ -5,6 +5,7 @@ import ChatbotMini from './pages/ChatbotMini';
 
 // Existing imports
 import Home from './pages/Home';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Onboarding from './pages/Onboarding';
 import Activate from './pages/Activate';
 
@@ -76,6 +77,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
       
       <Route path="/client/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
