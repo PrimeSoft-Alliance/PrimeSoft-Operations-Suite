@@ -2,10 +2,12 @@ import express from 'express';
 import { Client } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { checkAIQuota, recordAIUsage } from '../services/quotaService';
+import { authMiddleware } from '../auth';
+import { tenantContextMiddleware } from '../middlewares/tenantContext';
 
 const router = express.Router();
 
-router.post('/setup', async (req, res) => {
+router.post('/setup', authMiddleware, tenantContextMiddleware, async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   const clientId = (req as any).clientId;
   const { botToken } = req.body;

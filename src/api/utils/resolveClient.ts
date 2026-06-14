@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { Client, Domain, PlatformSettings } from '../models';
 
 async function validateClientIdExists(clientId: string): Promise<boolean> {
+  if (clientId === 'platform-prime') return true;
   try {
     const client = await Client.findOne({ clientId });
     return !!client;
@@ -13,13 +14,20 @@ async function validateClientIdExists(clientId: string): Promise<boolean> {
 export async function resolveClientId(req: Request): Promise<string | null> {
   const host = (req.headers.host || '').split(':')[0].trim();
   const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
-  let headerId = req.headers['x-client-id'];
-  let queryId = req.query.clientId;
-  let bodyId = req.body?.clientId;
+  const extractString = (val: any): string | undefined => {
+    if (!val) return undefined;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (val !== null && 'clientId' in val && typeof val.clientId === 'string') return val.clientId;
+      // If it's an array, take the first item
+      if (Array.isArray(val) && val.length > 0) return extractString(val[0]);
+    }
+    return undefined;
+  };
 
-  if (typeof headerId === 'object' && headerId !== null && 'clientId' in headerId) headerId = (headerId as any).clientId;
-  if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
-  if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
+  const headerId = extractString(req.headers['x-client-id']);
+  const queryId = extractString(req.query.clientId);
+  const bodyId = extractString(req.body?.clientId);
 
   // 1. Resolve via API Key
   if (apiKey) {
@@ -34,7 +42,7 @@ export async function resolveClientId(req: Request): Promise<string | null> {
   // 2. Resolve via direct IDs with Validation
   const cid = headerId || queryId || bodyId;
   const rawId = String(cid);
-  if (cid && cid !== 'undefined' && cid !== 'null' && cid !== '') {
+  if (cid && cid !== 'undefined' && cid !== 'null' && cid !== '' && cid !== '[object Object]') {
     const isValid = await validateClientIdExists(rawId);
     if (isValid) return rawId;
     else console.warn('[RESOLVE] Direct ID validation failed:', cid);
@@ -69,7 +77,9 @@ export async function resolveClientId(req: Request): Promise<string | null> {
       const pSettings = await PlatformSettings.findOne();
       const homepageId = pSettings?.homepageClientId || 'platform-prime';
       if (await validateClientIdExists(homepageId)) return homepageId;
-    } catch (e) {}
+    } catch (e) {
+      console.error('[RESOLVE] Platform fallback error:', e);
+    }
   }
 
   return null;

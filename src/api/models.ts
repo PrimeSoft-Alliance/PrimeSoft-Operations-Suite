@@ -195,6 +195,7 @@ const settingsSchema = new mongoose.Schema({
   favicon: { type: String },
   chatbotIcon: { type: String, default: 'Cpu' },
   chatbotTitle: { type: String, default: 'Assistant' },
+  chatbotSubtitle: { type: String, default: 'Digital Assistant' },
   chatbotAvatar: { type: String },
   chatbotPrimaryColor: { type: String, default: '#6366f1' },
   chatbotGreeting: { type: String, default: "Hello! I'm here to help you with any questions about our services or booking. How can I assist you today?" },
@@ -245,7 +246,7 @@ const clientSchema = new mongoose.Schema({
   businessType: { type: String },
   email: { type: String, required: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['client', 'superadmin'], default: 'client' },
+  role: { type: String, enum: ['client'], default: 'client' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: String, default: 'starter' },
   tier: { type: String, enum: ['starter', 'professional', 'enterprise'], default: 'starter' },
@@ -304,8 +305,7 @@ const onboardingRequestSchema = new mongoose.Schema({
   phone: { type: String },
   businessType: { type: String },
   details: { type: Map, of: String },
-  status: { type: String, enum: ['pending', 'reviewing', 'approved', 'rejected', 'info_needed'], default: 'pending' },
-  superadminNotes: { type: String },
+  status: { type: String, enum: ['pending', 'reviewing', 'approved', 'rejected', 'info_needed'], default: 'pending' }
 }, { timestamps: true });
 
 export const OnboardingRequest = mongoose.models.OnboardingRequest || mongoose.model<any>('OnboardingRequest', onboardingRequestSchema);
@@ -422,7 +422,7 @@ const leadSchema = new mongoose.Schema({
   contactPhone: { type: String },
   company: { type: String },
   jobTitle: { type: String },
-  data: { type: Map, of: mongoose.Schema.Types.Mixed },
+  data: { type: mongoose.Schema.Types.Mixed },
   tags: [{ type: String }],
   stage: { type: String, enum: ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'], default: 'New' },
   score: { type: Number, default: 0 },
@@ -437,7 +437,7 @@ const leadSchema = new mongoose.Schema({
      type: { type: String, enum: ['note', 'email', 'call', 'meeting', 'system', 'status_change'] },
      description: { type: String },
      date: { type: Date, default: Date.now },
-     metadata: { type: Map, of: mongoose.Schema.Types.Mixed }
+     metadata: { type: mongoose.Schema.Types.Mixed }
   }],
   lastActivity: { type: Date, default: Date.now },
   assignedTo: { type: String }
@@ -514,6 +514,7 @@ const ticketSchema = new mongoose.Schema({
   subject: { type: String, required: true },
   status: { type: String, enum: ['open', 'in_progress', 'resolved', 'closed'], default: 'open' },
   priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'low' },
+  hasUnreadMessages: { type: Boolean, default: false },
   assignedTo: { type: String }, // support agent email or ID
   source: { type: String, default: 'chat' } // chat, email, web
 }, { timestamps: true });
@@ -577,19 +578,23 @@ const tierDefinitionSchema = new mongoose.Schema({
 
 export const TierDefinition = mongoose.models.TierDefinition || mongoose.model<any>('TierDefinition', tierDefinitionSchema);
 
-<<<<<<< HEAD
-// AI Training Knowledge Base - exclusively for superadmin tenant 'platform-prime'
-const aiTrainingKnowledgeSchema = new mongoose.Schema({
-  clientId: { type: String, required: true, default: 'platform-prime' }, // Always superadmin
-  category: { type: String, required: true }, // e.g., 'business', 'services', 'process', 'faq'
-  title: { type: String, required: true },
-  content: { type: String, required: true }, // Knowledge content
-  tags: [{ type: String }],
-  status: { type: String, enum: ['active', 'archived'], default: 'active' },
-  source: { type: String, default: 'manual' } // 'manual' or 'import'
-}, { timestamps: true, indexes: [{ clientId: 1, status: 1 }, { clientId: 1, category: 1 }] });
+const visitSchema = new mongoose.Schema({
+  clientId: { type: String, required: true },
+  sessionId: { type: String, required: true },
+  page: { type: String, default: 'Home' },
+  route: { type: String, default: '/' },
+  referrer: { type: String },
+  userAgent: { type: String },
+  interactedWithBot: { type: Boolean, default: false },
+  location: {
+    city: String,
+    country: String,
+    region: String,
+    ip: String
+  }
+}, { timestamps: true });
 
-export const AITrainingKnowledge = mongoose.models.AITrainingKnowledge || mongoose.model<any>('AITrainingKnowledge', aiTrainingKnowledgeSchema);
-=======
->>>>>>> origin/main
+export const Visit = mongoose.models.Visit || mongoose.model<any>('Visit', visitSchema);
+
+
 

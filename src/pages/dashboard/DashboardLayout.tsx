@@ -1,6 +1,6 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Globe, Home, User, Mail, Clock } from 'lucide-react';
+import { CalendarDays, MessageSquare, Settings, LogOut, LayoutDashboard, Cpu, Menu, ChevronLeft, ChevronRight, FileText, Users, Zap, Home, User, Mail, Clock, Brain, BarChart3 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import ProfileModal from '../../components/ProfileModal';
 
@@ -22,6 +22,9 @@ export default function DashboardLayout() {
       .then(data => {
         if (!data.authenticated) navigate('/client/login');
         else {
+          if (data.clientId) {
+            localStorage.setItem('ps_client_id', data.clientId);
+          }
           setUser(data);
           setLoading(false);
         }
@@ -56,21 +59,21 @@ export default function DashboardLayout() {
 
   const handleLogout = async () => {
     await fetch('/v1/auth/logout', { method: 'POST' });
-    navigate('/client/login');
+    navigate('/');
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   const links = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
     { name: 'Inquiries', path: '/dashboard/inquiries', icon: Mail },
     { name: 'Bookings', path: '/dashboard/bookings', icon: CalendarDays },
     { name: 'Leads Stream', path: '/dashboard/leads', icon: Users },
-    { name: 'Operations', path: '/dashboard/nexus', icon: Zap },
     { name: 'Ticketing', path: '/dashboard/tickets', icon: MessageSquare },
     { name: 'Availability', path: '/dashboard/availability', icon: Clock },
     { name: 'API Docs', path: '/dashboard/developer', icon: Cpu },
-    { name: 'Website', path: '/dashboard/website', icon: Globe },
+    { name: 'AI Knowledge', path: '/dashboard/knowledge', icon: Brain },
     { name: 'Settings', path: '/dashboard/settings', icon: Settings },
   ];
 
@@ -95,7 +98,7 @@ export default function DashboardLayout() {
             <div className="bg-indigo-600 p-1.5 rounded-lg text-white shrink-0">
               <Cpu className="w-5 h-5" />
             </div>
-            {(!isSidebarCollapsed || isMobileMenuOpen) && <span className="font-bold text-lg text-white tracking-tight truncate">Nexus Platform</span>}
+            {(!isSidebarCollapsed || isMobileMenuOpen) && <span className="font-bold text-lg text-white tracking-tight truncate">OminiCSR</span>}
           </div>
           <button 
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -155,13 +158,6 @@ export default function DashboardLayout() {
             </h2>
           </div>
           <div className="flex items-center gap-4">
-             <Link 
-               to="/" 
-               title="Go to Homepage" 
-               className="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 border border-slate-100 rounded-xl transition-all"
-             >
-               <Home className="w-5 h-5" />
-             </Link>
              <div 
                onClick={() => setIsProfileOpen(true)}
                className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-indigo-50 hover:border-indigo-100 transition-all group"

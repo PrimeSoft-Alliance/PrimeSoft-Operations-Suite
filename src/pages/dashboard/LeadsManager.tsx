@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useClientId } from '../../lib/useClientId';
+import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Download, Trash2, Mail, Phone, Tag, MapPin, Calendar, ExternalLink, Zap, Database, KanbanSquare, List, GripHorizontal, CheckCircle2, Building2, User, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../../lib/utils';
@@ -9,22 +10,21 @@ const STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Clo
 
 export default function LeadsManager() {
   const { clientId: cidHook } = useClientId();
+  const navigate = useNavigate();
   const [leads, setLeads] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<'kanban'|'list'>('kanban');
 
-  const isSuperAdminPath = window.location.pathname.startsWith('/superadmin');
+        
 
   useEffect(() => {
-    if (cidHook || isSuperAdminPath) fetchLeads();
-  }, [cidHook, isSuperAdminPath]);
+    if (cidHook) fetchLeads();
+  }, [cidHook]);
 
   const fetchLeads = async () => {
     try {
-      const targetCid = isSuperAdminPath ? 'all' : cidHook;
-      const apiPath = isSuperAdminPath ? '/v1/sys-admin/leads' : '/v1/leads';
-      const res = await fetch(apiPath, { headers: { 'x-client-id': targetCid } });
+      const res = await fetch('/v1/leads', { headers: { 'x-client-id': cidHook } });
       const data = await res.json();
       
       const isEnveloped = data && typeof data === 'object' && 'success' in data;
@@ -62,16 +62,35 @@ export default function LeadsManager() {
 
   return (
     <div className="h-[calc(100vh-6rem)] -m-6 flex flex-col bg-slate-50 relative overflow-hidden animate-in fade-in duration-300">
-       <div className="p-8 border-b border-slate-200 bg-white shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 z-10 relative">
-          <div className="space-y-1">
+       <div className="p-8 border-b border-slate-200 bg-white shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 z-10 relative">
+          <div className="space-y-2">
              <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-4">
-                Leads & Public Inquiries <span className="bg-indigo-100 text-indigo-700 text-xs px-3 py-1 rounded-full uppercase tracking-widest">{filteredLeads.length} Records</span>
+                Leads Manager <span className="bg-indigo-100 text-indigo-700 text-xs px-3 py-1 rounded-full uppercase tracking-widest">{filteredLeads.length} Records</span>
              </h1>
-             <p className="text-slate-500 font-medium">Command center for structural opportunity ingestion, public form inquiries, and site contacts.</p>
+             <p className="text-slate-500 font-medium text-xs">Command center for structural opportunity ingestion, sales pipelines, and active CRM leads.</p>
+             
+             {/* Standalone Route Navigation Links */}
+             <div className="flex flex-wrap gap-2 pt-1">
+                <span className="text-xs bg-indigo-500 text-white font-bold px-3 py-1 rounded-lg shadow-sm">CRM Leads</span>
+                <button 
+                   onClick={() => navigate('/dashboard/bookings')}
+                   className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1 rounded-lg transition-all flex items-center gap-1.5"
+                >
+                   Bookings Page
+                   <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-sans">Standalone</span>
+                </button>
+                <button 
+                   onClick={() => navigate('/dashboard/inquiries')}
+                   className="text-xs bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 font-bold px-3 py-1 rounded-lg transition-all flex items-center gap-1.5"
+                >
+                   Public Inquiries Page
+                   <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md font-sans">Standalone</span>
+                </button>
+             </div>
           </div>
           
-          <div className="flex items-center gap-4 w-full md:w-auto">
-             <div className="relative flex-1 md:w-72">
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+             <div className="relative flex-1 sm:w-72">
                 <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                    type="text" 
@@ -242,17 +261,41 @@ export default function LeadsManager() {
                             <div className="bg-slate-50 rounded-[2rem] p-6 border border-slate-100 grid grid-cols-2 gap-6">
                                <div className="col-span-2">
                                   <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Source Node</div>
-                                  <div className="font-bold text-slate-900">{selectedLead.formName || selectedLead.source}</div>
+                                  <div className="font-bold text-slate-900 uppercase tracking-widest">{selectedLead.formName || selectedLead.source}</div>
                                </div>
-                               {Object.entries(selectedLead.data||{}).map(([k,v]) => {
-                                  if(['firstName','lastName','email','phone'].includes(k)) return null;
-                                  return (
-                                     <div key={k} className="col-span-2 sm:col-span-1 border-t border-slate-200 pt-4">
-                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{k.replace(/([A-Z])/g,' $1').trim()}</div>
-                                        <div className="font-bold text-slate-900 text-sm leading-relaxed">{String(v)}</div>
-                                     </div>
-                                  )
-                               })}
+                               {(() => {
+                                  let displayData: Record<string, any> = {};
+                                  if (selectedLead && selectedLead.data) {
+                                    if (typeof selectedLead.data === 'string') {
+                                      try { displayData = JSON.parse(selectedLead.data); } catch (e) { displayData = { "Raw Data": selectedLead.data }; }
+                                    } else if (typeof selectedLead.data === 'object' && selectedLead.data !== null) {
+                                      if (selectedLead.data instanceof Map) {
+                                         displayData = Object.fromEntries(selectedLead.data.entries());
+                                      } else {
+                                         displayData = { ...selectedLead.data };
+                                      }
+                                    }
+                                  }
+
+                                  const formatDisplayValue = (val: any): string => {
+                                    if (val === null || val === undefined) return 'N/A';
+                                    if (Array.isArray(val)) return val.join(', ');
+                                    if (typeof val === 'object') {
+                                      try { return JSON.stringify(val); } catch (e) { return String(val); }
+                                    }
+                                    return String(val);
+                                  };
+
+                                  return Object.entries(displayData).map(([k,v]) => {
+                                     if(['firstName','lastName','email','phone', 'formId', 'formName'].includes(k)) return null;
+                                     return (
+                                        <div key={k} className="col-span-2 sm:col-span-1 border-t border-slate-200 pt-4">
+                                           <div className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">{k.replace(/([A-Z])/g,' $1').replace(/_/g, ' ').trim()}</div>
+                                           <div className="font-bold text-slate-900 text-sm leading-relaxed whitespace-pre-wrap">{formatDisplayValue(v)}</div>
+                                        </div>
+                                     );
+                                  });
+                               })()}
                             </div>
                          </div>
 

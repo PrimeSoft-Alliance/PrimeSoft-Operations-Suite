@@ -134,7 +134,46 @@ export default function ClientBookings() {
                 </button>
               </div>
 
-              <div className="p-8 space-y-6">
+              <div className="p-8 space-y-6 animate-in fade-in duration-300">
+                {selectedBooking.leadStage && (
+                  <div className="bg-gradient-to-r from-teal-50/80 to-emerald-50/80 p-6 rounded-[2rem] border border-teal-100/50 space-y-4">
+                    <div className="text-[10px] font-black text-teal-600 uppercase tracking-widest flex items-center gap-2">
+                      <Briefcase className="w-3.5 h-3.5 animate-pulse" />
+                      Aggregated Lead Profile Data
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-black text-teal-600 uppercase tracking-tighter mb-1">Lead Stage</label>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-100 text-teal-800">
+                          {selectedBooking.leadStage}
+                        </span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-teal-600 uppercase tracking-tighter mb-1">Lead Score</label>
+                        <div className="text-sm font-bold text-slate-900">{selectedBooking.leadScore ?? 50} / 100</div>
+                      </div>
+                      {selectedBooking.assignedTo && (
+                        <div>
+                          <label className="block text-[10px] font-black text-teal-600 uppercase tracking-tighter mb-1">Assigned Executive</label>
+                          <div className="text-xs font-bold text-slate-700">{selectedBooking.assignedTo}</div>
+                        </div>
+                      )}
+                      {selectedBooking.leadTags && selectedBooking.leadTags.length > 0 && (
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-black text-teal-600 uppercase tracking-tighter mb-1">Sync Tags</label>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {selectedBooking.leadTags.map((tag: string, i: number) => (
+                              <span key={i} className="px-2 py-0.5 bg-white border border-slate-100 text-[10px] font-mono text-slate-500 rounded-lg">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                  <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-3">
                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer</div>

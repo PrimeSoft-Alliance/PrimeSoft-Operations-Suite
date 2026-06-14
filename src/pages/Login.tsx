@@ -3,27 +3,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Cpu, Mail, Lock, Loader2, AlertCircle, Rocket } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export default function Login({ loginRole = 'client' }: { loginRole?: 'client' | 'superadmin' }) {
+export default function Login() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/v1/auth/status-info')
-      .then(res => res.json())
-      .then(data => {
-        if (data.setupRequired) {
-          navigate('/setup', { replace: true });
-        } else {
-          return fetch('/v1/auth/check');
-        }
-      })
+    fetch('/v1/auth/check')
       .then(res => res?.json())
       .then(data => {
         if (data?.authenticated) {
-          if (data.role === 'superadmin') navigate('/superadmin', { replace: true });
-          else navigate('/dashboard', { replace: true });
+          navigate('/dashboard', { replace: true });
         }
       })
       .catch(console.error);
@@ -38,12 +29,14 @@ export default function Login({ loginRole = 'client' }: { loginRole?: 'client' |
       const res = await fetch('/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, role: loginRole })
+        body: JSON.stringify(formData)
       });
       const data = await res.json();
       if (data.success) {
-        if (data.role === 'superadmin') navigate('/superadmin');
-        else navigate('/dashboard');
+        if (data.clientId) {
+          localStorage.setItem('ps_client_id', data.clientId);
+        }
+        navigate('/dashboard');
       } else {
         setError(data.error || 'Invalid credentials');
       }
@@ -62,11 +55,11 @@ export default function Login({ loginRole = 'client' }: { loginRole?: 'client' |
         className="max-w-[400px] w-full bg-white rounded-xl shadow-lg border border-slate-200 p-8"
       >
         <div className="text-center mb-8">
-          <Link to="/" className="inline-block text-2xl font-bold text-indigo-600 mb-2 hover:text-indigo-700 transition">
-            Nexus Platform<span className="text-gray-900">.</span>
+          <Link to="/" className="inline-block text-2xl font-black text-indigo-900 border-2 border-indigo-900 px-3 py-1 rounded-lg mb-4 hover:bg-slate-50 transition">
+            OminiCSR
           </Link>
           <h1 className="text-xl font-bold text-gray-900">
-            {loginRole === 'superadmin' ? 'Admin Portal' : 'Client Portal'}
+            Client Portal
           </h1>
         </div>
 

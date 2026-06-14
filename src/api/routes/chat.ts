@@ -1,9 +1,10 @@
 import express from 'express';
-import { Groq } from 'groq-sdk';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { EnvelopeResponse } from '../middlewares/envelope';
-import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest, Invite, PlatformSettings, AITrainingKnowledge } from '../models';
+import { Settings, UsageStats, AILog, Booking, Client, OnboardingRequest } from '../models';
+import { getGroqClient, DEFAULT_MODEL } from '../utils/ai';
+
 import { startOfDay, endOfDay, format, addMinutes, isAfter } from 'date-fns';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
@@ -12,9 +13,7 @@ import { resolveClientId } from '../utils/resolveClient';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || 'dummy_key',
-});
+const groq = getGroqClient();
 
 router.get('/widget.js', (req, res) => {
   const host = req.get('host');
@@ -24,50 +23,87 @@ router.get('/widget.js', (req, res) => {
   const script = `
 (function() {
   const scriptTag = document.currentScript;
-  const clientId = scriptTag?.getAttribute('data-client-id') || (new URLSearchParams(window.location.search)).get('clientId') || '';
+  const targetDiv = document.getElementById('ominicsr');
+  const clientId = targetDiv?.getAttribute('client_id') || targetDiv?.getAttribute('client-id') || scriptTag?.getAttribute('data-client-id') || (new URLSearchParams(window.location.search)).get('clientId') || '';
   
+  let detectedBaseUrl = '${baseUrl}';
+  if (scriptTag && scriptTag.src) {
+    try {
+      const url = new URL(scriptTag.src);
+      detectedBaseUrl = url.origin;
+    } catch(e) {}
+  }
+
   const container = document.createElement('div');
   container.id = 'ai-chat-widget';
-  container.style.position = 'fixed';
-  container.style.bottom = '20px';
-  container.style.right = '20px';
-  container.style.zIndex = '999999';
   
-  const iframe = document.createElement('iframe');
-  iframe.src = '${baseUrl}/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
-  iframe.style.width = '400px';
-  iframe.style.height = '600px';
-  iframe.style.border = 'none';
-  iframe.style.borderRadius = '16px';
-  iframe.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
-  iframe.style.display = 'none';
-  
-  const toggle = document.createElement('button');
-  toggle.innerHTML = 'Agent Chat';
-  toggle.style.padding = '0 20px';
-  toggle.style.height = '50px';
-  toggle.style.borderRadius = '25px';
-  toggle.style.background = '#6366f1';
-  toggle.style.color = 'white';
-  toggle.style.border = 'none';
-  toggle.style.fontSize = '14px';
-  toggle.style.fontWeight = 'black';
-  toggle.style.textTransform = 'uppercase';
-  toggle.style.letterSpacing = '0.05em';
-  toggle.style.cursor = 'pointer';
-  toggle.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
-  
-  toggle.onclick = () => {
-    if (iframe.style.display === 'none') {
-      iframe.style.display = 'block';
-    } else {
-      iframe.style.display = 'none';
-    }
-  };
-  
-  container.appendChild(iframe);
-  container.appendChild(toggle);
-  document.body.appendChild(container);
+  if (targetDiv) {
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.minHeight = '500px';
+    container.style.position = 'relative';
+    container.style.borderRadius = '16px';
+    container.style.overflow = 'hidden';
+    container.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
+    container.style.border = '1px solid #e5e7eb';
+    
+    const iframe = document.createElement('iframe');
+    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.minHeight = '500px';
+    iframe.style.border = 'none';
+    iframe.style.display = 'block';
+    
+    container.appendChild(iframe);
+    targetDiv.appendChild(container);
+  } else {
+    container.style.position = 'fixed';
+    container.style.bottom = '20px';
+    container.style.right = '20px';
+    container.style.zIndex = '999999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'flex-end';
+    
+    const iframe = document.createElement('iframe');
+    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
+    iframe.style.width = '380px';
+    iframe.style.height = '500px';
+    iframe.style.border = 'none';
+    iframe.style.borderRadius = '16px';
+    iframe.style.boxShadow = '0 10px 25px rgba(0,0,0,0.12)';
+    iframe.style.display = 'none';
+    iframe.style.marginBottom = '10px';
+    
+    const toggle = document.createElement('button');
+    toggle.innerHTML = 'AI Assistant';
+    toggle.style.padding = '0 20px';
+    toggle.style.height = '50px';
+    toggle.style.borderRadius = '25px';
+    toggle.style.background = '#6366f1';
+    toggle.style.color = 'white';
+    toggle.style.border = 'none';
+    toggle.style.fontSize = '14px';
+    toggle.style.fontWeight = 'bold';
+    toggle.style.textTransform = 'uppercase';
+    toggle.style.letterSpacing = '0.05em';
+    toggle.style.cursor = 'pointer';
+    toggle.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
+    toggle.style.outline = 'none';
+    
+    toggle.onclick = () => {
+      if (iframe.style.display === 'none') {
+        iframe.style.display = 'block';
+      } else {
+        iframe.style.display = 'none';
+      }
+    };
+    
+    container.appendChild(iframe);
+    container.appendChild(toggle);
+    document.body.appendChild(container);
+  }
 })();
   `;
   res.set('Content-Type', 'application/javascript');
@@ -88,7 +124,7 @@ router.post('/', async (req, res) => {
     let userRole = 'visitor';
     let userEmail = null;
     let decoded: any = null;
-    const token = req.cookies?.admin_token;
+    const token = req.cookies?.auth_token;
     if (token) {
        try {
           decoded = jwt.verify(token, JWT_SECRET);
@@ -98,8 +134,8 @@ router.post('/', async (req, res) => {
     }
 
     // Global maintenance check
-    const platformSettings = await PlatformSettings.findOne();
-    if (platformSettings?.maintenanceMode && userRole !== 'superadmin') {
+    const platformSettings = null;
+    if (platformSettings?.maintenanceMode) {
       return res.status(503).json({ 
         message: 'The platform is currently undergoing scheduled maintenance. Please try again later or contact support.',
         maintenance: true 
@@ -114,7 +150,7 @@ router.post('/', async (req, res) => {
         businessName: 'Platform Central',
         email: 'central@platform.com',
         password: 'platform_prime_placeholder',
-        role: 'superadmin',
+        role: 'client',
         status: 'active'
       });
     }
@@ -144,7 +180,6 @@ router.post('/', async (req, res) => {
     }
 
     let settings = await Settings.findOne({ clientId });
-
     if (!settings && clientId === 'platform-prime') {
       settings = await Settings.create({
         clientId: 'platform-prime',
@@ -155,6 +190,9 @@ router.post('/', async (req, res) => {
     }
 
     if (!settings) return res.status(500).json({ error: 'Settings not found', message: "Configuration for this business is incomplete." });
+    
+    // LOG CONTEXT FOR DEBUGGING
+    console.log(`[CHAT_AI] [${clientId}] Settings Loaded: Instructions Length: ${settings.aiBehaviorInstructions?.length}, FAQs: ${settings.faqs?.length}, Services: ${settings.services?.length}`);
     
     // Get actual limit from Client record
     let messageLimit = clientRecord?.aiMessageLimit || 1000;
@@ -167,14 +205,7 @@ router.post('/', async (req, res) => {
     }
 
     // ... handle onboarding email notifications ...
-    const notifySuperadmin = async (requestId: string, businessName: string, email: string) => {
-        const superAdmin = await Client.findOne({ role: 'superadmin' });
-        if (superAdmin) {
-          sendEmail(superAdmin.email, 'New Onboarding Request Received', 
-            `A new onboarding request has been submitted by ${businessName} (${email}).\nView it in the superadmin dashboard.`,
-            undefined, clientId
-          );
-        }
+    const notifyAdmin = async (requestId: string, businessName: string, email: string) => {
         // Send Confirmation to User
         sendEmail(email, 'Application Received', 
           `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
@@ -194,85 +225,43 @@ router.post('/', async (req, res) => {
       ? `The user's name is ${userFirstName}. You MUST refer to them by their first name frequently (e.g. "Sure, ${userFirstName}...", "Great question, ${userFirstName}") to maintain a personalized technical session.` 
       : 'The user has not provided a name yet.';
 
-    // Load AI training knowledge for superadmin landing page
-    let trainingKnowledgeSection = '';
-    if (clientId === 'platform-prime') {
-      const trainingData = await AITrainingKnowledge.find({ clientId, status: 'active' }).lean();
-      if (trainingData && trainingData.length > 0) {
-        const groupedByCategory = trainingData.reduce((acc: any, item: any) => {
-          if (!acc[item.category]) acc[item.category] = [];
-          acc[item.category].push(`- ${item.title}: ${item.content}`);
-          return acc;
-        }, {});
-        
-        trainingKnowledgeSection = '\n\n## SUPERADMIN AI TRAINING KNOWLEDGE\n';
-        Object.entries(groupedByCategory).forEach(([category, items]: [string, any]) => {
-          trainingKnowledgeSection += `\n### ${category}\n${(items as string[]).join('\n')}`;
-        });
-      }
-    }
-
     const systemPrompt = `
-      # SYSTEM INSTRUCTIONS — ${clientRecord.businessName} AI ASSISTANT
-
-      You are the official AI assistant for ${clientRecord.businessName}.
-      You assist website visitors, clients, and administrators.
-
-      ## THE "RAG" PRINCIPLE (Retrieval-Augmented Generation)
-      - ALWAYS lookup information before answering.
-      - NEVER guess services, prices, or business details.
-      - Your knowledge is STRICTLY limited to the "CONTEXT AWARENESS" section below and tool outputs.
-      - If a user asks about your business, check the "CONTEXT AWARENESS" section first.
-      - If the answer is not in "CONTEXT AWARENESS" AND "External Knowledge Source" is ENABLED, use the "query_external_db" tool to search for the answer.
-      - If information is missing from both, say: "I don't have those specific details right now, but I can have a team member contact you." NEVER make things up.
-
-      ## BOOKING PROTOCOL (STRICT SEQUENTIAL GATHERING)
-      Follow this exact order for bookings. Do NOT skip steps or ask for multiple details in one message.
-      1. **Date:** Ask when they'd like to visit.
-      2. **Availability:** Once a date is provided, call 'check_availability' IMMEDIATELY. Show slots in 12-hour AM/PM format (e.g., 10:30 AM).
-      3. **Time Slot:** Ask which specific time slot they prefer.
-      4. **Full Name:** Ask for their legal full name.
-      5. **Phone:** Ask for their contact phone number.
-      6. **Email:** Ask for their email address for confirmation.
-      7. **Service:** Ask which service they want from the "Services Offered" list.
-         - **CRITICAL:** If the user says "none", "no", "not now", or is unsure, you MUST NOT call 'book_appointment'. Stop and offer general information or human support.
-      8. **Final Confirmation:** Only call 'book_appointment' once ALL details are explicitly confirmed by the user. Do not assume any missing fields.
-
-      ## FORMATTING & PRIVACY RULES
-      - NEVER show technical IDs (e.g., 'bookingId', '6a076...') or "ObjectId".
-      - TIME: Always use 12-hour AM/PM format in chat.
-      - Success Message: "Fantastic! Your appointment for [Service] on [Date] at [Time] is confirmed. You'll receive an email shortly. Is there anything else I can help you with?"
-      - Farewell: If the user is finished, close with "Have a lovely day!" or "It's been a pleasure. Take care!"
-
-      ## PERSONA
-      - You are a professional, warm, and highly efficient receptionist.
-      - Natural language only. No robotic scripts.
-      - Be warm and attentive.
-
-      ## MULTI-TENANT SAFETY
-      - Current clientId: ${clientId}.
-      - EXCLUSIVELY use data for this clientId. Isolation is critical.
-
-      ## CONTEXT AWARENESS (Primary Knowledge Base)
-      - Current Date/Time: ${new Date().toISOString()}
-      - Today's Day: ${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date())}
-      - Note: Use "Today's Day" as your anchor for relative terms like "tomorrow" (+1 day), "next Monday", etc.
-      - Client Name: ${settings.businessName}
-      - Contact: ${settings.contactEmail}, ${settings.contactPhone}
-      - Business Bio: ${settings.branding?.aboutText || settings.aboutText || "Professional business dedicated to excellence."}
-      - Services Offered: ${settings.services.map((s: any) => `${s.name} ($${s.price}): ${s.description}`).join(' | ')}
-      - FAQs: ${settings.faqs.map((f: any) => `Q: ${f.question} -> A: ${f.answer}`).join('\n')}
-      ${trainingKnowledgeSection}
+      # ROLE & IDENTITY
+      You are "${settings.chatbotTitle || 'Assistant'}", the official representative for ${clientRecord.businessName}.
       
-      Page Context:
-      - Page: ${pageContext?.page || 'Home'}
-      - URL: ${pageContext?.route || '/'}
-      - User Access: ${userRole}${chatUserEmail || userEmail || decoded?.email ? ` (${chatUserEmail || userEmail || decoded?.email})` : ''}
+      ## CORE DIRECTIVES (PRIORITY 1)
+      ${settings.aiBehaviorInstructions || "Be professional and encourage bookings."}
+      - Always lead with your assigned identity and tone.
+      - Isolation: Current clientId is ${clientId}. ONLY use knowledge for this client.
+      
+      ## THE "KNOWLEDGE FIRST" PRINCIPLE
+      - Check "BUSINESS KNOWLEDGE" below for every answer.
+      - NEVER guess services, prices, or business details.
+      - If internal knowledge is insufficient AND "External Knowledge Source" is ENABLED, use "query_external_db".
+      - External Knowledge Status: ${settings.externalDbConfig?.enabled ? 'CONNECTED & ENABLED' : 'DISABLED'}
+      - If you still don't know, say: "I don't have those specific details right now, but I can have a team member contact you."
+      
+      ## BUSINESS KNOWLEDGE
+      - Client Name: ${settings.businessName}
+      - Bio: ${settings.branding?.aboutText || settings.aboutText || "Professional business dedicated to excellence."}
+      - Contact: ${settings.contactEmail}, ${settings.contactPhone}
+      - Services: ${settings.services.map((s: any) => `${s.name} ($${s.price}): ${s.description}`).join(' | ')}
+      - FAQs: ${settings.faqs.map((f: any) => `Q: ${f.question} -> A: ${f.answer}`).join('\n')}
+      - Today's Date: ${new Date().toISOString()} (${new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date())})
 
-      ## BEHAVIOR GUIDELINES
-      - Instructions: ${settings.aiBehaviorInstructions || "Be professional and encourage bookings."}
-      - External Knowledge Source: ${settings.externalDbConfig?.enabled ? 'CONNECTED & ENABLED' : 'DISABLED'}
+      ## PERSONALIZATION
       - ${nameInstruction}
+      - Refer to users by their first name frequently to maintain engagement.
+
+      ## BOOKING FLOW
+      Follow strictly: Date -> check_availability -> Time Slot -> Full Name -> Phone -> Email -> Service -> book_appointment.
+      - Show slots in 12h format (e.g. 10:30 AM).
+      - Do NOT call book_appointment until ALL fields are confirmed.
+      - If user says "No" to a service, do NOT book.
+
+      ## PRIVACY & SAFETY
+      - NO technical IDs (bookingId, ObjectId, etc).
+      - NO robotic scripts—be conversational but professional.
     `;
 
     const tools = [
@@ -395,358 +384,343 @@ router.post('/', async (req, res) => {
       }
     ];
 
-    const messages = [
+    const messages: any[] = [
       { role: 'system', content: systemPrompt },
-      ...history.map((h: any) => ({ role: h.role, content: h.content })),
+      ...history.map((h: any) => ({ role: h.role === 'model' ? 'assistant' : h.role, content: h.content })),
       { role: 'user', content: message }
     ];
 
-    let aiResponse = "";
-    if (process.env.GROQ_API_KEY) {
-      let runComplete = false;
-      let currentMessages = [...messages];
-      let iterations = 0;
-      const CHAT_MODEL = 'llama-3.3-70b-versatile'; // Standard versatile model for tool use and reasoning
-      
+    let aiResponse = "I'm having difficulty processing that right now. Could you please rephrase or try again?";
+
+    const executeTool = async (name: string, args: any): Promise<string> => {
       try {
-        while (!runComplete && iterations < 5) {
-          iterations++;
-          const chatCompletion = await groq.chat.completions.create({
-            messages: currentMessages,
-            model: CHAT_MODEL,
-            tools: tools as any,
-            tool_choice: "auto",
-            temperature: 0, 
+        console.log(`[CHAT_AI] Executing tool: ${name}`);
+        if (name === 'check_availability') {
+          const { date, serviceName } = args;
+          const dStr = String(date);
+          let dParts = dStr.split('-').map(Number);
+          
+          if (dParts.length !== 3 || isNaN(dParts[0])) {
+             return JSON.stringify({ error: "Invalid date format. Use YYYY-MM-DD." });
+          } else {
+            const reqDate = new Date(`${dStr}T12:00:00Z`);
+            const dayOfWeek = reqDate.getUTCDay();
+            const workingHour = settings.workingHours.find((wh: any) => wh.day === dayOfWeek);
+
+            if (!workingHour || !workingHour.isOpen) {
+              return JSON.stringify({ 
+                success: false, 
+                availableSlots: [], 
+                reason: `Closed on ${format(reqDate, 'EEEE')}. Our typical hours are from ${workingHour?.openTime || '8:00'} to ${workingHour?.closeTime || '17:00'}.` 
+              });
+            } else {
+              const openTime = workingHour.openTime || '08:00';
+              const closeTime = workingHour.closeTime || '17:00';
+              const openParts = openTime.split(':').map(Number);
+              const closeParts = closeTime.split(':').map(Number);
+              
+              let currentSlot = new Date(reqDate);
+              currentSlot.setHours(openParts[0], openParts[1], 0, 0);
+
+              const endTime = new Date(reqDate);
+              endTime.setHours(closeParts[0], closeParts[1], 0, 0);
+
+              const selectedService = settings.services.find((s: any) => s.name === serviceName);
+              const slotDuration = selectedService?.durationMinutes || settings.slotDurationMinutes || 60;
+              const buffer = settings.bufferTimeMinutes || 30;
+
+              const dayStart = startOfDay(reqDate);
+              const dayEnd = endOfDay(reqDate);
+              const existingBookings = await Booking.find({
+                clientId,
+                preferredDate: { $gte: dayStart, $lte: dayEnd },
+                status: { $in: ['pending', 'confirmed'] }
+              });
+
+              const availableSlots = [];
+              while (currentSlot < endTime) {
+                const slotEnd = addMinutes(currentSlot, slotDuration);
+                if (isAfter(slotEnd, endTime)) break;
+
+                const slotStartStr = format(currentSlot, 'HH:mm');
+                const slotEndStr = format(slotEnd, 'HH:mm');
+
+                const hasOverlap = existingBookings.some(b => {
+                  return (slotStartStr >= b.preferredStartTime && slotStartStr < b.preferredEndTime) ||
+                         (slotEndStr > b.preferredStartTime && slotEndStr <= b.preferredEndTime) ||
+                         (slotStartStr <= b.preferredStartTime && slotEndStr >= b.preferredEndTime);
+                });
+
+                if (!hasOverlap) {
+                  const startTime12 = format(currentSlot, 'hh:mm a');
+                  const endTime12 = format(slotEnd, 'hh:mm a');
+                  availableSlots.push({ 
+                    startTime: slotStartStr, 
+                    endTime: slotEndStr,
+                    displayTime: `${startTime12} - ${endTime12}`
+                  });
+                }
+                currentSlot = addMinutes(currentSlot, slotDuration + buffer);
+              }
+
+              if (availableSlots.length === 0) {
+                return JSON.stringify({ 
+                  success: false, 
+                  availableSlots: [], 
+                  reason: `We are fully booked on ${format(reqDate, 'yyyy-MM-dd')}. Please check another date.` 
+                });
+              } else {
+                return JSON.stringify({ success: true, availableSlots });
+              }
+            }
+          }
+        } else if (name === 'book_appointment') {
+          const { fullName, phoneNumber, email, serviceName, date, startTime, notes } = args;
+          
+          const selectedService = settings.services.find((s: any) => s.name === serviceName);
+          const duration = selectedService?.durationMinutes || settings.slotDurationMinutes || 60;
+          
+          const startDate = new Date(`${date}T${startTime}:00Z`);
+          const endTimeDate = addMinutes(startDate, duration);
+          const preferredEndTime = format(endTimeDate, 'HH:mm');
+
+          if (usage.storageBytesUsed >= usage.storageBytesLimit) {
+            return JSON.stringify({ success: false, error: "System capacity reached." });
+          } else {
+            const existing = await Booking.findOne({
+              clientId,
+              preferredDate: startOfDay(startDate),
+              status: { $in: ['pending', 'confirmed'] },
+              $or: [
+                { preferredStartTime: { $lte: startTime }, preferredEndTime: { $gt: startTime } },
+                { preferredStartTime: { $lt: preferredEndTime }, preferredEndTime: { $gte: preferredEndTime } }
+              ]
+            });
+
+            if (existing) {
+              return JSON.stringify({ success: false, error: "Slot no longer available." });
+            } else {
+              const booking = await Booking.create({
+                clientId,
+                fullName, phoneNumber, email, serviceSelection: serviceName,
+                preferredDate: startOfDay(startDate),
+                preferredStartTime: startTime, preferredEndTime, notes,
+                status: 'pending'
+              });
+
+              sendEmail(settings.contactEmail, 'New Booking Received', `New booking: ${fullName}\nService: ${serviceName}\nDate: ${date}\nTime: ${startTime}`, undefined, clientId);
+              sendEmail(email, 'Booking Confirmed', `Hello ${fullName}, your booking for ${serviceName} on ${date} at ${startTime} has been received.`, undefined, clientId);
+
+              // Sync to Leads
+              await upsertLead({
+                clientId,
+                email,
+                phone: phoneNumber,
+                name: fullName,
+                source: 'booking',
+                tags: ['high-intent', 'ai-booking'],
+                data: { serviceSelection: serviceName, date, startTime, notes }
+              }).catch(e => console.error('AI Booking lead sync error:', e));
+
+              return JSON.stringify({ success: true, bookingId: booking._id });
+            }
+          }
+        } else if (name === 'collect_lead') {
+          const { fullName, email, phone, interest, notes } = args;
+          
+          const { Contact: ContactModelBatch } = await import('../models');
+          await ContactModelBatch.create({
+            clientId,
+            name: fullName,
+            email,
+            phone: phone || 'N/A',
+            subject: 'AI Intelligence Lead',
+            message: `Lead captured via AI chat. Expressed interest: ${interest || 'General'}. Notes: ${notes || ''}`
           });
 
-          const responseMessage = chatCompletion.choices[0]?.message;
-          
-          if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
-            currentMessages.push(responseMessage);
-            for (const toolCall of responseMessage.tool_calls) {
-              let functionResult = "";
-              try {
-                const args = JSON.parse(toolCall.function.arguments);
-                
-                if (toolCall.function.name === 'check_availability') {
-                  const { date, serviceName } = args;
-                  const dStr = String(date);
-                  let dParts = dStr.split('-').map(Number);
-                  
-                  if (dParts.length !== 3 || isNaN(dParts[0])) {
-                     functionResult = JSON.stringify({ error: "Invalid date format. Use YYYY-MM-DD." });
-                  } else {
-                    // Create date safely using mid-day UTC offset to avoid timezone shifts during day-of-week calculation
-                    const reqDate = new Date(`${dStr}T12:00:00Z`);
-                    const dayOfWeek = reqDate.getUTCDay();
-                    const workingHour = settings.workingHours.find((wh: any) => wh.day === dayOfWeek);
+          await upsertLead({
+            clientId,
+            email,
+            phone: phone || '',
+            name: fullName,
+            source: 'ai',
+            tags: ['nurture', 'ai-chat-lead'],
+            data: { interest, notes }
+          }).catch(e => console.error('AI Lead sync error:', e));
 
-                      if (!workingHour || !workingHour.isOpen) {
-                        functionResult = JSON.stringify({ 
-                          success: false, 
-                          availableSlots: [], 
-                          reason: `Closed on ${format(reqDate, 'EEEE')}. Our typical hours are from ${workingHour?.openTime || '8:00'} to ${workingHour?.closeTime || '17:00'}.` 
-                        });
-                      } else {
-                        const openTime = workingHour.openTime || '08:00';
-                        const closeTime = workingHour.closeTime || '17:00';
-                        const openParts = openTime.split(':').map(Number);
-                        const closeParts = closeTime.split(':').map(Number);
-                        
-                        let currentSlot = new Date(reqDate);
-                        currentSlot.setHours(openParts[0], openParts[1], 0, 0);
+          return JSON.stringify({ success: true, message: "Lead captured successfully." });
+        } else if (name === 'submit_onboarding_request') {
+          const { businessName, email, phone, businessType, details } = args;
+          const requestId = `req_${Math.random().toString(36).substring(7)}`;
+          const request = await OnboardingRequest.create({
+            requestId,
+            businessName,
+            email,
+            phone,
+            businessType,
+            details,
+            status: 'pending'
+          });
 
-                        const endTime = new Date(reqDate);
-                        endTime.setHours(closeParts[0], closeParts[1], 0, 0);
+          sendEmail(email, 'Application Received', 
+            `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
+            undefined, clientId
+          );
 
-                        const selectedService = settings.services.find((s: any) => s.name === serviceName);
-                        const slotDuration = selectedService?.durationMinutes || settings.slotDurationMinutes || 60;
-                        const buffer = settings.bufferTimeMinutes || 30;
-
-                        const dayStart = startOfDay(reqDate);
-                        const dayEnd = endOfDay(reqDate);
-                        const existingBookings = await Booking.find({
-                          clientId,
-                          preferredDate: { $gte: dayStart, $lte: dayEnd },
-                          status: { $in: ['pending', 'confirmed'] }
-                        });
-
-                        const availableSlots = [];
-                        while (currentSlot < endTime) {
-                          const slotEnd = addMinutes(currentSlot, slotDuration);
-                          if (isAfter(slotEnd, endTime)) break;
-
-                          const slotStartStr = format(currentSlot, 'HH:mm');
-                          const slotEndStr = format(slotEnd, 'HH:mm');
-
-                          const hasOverlap = existingBookings.some(b => {
-                            return (slotStartStr >= b.preferredStartTime && slotStartStr < b.preferredEndTime) ||
-                                   (slotEndStr > b.preferredStartTime && slotEndStr <= b.preferredEndTime) ||
-                                   (slotStartStr <= b.preferredStartTime && slotEndStr >= b.preferredEndTime);
-                          });
-
-                          if (!hasOverlap) {
-                            const startTime12 = format(currentSlot, 'hh:mm a');
-                            const endTime12 = format(slotEnd, 'hh:mm a');
-                            availableSlots.push({ 
-                              startTime: slotStartStr, 
-                              endTime: slotEndStr,
-                              displayTime: `${startTime12} - ${endTime12}`
-                            });
-                          }
-                          currentSlot = addMinutes(currentSlot, slotDuration + buffer);
-                        }
-
-                        if (availableSlots.length === 0) {
-                          functionResult = JSON.stringify({ 
-                            success: false, 
-                            availableSlots: [], 
-                            reason: `We are fully booked on ${format(reqDate, 'yyyy-MM-dd')}. Please check another date.` 
-                          });
-                        } else {
-                          functionResult = JSON.stringify({ success: true, availableSlots });
-                        }
-                      }
-                  }
-                } else if (toolCall.function.name === 'book_appointment') {
-                  const { fullName, phoneNumber, email, serviceName, date, startTime, notes } = args;
-                  
-                const selectedService = settings.services.find((s: any) => s.name === serviceName);
-                const duration = selectedService?.durationMinutes || settings.slotDurationMinutes || 60;
-                
-                let startParts = String(startTime).split(':').map(Number);
-                let dParts = String(date).split('-').map(Number);
-                // Create start date safely
-                const startDate = new Date(`${date}T${startTime}:00Z`);
-                const endTimeDate = addMinutes(startDate, duration);
-                const preferredEndTime = format(endTimeDate, 'HH:mm');
-
-                  if (usage.storageBytesUsed >= usage.storageBytesLimit) {
-                    functionResult = JSON.stringify({ success: false, error: "System capacity reached." });
-                  } else {
-                    const existing = await Booking.findOne({
-                      clientId,
-                      preferredDate: startOfDay(startDate),
-                      status: { $in: ['pending', 'confirmed'] },
-                      $or: [
-                        { preferredStartTime: { $lte: startTime }, preferredEndTime: { $gt: startTime } },
-                        { preferredStartTime: { $lt: preferredEndTime }, preferredEndTime: { $gte: preferredEndTime } }
-                      ]
-                    });
-
-                    if (existing) {
-                      functionResult = JSON.stringify({ success: false, error: "Slot no longer available." });
-                    } else {
-                      const booking = await Booking.create({
-                        clientId,
-                        fullName, phoneNumber, email, serviceSelection: serviceName,
-                        preferredDate: startOfDay(startDate),
-                        preferredStartTime: startTime, preferredEndTime, notes,
-                        status: 'pending'
-                      });
-
-                      sendEmail(settings.contactEmail, 'New Booking Received', `New booking: ${fullName}\nService: ${serviceName}\nDate: ${date}\nTime: ${startTime}`, undefined, clientId);
-                      sendEmail(email, 'Booking Confirmed', `Hello ${fullName}, your booking for ${serviceName} on ${date} at ${startTime} has been received.`, undefined, clientId);
-
-                      // Sync to Leads
-                      await upsertLead({
-                        clientId,
-                        email,
-                        phone: phoneNumber,
-                        name: fullName,
-                        source: 'booking',
-                        tags: ['high-intent', 'ai-booking'],
-                        data: { serviceSelection: serviceName, date, startTime, notes }
-                      }).catch(e => console.error('AI Booking lead sync error:', e));
-
-                      functionResult = JSON.stringify({ success: true, bookingId: booking._id });
-                    }
-                  }
-                } else if (toolCall.function.name === 'collect_lead') {
-                  const { fullName, email, phone, interest, notes } = args;
-                  
-                  // Also create a Contact record so it appears in the Inquiries view
-                  const { Contact: ContactModelBatch } = await import('../models');
-                  await ContactModelBatch.create({
-                    clientId,
-                    name: fullName,
-                    email,
-                    phone: phone || 'N/A',
-                    subject: 'AI Intelligence Lead',
-                    message: `Interest: ${interest || 'General'}\nNotes: ${notes || 'Captured via Chatbot'}`,
-                    source: 'ai_chatbot'
-                  }).catch(e => console.error('AI Contact creation error:', e));
-
-                  await upsertLead({
-                     clientId,
-                     email,
-                     phone,
-                     name: fullName,
-                     source: 'ai',
-                     tags: ['ai-collected', interest ? `interest:${interest}` : 'inquiry'],
-                     data: { interest, notes }
-                  });
-                  functionResult = JSON.stringify({ success: true, message: "Lead information saved successfully." });
-                } else if (toolCall.function.name === 'submit_onboarding_request') {
-                  const { businessName, email, phone, businessType, details } = args;
-                  const requestId = `req_${Math.random().toString(36).substring(7)}`;
-                  const request = await OnboardingRequest.create({
-                    requestId,
-                    businessName,
-                    email,
-                    phone,
-                    businessType,
-                    details,
-                    status: 'pending'
-                  });
-
-                  // Notify Superadmin
-                  const superAdmin = await Client.findOne({ role: 'superadmin' });
-                  if (superAdmin) {
-                    sendEmail(superAdmin.email, 'New Onboarding Request Received', 
-                      `A new onboarding request has been submitted by ${businessName} (${email}).\nView it in the superadmin dashboard.`,
-                      undefined, 'super-admin-001'
-                    );
-                  }
-
-                  // Send Confirmation to User
-                  sendEmail(email, 'Application Received', 
-                    `Hello ${businessName},\n\nWe have received your application. Our team will review it and get back to you shortly.\n\nStatus: Under Review\nRequest ID: ${requestId}`,
-                    undefined, clientId
-                  );
-
-                  functionResult = JSON.stringify({ success: true, requestId, status: 'pending', nextStep: 'Wait for superadmin review' });
-                } else if (toolCall.function.name === 'check_status') {
-                  const { type, email, id } = args;
-                  if (type === 'onboarding') {
-                    const reqs = await OnboardingRequest.find({ email }).sort({ createdAt: -1 });
-                    if (reqs.length === 0) {
-                      functionResult = JSON.stringify({ error: "No onboarding requests found for this email." });
-                    } else {
-                      const latest = reqs[0];
-                      functionResult = JSON.stringify({ 
-                        status: latest.status, 
-                        businessName: latest.businessName,
-                        submittedAt: latest.createdAt,
-                        notes: latest.superadminNotes
-                      });
-                    }
-                  } else {
-                    const bookings = await Booking.find({ email, clientId }).sort({ createdAt: -1 });
-                    if (bookings.length === 0) {
-                      functionResult = JSON.stringify({ error: "No bookings found for this email." });
-                    } else {
-                      const latest = bookings[0];
-                      functionResult = JSON.stringify({ 
-                        status: latest.status, 
-                        service: latest.serviceSelection,
-                        date: latest.preferredDate,
-                        time: latest.preferredStartTime
-                      });
-                    }
-                  }
-                } else if (toolCall.function.name === 'query_external_db') {
-                  const { query, tableName } = args;
-                  if (!settings.externalDbConfig?.enabled) {
-                     functionResult = JSON.stringify({ error: "External database connection is not enabled by the admin." });
-                  } else {
-                     // Mocked secure connector layer
-                     functionResult = JSON.stringify({ 
-                       success: true, 
-                       message: `Mocked Query Result: Successfully retrieved information related to "${query}" from the ${settings.externalDbConfig.dbType} instance at ${settings.externalDbConfig.host}.`,
-                       data: [] 
-                     });
-                  }
-                } else if (toolCall.function.name === 'transfer_to_human') {
-                  const { customerName, customerEmail, subject, reason } = args;
-                  
-                  // Instead of making an internal fetch which might fail due to auth or not existing, let's just create it here:
-                  const { Ticket, TicketMessage } = await import('../models');
-                  
-                  const ticket = await Ticket.create({
-                    clientId,
-                    customerName,
-                    customerEmail,
-                    subject,
-                    source: 'chat'
-                  });
-
-                  await TicketMessage.create({
-                    ticketId: ticket._id,
-                    senderRole: 'system',
-                    senderName: 'System',
-                    content: `Chat Transferred by AI. Reason: ${reason}`
-                  });
-
-                  // Send email to human (business)
-                  if (settings.contactEmail) {
-                    await sendEmail(
-                      settings.contactEmail,
-                      `New Support Ticket: ${subject}`,
-                      `A chat has been transferred to human support.\n\nCustomer: ${customerName}\nEmail: ${customerEmail}\nReason: ${reason}\nTicket ID: ${ticket._id}\n\nPlease check the dashboard to reply.`,
-                      `<p>A chat has been transferred to human support.</p><p><strong>Customer:</strong> ${customerName}<br/><strong>Email:</strong> ${customerEmail}<br/><strong>Reason:</strong> ${reason}</p><p><a href="http://127.0.0.1:3000/dashboard/tickets">View Ticket</a></p>`,
-                      clientId
-                    );
-                  }
-
-                  // Send email to customer (acknowledgement)
-                  await sendEmail(
-                    customerEmail,
-                    `We've received your request - ${settings.businessName}`,
-                    `Hello ${customerName},\n\nOur AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.\n\nSubject: ${subject}\n\nBest,\nThe ${settings.businessName} Team`,
-                    `<p>Hello ${customerName},</p><p>Our AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.</p><p><strong>Topic:</strong> ${subject}</p><p>Best,<br/>The ${settings.businessName} Team</p>`,
-                    clientId
-                  );
-
-                  functionResult = JSON.stringify({ success: true, message: "Ticket created and transferred successfully. Let the user know an agent will contact them soon." });
-                }
-              } catch (e) {
-                console.error("Tool execution error:", e);
-                functionResult = JSON.stringify({ error: "Could not process request." });
-              }
-              
-              currentMessages.push({
-                tool_call_id: toolCall.id,
-                role: "tool" as any,
-                name: toolCall.function.name,
-                content: functionResult,
+          return JSON.stringify({ success: true, requestId, status: 'pending', nextStep: 'Wait for review' });
+        } else if (name === 'check_status') {
+          const { type, email } = args;
+          if (type === 'onboarding') {
+            const reqs = await OnboardingRequest.find({ email }).sort({ createdAt: -1 });
+            if (reqs.length === 0) {
+              return JSON.stringify({ error: "No onboarding requests found for this email." });
+            } else {
+              const latest = reqs[0];
+              return JSON.stringify({ 
+                status: latest.status, 
+                businessName: latest.businessName,
+                submittedAt: latest.createdAt
               });
             }
           } else {
-            aiResponse = responseMessage.content || aiResponse || "I'm still here, what else can I help with?";
-            runComplete = true;
+            const bookings = await Booking.find({ email, clientId }).sort({ createdAt: -1 });
+            if (bookings.length === 0) {
+              return JSON.stringify({ error: "No bookings found for this email." });
+            } else {
+              const latest = bookings[0];
+              return JSON.stringify({ 
+                status: latest.status, 
+                service: latest.serviceSelection,
+                date: latest.preferredDate,
+                time: latest.preferredStartTime
+              });
+            }
           }
-        }
+        } else if (name === 'query_external_db') {
+          const { query } = args;
+          if (!settings.externalDbConfig?.enabled) {
+             return JSON.stringify({ error: "External database connection is not enabled by the admin." });
+          } else {
+             return JSON.stringify({ 
+               success: true, 
+               message: `Mocked Query Result: Successfully retrieved information related to "${query}" from the ${settings.externalDbConfig.dbType} instance at ${settings.externalDbConfig.host}.`,
+               data: [] 
+             });
+          }
+        } else if (name === 'transfer_to_human') {
+          const { customerName, customerEmail, subject, reason } = args;
+          
+          const { Ticket, TicketMessage } = await import('../models');
+          
+          const ticket = await Ticket.create({
+            clientId,
+            customerName,
+            customerEmail,
+            subject,
+            source: 'chat'
+          });
 
-        if (!aiResponse && currentMessages.length > messages.length) {
-           const finalCompletion = await groq.chat.completions.create({
-             messages: currentMessages,
-             model: CHAT_MODEL,
-             temperature: 0,
-           });
-           aiResponse = finalCompletion.choices[0]?.message?.content || "I've handled your request. How else can I assist?";
+          await TicketMessage.create({
+            ticketId: ticket._id,
+            senderRole: 'system',
+            senderName: 'System',
+            content: `Chat Transferred by AI. Reason: ${reason}`
+          });
+
+          if (settings.contactEmail) {
+            await sendEmail(
+              settings.contactEmail,
+              `New Support Ticket: ${subject}`,
+              `A chat has been transferred to human support.\n\nCustomer: ${customerName}\nEmail: ${customerEmail}\nReason: ${reason}\nTicket ID: ${ticket._id}\n\nPlease check the dashboard to reply.`,
+              `<p>A chat has been transferred to human support.</p><p><strong>Customer:</strong> ${customerName}<br/><strong>Email:</strong> ${customerEmail}<br/><strong>Reason:</strong> ${reason}</p><p><a href="http://127.0.0.1:3000/dashboard/tickets">View Ticket</a></p>`,
+              clientId
+            );
+          }
+
+          await sendEmail(
+            customerEmail,
+            `We've received your request - ${settings.businessName}`,
+            `Hello ${customerName},\n\nOur AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.\n\nSubject: ${subject}\n\nBest,\nThe ${settings.businessName} Team`,
+            `<p>Hello ${customerName},</p><p>Our AI assistant has transferred your request to our human support team. We will review your request and get back to you shortly.</p><p><strong>Topic:</strong> ${subject}</p><p>Best,<br/>The ${settings.businessName} Team</p>`,
+            clientId
+          );
+
+          return JSON.stringify({ success: true, message: "Ticket created and transferred successfully. Let the user know an agent will contact them soon." });
         }
       } catch (err: any) {
-        if (err?.status === 429 || err?.name === 'RateLimitError') {
-          aiResponse = "I'm receiving a lot of requests right now and have reached my temporary processing limit. Please wait a moment or reach out to us using the contact form below.";
+        console.error("Helper tool execution error:", err);
+        return JSON.stringify({ error: "Could not process request." });
+      }
+      return JSON.stringify({ error: "Unknown tool call." });
+    };
+
+    let runComplete = false;
+    let iterations = 0;
+
+    try {
+      while (!runComplete && iterations < 8) {
+        iterations++;
+
+        const response = await groq.chat.completions.create({
+          model: DEFAULT_MODEL,
+          messages: messages,
+          tools: tools as any,
+          tool_choice: 'auto',
+          temperature: 0.1
+        });
+
+        const choice = response.choices[0];
+        const messageOutput = choice.message;
+
+        if (messageOutput.tool_calls && messageOutput.tool_calls.length > 0) {
+          messages.push(messageOutput);
+
+          for (const toolCall of messageOutput.tool_calls) {
+            const functionName = toolCall.function.name;
+            let functionArgs: any = {};
+            
+            try {
+              functionArgs = JSON.parse(toolCall.function.arguments);
+            } catch (e: any) {
+              console.error(`[CHAT_AI] Failed to parse tool arguments for ${functionName}:`, toolCall.function.arguments);
+              functionArgs = {};
+            }
+            
+            console.log(`[CHAT_AI] Executing tool: ${functionName}`, functionArgs);
+            let functionResult = "";
+            try {
+              functionResult = await executeTool(functionName, functionArgs);
+            } catch (e: any) {
+              console.error(`[CHAT_AI] Tool execution crash (${functionName}):`, e);
+              functionResult = JSON.stringify({ error: `Critical tool failure: ${e.message || 'unknown'}` });
+            }
+
+            messages.push({
+              tool_call_id: toolCall.id,
+              role: "tool",
+              //@ts-ignore
+              name: functionName,
+              content: functionResult,
+            });
+          }
         } else {
-          throw err;
+          aiResponse = messageOutput.content || "I've processed that. What else can I do for you?";
+          runComplete = true;
         }
       }
-      
-      // Clean up any leaked technical markers or hallucinations
-      aiResponse = aiResponse.replace(/<function[\s\S]*?>[\s\S]*?<\/function>/gi, '');
-      aiResponse = aiResponse.replace(/<tool_call[\s\S]*?>[\s\S]*?<\/tool_call>/gi, '');
-      aiResponse = aiResponse.replace(/<ctrl42>_call:[\s\S]*/gi, '');
-      // New: Remove raw JSON blocks that might be appended (common for some models when tools are involved)
-      aiResponse = aiResponse.replace(/\{[\s\S]*"date"[\s\S]*"startTime"[\s\S]*\}/gi, '');
-      aiResponse = aiResponse.replace(/\{[\s\S]*"availableSlots"[\s\S]*\}/gi, '');
-      
-      aiResponse = aiResponse.trim();
-
-    } else {
-      aiResponse = "AI is not configured right now. Please contact us directly.";
+    } catch (err: any) {
+      console.error("Groq model execution failed:", err);
+      aiResponse = "I'm having difficulty connecting right now. Please try again or contact support.";
     }
+
+    // Clean up any leaked technical markers or hallucinations
+    aiResponse = aiResponse.replace(/<function[\s\S]*?>[\s\S]*?<\/function>/gi, '');
+    aiResponse = aiResponse.replace(/<tool_call[\s\S]*?>[\s\S]*?<\/tool_call>/gi, '');
+    aiResponse = aiResponse.replace(/<ctrl42>_call:[\s\S]*/gi, '');
+    aiResponse = aiResponse.replace(/\{[\s\S]*"date"[\s\S]*"startTime"[\s\S]*\}/gi, '');
+    aiResponse = aiResponse.replace(/\{[\s\S]*"availableSlots"[\s\S]*\}/gi, '');
+    
+    aiResponse = aiResponse.trim();
 
     await incrementAiUsage(clientId, sessionId, 'assistant', aiResponse);
 

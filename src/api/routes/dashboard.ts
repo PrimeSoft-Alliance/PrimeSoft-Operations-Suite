@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { Booking, Contact, Settings, UsageStats, AILog, Client, Lead, AuditLog } from '../models';
 import { authMiddleware } from '../auth';
 import { sendEmail } from '../email';
+import { startOfDay, format } from 'date-fns';
 
 import path from 'path';
 import fs from 'fs';
@@ -74,10 +75,6 @@ const getCid = (req: any) => {
 
   let cid = userCid || reqCid || headerCid || queryCid;
 
-  if (req.user?.role === 'superadmin' && (queryCid || headerCid)) {
-    cid = queryCid || headerCid;
-  }
-
   if (!cid) return null;
 
   (req as any).clientId = String(cid);
@@ -131,8 +128,31 @@ router.get('/stats', async (req, res) => {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let usage = await UsageStats.findOne({ clientId, month: currentMonth });
-    
-    console.log(`[STATS] Usage for ${clientId}:`, usage);
+
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(now.getDate() - (6 - i));
+      return d;
+    });
+
+    const chartData = await Promise.all(last7Days.map(async (day) => {
+      const start = startOfDay(day);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      
+      const [bookings, leads, contacts, chats] = await Promise.all([
+        Booking.countDocuments({ clientId, createdAt: { $gte: start, $lte: end } }),
+        Lead.countDocuments({ clientId, createdAt: { $gte: start, $lte: end } }),
+        Contact.countDocuments({ clientId, createdAt: { $gte: start, $lte: end } }),
+        AILog.countDocuments({ clientId, role: 'user', createdAt: { $gte: start, $lte: end } })
+      ]);
+
+      return {
+        name: format(day, 'MMM dd'),
+        interactions: chats + contacts,
+        conversion: bookings + leads
+      };
+    }));
 
     const statsData = {
       businessName: client?.businessName || 'Business',
@@ -141,6 +161,7 @@ router.get('/stats', async (req, res) => {
       totalContacts,
       unreadContacts,
       totalLeads,
+      chartData,
       usage: {
         aiMessagesUsed: usage?.aiMessagesUsed ?? 0,
         aiMessagesLimit: client?.aiMessageLimit ?? 1000,
@@ -176,7 +197,7 @@ router.post('/domains', async (req, res) => {
     
     // Check if subdomains are restricted
     if (type === 'subdomain') {
-       const pSettings = await PlatformSettings.findOne();
+       const pSettings = null;
        if (pSettings?.restrictSubdomains) {
           return envRes.sendError(403, 'RESTRICTED', 'Platform policy restricts creation of new subdomains at this time.');
        }
@@ -206,12 +227,45 @@ router.get('/bookings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const cid = getCid(req);
-    const [bookings, client] = await Promise.all([
-      Booking.find({ clientId: cid }).sort({ createdAt: -1 }),
+    const [bookings, leads, client] = await Promise.all([
+      Booking.find({ clientId: cid }).sort({ createdAt: -1 }).lean(),
+      Lead.find({ clientId: cid }).lean(),
       Client.findOne({ clientId: cid })
     ]);
-    envRes.sendSuccess(bookings, { clientId: cid, businessName: client?.businessName });
-  } catch (error) { envRes.sendError(500, 'API_ERROR', 'Failed'); }
+    
+    // Enrich each booking with matched lead attributes if present
+    const enrichedBookings = bookings.map((booking: any) => {
+      const emailLower = booking.email ? String(booking.email).toLowerCase().trim() : '';
+      const phoneClean = booking.phoneNumber ? String(booking.phoneNumber).replace(/\D/g, '') : '';
+      
+      const matchedLead = leads.find((l: any) => {
+        const leadEmail = l.contactEmail ? String(l.contactEmail).toLowerCase().trim() : '';
+        const leadPhone = l.contactPhone ? String(l.contactPhone).replace(/\D/g, '') : '';
+        return (emailLower && leadEmail === emailLower) || 
+               (phoneClean && leadPhone === phoneClean) || 
+               (l.data?.bookingId && String(l.data.bookingId) === String(booking._id));
+      });
+      
+      if (matchedLead) {
+        return {
+          ...booking,
+          leadId: matchedLead._id,
+          leadStage: matchedLead.stage,
+          leadScore: matchedLead.score,
+          leadTags: matchedLead.tags,
+          leadActivities: matchedLead.activities,
+          leadData: matchedLead.data,
+          assignedTo: matchedLead.assignedTo
+        };
+      }
+      return booking;
+    });
+
+    envRes.sendSuccess(enrichedBookings, { clientId: cid, businessName: client?.businessName });
+  } catch (error) { 
+    console.error('[BOOKINGS_FETCH] Error:', error);
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch bookings'); 
+  }
 });
 
 router.patch('/bookings/:id/status', async (req, res) => {
@@ -296,7 +350,7 @@ router.post('/logs', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const { PlatformSettings } = await import('../models');
-    const pSettings = await PlatformSettings.findOne();
+    const pSettings = null;
     
     const { action, target, metadata } = req.body;
     
@@ -334,9 +388,44 @@ router.get('/contacts', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const cid = getCid(req);
-    const contacts = await Contact.find({ clientId: cid }).sort({ createdAt: -1 });
-    envRes.sendSuccess(contacts);
-  } catch (error) { envRes.sendError(500, 'API_ERROR', 'Failed to fetch contacts'); }
+    const [contacts, leads] = await Promise.all([
+      Contact.find({ clientId: cid }).sort({ createdAt: -1 }).lean(),
+      Lead.find({ clientId: cid }).lean()
+    ]);
+    
+    // Enrich with lead metrics
+    const enrichedContacts = contacts.map((contact: any) => {
+      const emailLower = contact.email ? String(contact.email).toLowerCase().trim() : '';
+      const phoneClean = contact.phone ? String(contact.phone).replace(/\D/g, '') : '';
+      
+      const matchedLead = leads.find((l: any) => {
+        const leadEmail = l.contactEmail ? String(l.contactEmail).toLowerCase().trim() : '';
+        const leadPhone = l.contactPhone ? String(l.contactPhone).replace(/\D/g, '') : '';
+        return (emailLower && leadEmail === emailLower) || 
+               (phoneClean && leadPhone === phoneClean) ||
+               (l.data?.contactId && String(l.data.contactId) === String(contact._id));
+      });
+      
+      if (matchedLead) {
+        return {
+          ...contact,
+          leadId: matchedLead._id,
+          leadStage: matchedLead.stage,
+          leadScore: matchedLead.score,
+          leadTags: matchedLead.tags,
+          leadActivities: matchedLead.activities,
+          leadData: matchedLead.data,
+          assignedTo: matchedLead.assignedTo
+        };
+      }
+      return contact;
+    });
+
+    envRes.sendSuccess(enrichedContacts);
+  } catch (error) { 
+    console.error('[CONTACTS_FETCH] Error:', error);
+    envRes.sendError(500, 'API_ERROR', 'Failed to fetch contacts'); 
+  }
 });
 
 router.patch('/contacts/:id/status', async (req, res) => {

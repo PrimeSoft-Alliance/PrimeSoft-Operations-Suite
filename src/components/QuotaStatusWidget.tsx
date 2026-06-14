@@ -5,7 +5,7 @@ import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 
 export default function QuotaStatusWidget() {
-  const clientId = useClientId();
+  const { clientId } = useClientId();
   const [quota, setQuota] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

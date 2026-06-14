@@ -33,11 +33,34 @@ export async function upsertLead(params: {
   const contactFirst = nameParts[0] || '';
   const contactLast = nameParts.slice(1).join(' ') || '';
 
+  // Normalize params.data to be a plain object, parsing it if it is a JSON-serialized string
+  let incomingData: any = {};
+  if (params.data) {
+    if (typeof params.data === 'string') {
+      try {
+        incomingData = JSON.parse(params.data);
+      } catch (e) {
+        incomingData = { rawValue: params.data };
+      }
+    } else if (typeof params.data === 'object') {
+      if (params.data instanceof Map) {
+        incomingData = Object.fromEntries(params.data);
+      } else {
+        // Safe cloning that handles standard objects
+        try {
+          incomingData = JSON.parse(JSON.stringify(params.data));
+        } catch (e) {
+          incomingData = { ...params.data };
+        }
+      }
+    }
+  }
+
   // Extract form info if present in data
-  const formId = params.data?.formId;
-  const formName = params.data?.formName || 'General Inquiry';
-  const stage = params.data?.stage || 'New';
-  const score = params.data?.score || 50;
+  const formId = incomingData.formId;
+  const formName = incomingData.formName || 'General Inquiry';
+  const stage = incomingData.stage || 'New';
+  const score = incomingData.score || 50;
 
   if (lead) {
     console.log(`[LEAD] Updating existing lead: ${lead._id} for client: ${params.clientId}`);
@@ -55,8 +78,18 @@ export async function upsertLead(params: {
     // Update score if higher
     if (score > (lead.score || 0)) lead.score = score;
     
-    // Merge data
-    lead.data = { ...(lead.data || {}), ...(params.data || {}) };
+    // Merge data safely extraction of Mongoose Map
+    let existingData: any = {};
+    if (lead.data) {
+      if (typeof lead.data.toJSON === 'function') {
+        existingData = lead.data.toJSON();
+      } else if (lead.data instanceof Map) {
+        existingData = Object.fromEntries(lead.data);
+      } else if (typeof lead.data === 'object') {
+        existingData = { ...lead.data };
+      }
+    }
+    lead.data = { ...existingData, ...incomingData };
 
     // Update name if missing
     if (!lead.contactFirst) lead.contactFirst = contactFirst;
@@ -73,7 +106,7 @@ export async function upsertLead(params: {
       type: 'system',
       description: `Lead updated via ${params.source} activity`,
       date: new Date(),
-      metadata: { source: params.source, ...params.data }
+      metadata: { source: params.source, ...incomingData }
     });
     
     await lead.save();
@@ -99,7 +132,7 @@ export async function upsertLead(params: {
       tags,
       stage,
       score,
-      data: params.data || {},
+      data: incomingData,
       lastActivity: new Date(),
       activities: [{
         type: 'system',

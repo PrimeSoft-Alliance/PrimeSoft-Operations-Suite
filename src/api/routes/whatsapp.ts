@@ -2,10 +2,12 @@ import express from 'express';
 import { Client } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { checkAIQuota, recordAIUsage } from '../services/quotaService';
+import { authMiddleware } from '../auth';
+import { tenantContextMiddleware } from '../middlewares/tenantContext';
 
 const router = express.Router();
 
-router.post('/setup', async (req, res) => {
+router.post('/setup', authMiddleware, tenantContextMiddleware, async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   const clientId = (req as any).clientId;
   const { whatsappPhoneNumber, whatsappBusinessAccountId, whatsappAccessToken } = req.body;
@@ -16,6 +18,16 @@ router.post('/setup', async (req, res) => {
 
   await Client.updateOne({ clientId }, { whatsappPhoneNumber, whatsappBusinessAccountId, whatsappAccessToken });
   envRes.sendSuccess({ message: 'WhatsApp setup complete' });
+});
+
+router.get('/webhook-url', authMiddleware, tenantContextMiddleware, async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = (req as any).clientId;
+  const baseUrl = process.env.APP_URL || 'https://primesoft-operation-suite.onrender.com';
+  
+  envRes.sendSuccess({
+    webhookUrl: `${baseUrl}/api/whatsapp/webhook/${clientId}`
+  });
 });
 
 router.post('/webhook/:clientId', async (req, res) => {

@@ -43,10 +43,11 @@ export function useClientId() {
       // 3. Fallback to cached client for client pages like /booking or /inquiry if navigated
       const storedClientId = localStorage.getItem('ps_client_id');
       console.log('[DEBUG] [useClientId] Stored CID:', storedClientId);
-      if (storedClientId) {
+      if (storedClientId && storedClientId !== 'undefined' && storedClientId !== 'null' && storedClientId.trim() !== '') {
         setClientId(storedClientId);
       } else {
         setClientId('platform-prime');
+        localStorage.setItem('ps_client_id', 'platform-prime');
       }
       return;
     }

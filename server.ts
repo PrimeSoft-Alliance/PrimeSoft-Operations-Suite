@@ -15,7 +15,6 @@ import contactRoutes from './src/api/routes/contact';
 import chatRoutes from './src/api/routes/chat';
 import authRoutes from './src/api/routes/auth';
 import dashboardRoutes from './src/api/routes/dashboard';
-import superAdminRoutes from './src/api/routes/superadmin';
 import aiRoutes from './src/api/routes/ai';
 import formsRoutes from './src/api/routes/forms';
 import leadsRoutes from './src/api/routes/leads';
@@ -25,6 +24,7 @@ import webhookRoutes from './src/api/routes/webhooks';
 import ticketsRoutes from './src/api/routes/tickets';
 import telegramRoutes from './src/api/routes/telegram';
 import whatsappRoutes from './src/api/routes/whatsapp';
+import analyticsRoutes from './src/api/routes/analytics';
 
 import { authMiddleware } from './src/api/auth';
 import { Client, Settings } from './src/api/models';
@@ -67,6 +67,101 @@ async function startServer() {
   // Domain & Theme Middleware
   app.get('/platform-sdk.js', (req, res) => {
     res.sendFile(path.join(process.cwd(), 'themes', 'platform-sdk.js'));
+  });
+
+  app.get('/widget.js', (req, res) => {
+    const host = req.get('host');
+    const protocol = host?.includes('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
+    
+    const script = `
+(function() {
+  const scriptTag = document.currentScript;
+  const targetDiv = document.getElementById('ai-assistant-widget') || document.getElementById('ominicsr');
+  const clientId = targetDiv?.getAttribute('client_id') || targetDiv?.getAttribute('client-id') || scriptTag?.getAttribute('data-client-id') || (new URLSearchParams(window.location.search)).get('clientId') || '';
+  
+  let detectedBaseUrl = '${baseUrl}';
+  if (scriptTag && scriptTag.src) {
+    try {
+      const url = new URL(scriptTag.src);
+      detectedBaseUrl = url.origin;
+    } catch(e) {}
+  }
+
+  const container = document.createElement('div');
+  container.id = 'ai-chat-widget';
+  
+  if (targetDiv) {
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.minHeight = '500px';
+    container.style.position = 'relative';
+    container.style.borderRadius = '16px';
+    container.style.overflow = 'hidden';
+    container.style.boxShadow = '0 10px 25px rgba(0,0,0,0.1)';
+    container.style.border = '1px solid #e5e7eb';
+    
+    const iframe = document.createElement('iframe');
+    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.minHeight = '500px';
+    iframe.style.border = 'none';
+    iframe.style.display = 'block';
+    
+    container.appendChild(iframe);
+    targetDiv.appendChild(container);
+  } else {
+    container.style.position = 'fixed';
+    container.style.bottom = '20px';
+    container.style.right = '20px';
+    container.style.zIndex = '999999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'flex-end';
+    
+    const iframe = document.createElement('iframe');
+    iframe.src = detectedBaseUrl + '/chatbot-mini' + (clientId ? '?clientId=' + clientId : '');
+    iframe.style.width = '380px';
+    iframe.style.height = '500px';
+    iframe.style.border = 'none';
+    iframe.style.borderRadius = '16px';
+    iframe.style.boxShadow = '0 10px 25px rgba(0,0,0,0.12)';
+    iframe.style.display = 'none';
+    iframe.style.marginBottom = '10px';
+    
+    const toggle = document.createElement('button');
+    toggle.innerHTML = 'AI Assistant';
+    toggle.style.padding = '0 20px';
+    toggle.style.height = '50px';
+    toggle.style.borderRadius = '25px';
+    toggle.style.background = '#6366f1';
+    toggle.style.color = 'white';
+    toggle.style.border = 'none';
+    toggle.style.fontSize = '14px';
+    toggle.style.fontWeight = 'bold';
+    toggle.style.textTransform = 'uppercase';
+    toggle.style.letterSpacing = '0.05em';
+    toggle.style.cursor = 'pointer';
+    toggle.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
+    toggle.style.outline = 'none';
+    
+    toggle.onclick = () => {
+      if (iframe.style.display === 'none') {
+        iframe.style.display = 'block';
+      } else {
+        iframe.style.display = 'none';
+      }
+    };
+    
+    container.appendChild(iframe);
+    container.appendChild(toggle);
+    document.body.appendChild(container);
+  }
+})();
+    `;
+    res.set('Content-Type', 'application/javascript');
+    res.send(script);
   });
 
   app.use(async (req, res, next) => {
@@ -175,43 +270,9 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date() });
   });
 
-  // Ensure Platform Prime exists on start
-  try {
-    const platformPrimeId = 'platform-prime';
-    const client = await Client.findOne({ clientId: platformPrimeId });
-    if (!client) {
-      console.log('[INIT] Creating Platform Prime client...');
-      await Client.create({
-        clientId: platformPrimeId,
-        businessName: 'Platform Central',
-        email: 'central@platform.com',
-        password: 'platform_prime_placeholder',
-        role: 'superadmin',
-        status: 'active',
-        apiKey: 'pk_live_platform_prime_' + crypto.randomBytes(8).toString('hex')
-      });
-    }
-    
-    const settings = await Settings.findOne({ clientId: platformPrimeId });
-    if (!settings) {
-      console.log('[INIT] Creating Platform Prime settings...');
-      await Settings.create({
-        clientId: platformPrimeId,
-        businessName: 'Platform Central',
-        contactEmail: 'central@platform.com',
-        aboutText: 'The central hub for platform operations.',
-        services: [
-          { name: 'Consultation', description: 'Technical briefing and strategy session.', durationMinutes: 30 }
-        ]
-      });
-    }
-  } catch (err) {
-    console.error('[INIT] Platform Prime setup error:', err);
-  }
-
   // Apply common middlewares to all /v1 routes
   app.use('/v1', requestEnvelopeMiddleware, idempotencyMiddleware);
-  
+
   // Auth routes (setup, login, etc.)
   app.use('/v1/auth', authRoutes);
   
@@ -222,7 +283,6 @@ async function startServer() {
   app.use('/v1/contact', (req, res, next) => { if (req.method === 'POST') return next(); next('route'); }, tenantContextMiddleware, contactRoutes);
   app.use('/v1/contacts', (req, res, next) => { if (req.method === 'POST') return next(); next('route'); }, tenantContextMiddleware, contactRoutes);
   app.use('/v1/chat', tenantContextMiddleware, aiUsageTracking, chatRoutes);
-  app.use('/v1/sys-admin', superAdminRoutes);
   app.use('/v1/forms', tenantContextMiddleware, formsRoutes);
   app.use('/v1/leads', tenantContextMiddleware, leadsRoutes);
   app.use('/v1/content', tenantContextMiddleware, contentRoutes);
@@ -231,6 +291,7 @@ async function startServer() {
   app.use('/v1/tickets', tenantContextMiddleware, ticketsRoutes);
   app.use('/v1/telegram', telegramRoutes);
   app.use('/v1/whatsapp', whatsappRoutes);
+  app.use('/v1/analytics', tenantContextMiddleware, analyticsRoutes);
   
   // Admin Dashboard routes (mounted at root of /v1 after others)
   app.use('/v1/ai', authMiddleware, tenantContextMiddleware, aiUsageTracking, aiRoutes);

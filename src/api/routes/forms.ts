@@ -1,18 +1,14 @@
 import express from 'express';
 import { Form, Lead, Client } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
-import { Groq } from 'groq-sdk';
+import Groq from 'groq-sdk';
 import { incrementAiUsage } from '../../lib/usage';
 import { authMiddleware } from '../auth';
 
 const router = express.Router();
-let groqClient: Groq | null = null;
-const getGroq = () => {
-    if (!groqClient) {
-        groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY || 'dummy_key' });
-    }
-    return groqClient;
-};
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY || 'dummy_key'
+});
 
 router.use(authMiddleware);
 
@@ -23,10 +19,6 @@ const getCid = (req: any) => {
   const headerCid = req.headers['x-client-id'];
 
   let cid = userCid || reqCid || headerCid || queryCid;
-
-  if (req.user?.role === 'superadmin' && (queryCid || headerCid)) {
-    cid = queryCid || headerCid;
-  }
 
   if (!cid) return null;
 
@@ -145,10 +137,11 @@ router.post('/generate-design', async (req, res) => {
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
-    const completion = await getGroq().chat.completions.create({
+    const response = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       messages: [
-        {
-          role: 'system',
+        { 
+          role: 'system', 
           content: `You are an AI form architect. Generate a full form configuration based on user prompts.
           Return ONLY a JSON object with this structure:
           {
@@ -158,19 +151,15 @@ router.post('/generate-design', async (req, res) => {
             "fields": [
               { "name": "field_name", "label": "Label", "type": "text|email|phone|textarea|select|checkbox|radio", "required": true, "options": ["option1", "option2"] }
             ]
-          }
-          Output only the JSON object, no markdown.`
+          }`
         },
-        {
-          role: 'user',
-          content: `Generate a form for this prompt: "${req.body.description}"`
-        }
+        { role: 'user', content: `Generate a form for this prompt: "${req.body.description}"` }
       ],
-      model: 'llama-3.3-70b-versatile',
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      temperature: 0.1
     });
     
-    const text = completion.choices[0].message.content || '{}';
+    const text = response.choices[0].message.content || '{}';
     await incrementAiUsage(clientId, 'form-gen', 'assistant', 'AI Form Design Generation');
     envRes.sendSuccess({ result: JSON.parse(text) });
   } catch (error: any) {

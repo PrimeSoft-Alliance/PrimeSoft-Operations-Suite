@@ -19,10 +19,6 @@ const getCid = (req: any) => {
 
   let cid = userCid || reqCid || headerCid || queryCid;
 
-  if (req.user?.role === 'superadmin' && (queryCid || headerCid)) {
-    cid = queryCid || headerCid;
-  }
-  
   if (!cid) return null;
   cid = String(cid);
 
@@ -96,8 +92,10 @@ router.post('/:id/messages', async (req, res) => {
     ticket.updatedAt = new Date();
     if (senderRole === 'customer') {
       ticket.status = 'open';
+      ticket.hasUnreadMessages = true;
     } else {
       ticket.status = 'in_progress';
+      ticket.hasUnreadMessages = false;
     }
     await ticket.save();
 
@@ -116,6 +114,64 @@ router.post('/:id/messages', async (req, res) => {
     envRes.sendSuccess(message);
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to add message');
+  }
+});
+
+// Incoming message from customer (Webhook / Simulation)
+router.post('/incoming', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { ticketId, content, customerEmail, senderName } = req.body;
+    
+    // Find ticket by ID
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) return envRes.sendError(404, 'NOT_FOUND', 'Ticket not found');
+
+    const message = await TicketMessage.create({
+      ticketId: ticket._id,
+      senderRole: 'customer',
+      senderName: senderName || ticket.customerName,
+      content,
+    });
+
+    ticket.status = 'open';
+    ticket.hasUnreadMessages = true;
+    ticket.updatedAt = new Date();
+    await ticket.save();
+
+    // Notify agent via email
+    const { Client } = await import('../models');
+    const client = await Client.findOne({ clientId: ticket.clientId }).lean();
+    if (client && client.email) {
+      await sendEmail(
+        client.email,
+        `New Reply to Ticket #${ticket._id.toString().slice(-6)}`,
+        `You have a new customer reply on ticket: ${ticket.subject}\n\nContent:\n${content}\n\nView it in your dashboard.`,
+        `<p>You have a new customer reply on ticket: <strong>${ticket.subject}</strong></p><p>Content:</p><blockquote>${content}</blockquote><p><a href="https://${client.subdomain}.your-platform.com/dashboard/tickets">View it in your dashboard</a></p>`,
+        ticket.clientId
+      );
+    }
+
+    envRes.sendSuccess({ success: true, message: 'Incoming message recorded' });
+  } catch (error: any) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to process incoming message: ' + error.message);
+  }
+});
+
+// Mark messages as read
+router.post('/:id/read', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = getCid(req);
+  try {
+    const ticket = await Ticket.findOneAndUpdate(
+      { _id: req.params.id, clientId },
+      { $set: { hasUnreadMessages: false } },
+      { new: true }
+    );
+    if (!ticket) return envRes.sendError(404, 'NOT_FOUND', 'Ticket not found');
+    envRes.sendSuccess({ success: true });
+  } catch (error) {
+    envRes.sendError(500, 'API_ERROR', 'Failed to mark as read');
   }
 });
 

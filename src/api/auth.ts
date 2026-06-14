@@ -6,7 +6,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    let token = req.cookies.admin_token;
+    let token = req.cookies.auth_token;
     
     // Also support Bearer tokens mapping to the same secret
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
@@ -41,8 +41,8 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     (req as any).clientId = decoded.clientId;
 
     // Global maintenance check
-    const platformSettings = await PlatformSettings.findOne();
-    if (platformSettings?.maintenanceMode && decoded.role !== 'superadmin') {
+    const platformSettings = null;
+    if (platformSettings?.maintenanceMode) {
       const envRes = res as any;
       if (typeof envRes.sendError === 'function') {
         return envRes.sendError(503, 'MAINTENANCE', 'System is under maintenance');
@@ -74,26 +74,3 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
   }
 };
 
-export const superAdminMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-  try {
-    let token = req.cookies.admin_token;
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      token = req.headers.authorization.split(' ')[1];
-    }
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    
-    const decoded: any = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'superadmin') {
-      res.status(401).json({ error: 'Forbidden: Super Admin only' });
-      return;
-    }
-    (req as any).user = decoded;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
-  }
-};

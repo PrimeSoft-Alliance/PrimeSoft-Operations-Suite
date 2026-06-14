@@ -1,114 +1,103 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import About from './pages/About';
-import Booking from './pages/Booking';
-import BookDiscovery from './pages/BookDiscovery';
-import Inquiry from './pages/Inquiry';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import Signup from './pages/Signup';
 import ChatbotMini from './pages/ChatbotMini';
+
+// Existing imports
+import Home from './pages/Home';
 import Onboarding from './pages/Onboarding';
-import PublicOnboarding from './pages/PublicOnboarding';
 import Activate from './pages/Activate';
 
 import DashboardLayout from './pages/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
 import BookingsManager from './pages/dashboard/BookingsManager';
 import LeadsManager from './pages/dashboard/LeadsManager';
-import TicketingNexus from './pages/dashboard/TicketingNexus';
-import OperationsNexus from './pages/dashboard/OperationsNexus';
+import Tickets from './pages/dashboard/Tickets';
 import SettingsManager from './pages/dashboard/SettingsManager';
 import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
-import WebsiteManager from './pages/dashboard/WebsiteManager';
+import KnowledgeManager from './pages/dashboard/KnowledgeManager';
+import Analytics from './pages/dashboard/Analytics';
 import ClientInquiries from './pages/dashboard/Inquiries';
 import ClientBookings from './pages/dashboard/Bookings';
 import Login from './pages/Login';
-import Setup from './pages/Setup';
-import Privacy from './pages/Privacy';
-import Terms from './pages/Terms';
-import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
-import ClientsManager from './pages/superadmin/ClientsManager';
-import GlobalStats from './pages/superadmin/GlobalStats';
-
-import SuperadminUsage from './pages/superadmin/SuperadminUsage';
-import SuperadminTemplates from './pages/superadmin/SuperadminTemplates';
-import SuperadminLogs from './pages/superadmin/SuperadminLogs';
-import OnboardingRequests from './pages/superadmin/OnboardingRequests';
-import PromptGenerator from './pages/superadmin/PromptGenerator';
-import SystemHealth from './pages/superadmin/SystemHealth';
-import DomainsManager from './pages/superadmin/DomainsManager';
-import NotificationsManager from './pages/superadmin/NotificationsManager';
-import PlatformSettings from './pages/superadmin/PlatformSettings';
-import MissionControl from './pages/superadmin/MissionControl';
-import SuperAdminInquiries from './pages/superadmin/Inquiries';
-import SuperAdminBookings from './pages/superadmin/Bookings';
-<<<<<<< HEAD
-import AITrainingManager from './pages/superadmin/AITrainingManager';
-=======
-import QuotaDashboard from './pages/superadmin/QuotaDashboard';
->>>>>>> origin/main
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="about" element={<About />} />
-          <Route path="booking" element={<Booking />} />
-          <Route path="book-discovery" element={<BookDiscovery />} />
-          <Route path="inquiry" element={<Inquiry />} />
-          <Route path="privacy" element={<Privacy />} />
-          <Route path="terms" element={<Terms />} />
-          <Route path="get-started" element={<PublicOnboarding />} />
-        </Route>
-        
-        <Route path="/client/login" element={<Login loginRole="client" />} />
-        <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Visitor Tracking Logic
+    const track = async () => {
+      try {
+        let sessionId = localStorage.getItem('v_session');
+        if (!sessionId) {
+          sessionId = 'sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+          localStorage.setItem('v_session', sessionId);
+        }
+
+        const isDashboard = location.pathname.startsWith('/dashboard');
+        const clientId = isDashboard 
+          ? localStorage.getItem('ps_client_id') 
+          : (new URLSearchParams(window.location.search).get('clientId') || 'platform-prime');
+
+        if (!clientId) return;
+
+        await fetch('/v1/public/track', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-client-id': String(clientId)
+          },
+          body: JSON.stringify({
+            page: document.title || 'App',
+            route: location.pathname,
+            referrer: document.referrer,
+            sessionId,
+            interactedWithBot: sessionStorage.getItem('bot_interacted') === 'true'
+          })
+        });
+      } catch (e) {
+        // Silently fail tracking
+      }
+    };
+
+    track();
+  }, [location.pathname]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      
+      <Route path="/client/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/activate" element={<Activate />} />
-        <Route path="/setup" element={<Setup />} />
         <Route path="/chatbot-mini" element={<ChatbotMini />} />
         <Route path="/onboarding/:token" element={<Onboarding />} />
         
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
-          <Route path="nexus" element={<OperationsNexus />} />
           <Route path="bookings" element={<ClientBookings />} />
           <Route path="inquiries" element={<ClientInquiries />} />
           <Route path="leads" element={<LeadsManager />} />
-          <Route path="tickets" element={<TicketingNexus />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="tickets" element={<Tickets />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />
           <Route path="developer" element={<HeadlessDocs />} />
           <Route path="settings" element={<SettingsManager />} />
-          <Route path="website" element={<WebsiteManager />} />
-        </Route>
-
-        <Route path="/superadmin" element={<SuperAdminLayout />}>
-          <Route index element={<GlobalStats />} />
-          <Route path="hub" element={<MissionControl />} />
-          <Route path="clients" element={<ClientsManager />} />
-          <Route path="leads" element={<LeadsManager />} />
-          <Route path="bookings" element={<SuperAdminBookings />} />
-          <Route path="inquiries" element={<SuperAdminInquiries />} />
-          <Route path="onboarding" element={<OnboardingRequests />} />
-          <Route path="prompts" element={<PromptGenerator />} />
-          <Route path="domains" element={<DomainsManager />} />
-          <Route path="usage" element={<SuperadminUsage />} />
-          <Route path="logs" element={<SuperadminLogs />} />
-          <Route path="health" element={<SystemHealth />} />
-          <Route path="notifications" element={<NotificationsManager />} />
-          <Route path="settings" element={<PlatformSettings />} />
-<<<<<<< HEAD
-          <Route path="ai-training" element={<AITrainingManager />} />
-=======
-          <Route path="quotas" element={<QuotaDashboard />} />
->>>>>>> origin/main
+          <Route path="knowledge" element={<KnowledgeManager />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
   );
 }

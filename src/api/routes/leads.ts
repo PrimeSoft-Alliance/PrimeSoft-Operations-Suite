@@ -18,10 +18,6 @@ const getCid = (req: any) => {
 
   let cid = userCid || reqCid || headerCid || queryCid;
 
-  if (req.user?.role === 'superadmin' && (queryCid || headerCid)) {
-    cid = queryCid || headerCid;
-  }
-
   if (!cid) return null;
   
   cid = String(cid);
@@ -38,20 +34,17 @@ router.get('/', async (req, res) => {
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
-    // 1. Fetch all leads and bookings
-    console.log(`[LEADS] Querying Leads collection for ${clientId}`);
+    // 1. Fetch all leads, bookings, and contacts from source collections
+    console.log(`[LEADS] Querying Leads, Bookings, Contacts collections for ${clientId}`);
     
-    // For SuperAdmin, if clientId is platform-prime (the host default) or missing, they might want to see EVERYTHING.
-    // However, let's be explicit. If clientId is 'all' and req.user.role === 'superadmin', return all.
-    const user = (req as any).user;
-    const isSuperAdminAll = user?.role === 'superadmin' && (!req.headers['x-client-id'] || req.headers['x-client-id'] === 'all');
-    
-    const leadQuery = isSuperAdminAll ? {} : { clientId };
-    const bookingQuery = isSuperAdminAll ? {} : { clientId };
+    const leadQuery = { clientId };
+    const bookingQuery = { clientId };
+    const contactQuery = { clientId };
 
-    const [leadsRaw, bookings, client] = await Promise.all([
+    const [leadsRaw, bookings, contacts, client] = await Promise.all([
       Lead.find(leadQuery).lean(),
       Booking.find(bookingQuery).lean(),
+      Contact.find(contactQuery).lean(),
       Client.findOne({ clientId }).lean()
     ]);
     
@@ -72,7 +65,7 @@ router.get('/', async (req, res) => {
         status: b.status || 'new',
         stage: 'New', // Ensure bookings show up in Kanban
         source: 'booking',
-        location: { city: 'Unknown', country: 'Unknown' },
+        location: b.location || { city: 'Unknown', country: 'Unknown' },
         createdAt: b.createdAt,
         lastActivity: b.createdAt,
         type: 'booking',
@@ -80,41 +73,96 @@ router.get('/', async (req, res) => {
           service: b.serviceSelection || b.serviceName,
           date: b.preferredDate || b.date,
           time: b.preferredStartTime || b.time,
-          notes: b.notes
+          notes: b.notes,
+          bookingId: b._id
+        }
+      })),
+      ...contacts.map((c: any) => ({
+        _id: c._id,
+        clientId: c.clientId,
+        contactFirst: c.name?.split(' ')[0] || 'Unknown',
+        contactLast: c.name?.split(' ').slice(1).join(' ') || '',
+        contactEmail: c.email,
+        contactPhone: c.phone,
+        status: c.status || 'unread',
+        stage: 'New', // Ensure contacts show up in Kanban
+        source: 'contact',
+        location: c.location || { city: 'Unknown', country: 'Unknown' },
+        createdAt: c.createdAt,
+        lastActivity: c.createdAt,
+        type: 'contact',
+        data: {
+          subject: c.subject || 'General Inquiry',
+          message: c.message,
+          contactId: c._id
         }
       }))
     ];
 
-    combined.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    // Deduplicate by email and phone
+    // Deduplicate by email and phone, prioritize Lead records
     const deduplicatedMap = new Map();
     
     combined.forEach(record => {
-      const emailMatch = record.contactEmail ? String(record.contactEmail).toLowerCase().trim() : null;
-      const phoneMatch = record.contactPhone ? String(record.contactPhone).toLowerCase().trim() : null;
+      const emailLower = record.contactEmail ? String(record.contactEmail).toLowerCase().trim() : '';
+      const phoneClean = record.contactPhone ? String(record.contactPhone).replace(/\D/g, '') : '';
       // If neither email nor phone is present, use ID so it doesn't get squashed with others
-      const dedupeKey = emailMatch || phoneMatch || record._id.toString();
+      const dedupeKey = emailLower || (phoneClean ? `phone_${phoneClean}` : null) || record._id.toString();
 
       if (deduplicatedMap.has(dedupeKey)) {
         const existing = deduplicatedMap.get(dedupeKey);
-        if (existing.source !== record.source && existing.source !== 'multi-channel') {
-          existing.source = 'multi-channel';
+        
+        let primary = existing;
+        let secondary = record;
+        // Prioritize type 'lead' (database collection) because it has the user specified stage/assignment/score
+        if (record.type === 'lead' && existing.type !== 'lead') {
+          primary = record;
+          secondary = existing;
         }
-        existing.lastActivity = new Date(Math.max(new Date(existing.lastActivity || 0).getTime(), new Date(record.lastActivity || record.createdAt || 0).getTime()));
-        if (!existing.formName && record.formName) existing.formName = record.formName;
-        if (!existing.contactPhone && record.contactPhone) existing.contactPhone = record.contactPhone;
-        if (!existing.contactEmail && record.contactEmail) existing.contactEmail = record.contactEmail;
-        deduplicatedMap.set(dedupeKey, existing);
+
+        const mergedTags = Array.from(new Set([
+          ...(primary.tags || []),
+          ...(secondary.tags || [])
+        ]));
+
+        let finalSource = primary.source || secondary.source;
+        if (primary.source && secondary.source && primary.source !== secondary.source) {
+          finalSource = 'multi-channel';
+        }
+
+        const mergedData = {
+          ...(secondary.data || {}),
+          ...(primary.data || {})
+        };
+
+        if (secondary.bookingId || secondary.data?.bookingId) {
+          mergedData.bookingId = secondary.bookingId || secondary.data?.bookingId;
+        }
+        if (secondary.contactId || secondary.data?.contactId) {
+          mergedData.contactId = secondary.contactId || secondary.data?.contactId;
+        }
+
+        deduplicatedMap.set(dedupeKey, {
+          ...secondary,
+          ...primary,
+          source: finalSource,
+          tags: mergedTags,
+          data: mergedData,
+          lastActivity: new Date(Math.max(
+            new Date(primary.lastActivity || primary.createdAt || 0).getTime(),
+            new Date(secondary.lastActivity || secondary.createdAt || 0).getTime()
+          )),
+          _id: primary.type === 'lead' ? primary._id : (secondary.type === 'lead' ? secondary._id : primary._id),
+          type: (primary.type === 'lead' || secondary.type === 'lead') ? 'lead' : primary.type
+        });
       } else {
         deduplicatedMap.set(dedupeKey, { ...record });
       }
     });
 
     const finalLeads = Array.from(deduplicatedMap.values());
-    finalLeads.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    finalLeads.sort((a: any, b: any) => new Date(b.createdAt || b.lastActivity || 0).getTime() - new Date(a.createdAt || a.lastActivity || 0).getTime());
 
-    console.log(`[LEADS] Found ${finalLeads.length} combined records for ${clientId}`);
+    console.log(`[LEADS] Found ${finalLeads.length} combined deduplicated records for ${clientId}`);
 
     envRes.sendSuccess(finalLeads, { clientId, businessName: client?.businessName });
   } catch (error) {

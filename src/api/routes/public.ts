@@ -3,11 +3,7 @@ import { EnvelopeResponse } from '../middlewares/envelope';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-<<<<<<< HEAD
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, Quota, AITrainingKnowledge } from '../models';
-=======
-import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformSettings, PlatformNotification } from '../models';
->>>>>>> origin/main
+import { Settings, Booking, Contact, Invite, Client, Domain, UsageStats, Lead, OnboardingRequest, PlatformNotification, PlatformSettings, Visit } from '../models';
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { startOfDay, addMinutes, format } from 'date-fns';
@@ -17,7 +13,7 @@ const router = express.Router();
 // Middleware to check maintenance mode
 router.use(async (req, res, next) => {
   try {
-    const pSettings = await PlatformSettings.findOne();
+    const pSettings = null;
     if (pSettings?.maintenanceMode) {
       // Allow only check and resolve paths
       const allowedPaths = ['/headless/config', '/tenant/resolve', '/v1/public/settings'];
@@ -55,13 +51,18 @@ async function getGeoLocation(ip: string) {
 // Helper to resolve client identity from various signals
 async function resolveClientId(req: express.Request): Promise<string | null> {
   const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
-  let headerId = req.headers['x-client-id'];
-  let queryId = req.query.clientId;
-  let bodyId = req.body?.clientId;
-
-  if (typeof headerId === 'object' && headerId !== null && 'clientId' in headerId) headerId = (headerId as any).clientId;
-  if (typeof queryId === 'object' && queryId !== null && 'clientId' in queryId) queryId = (queryId as any).clientId;
-  if (typeof bodyId === 'object' && bodyId !== null && 'clientId' in bodyId) bodyId = (bodyId as any).clientId;
+  const extractString = (val: any): string | undefined => {
+    if (!val) return undefined;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (val !== null && 'clientId' in val && typeof val.clientId === 'string') return val.clientId;
+      if (Array.isArray(val) && val.length > 0) return extractString(val[0]);
+    }
+    return undefined;
+  };
+  const headerId = extractString(req.headers['x-client-id']);
+  const queryId = extractString(req.query.clientId);
+  const bodyId = extractString(req.body?.clientId);
 
   console.log(`[RESOLVE] Attempting to resolve client for host: ${req.hostname}. Signals - APIKey: ${!!apiKey}, HeaderID: ${headerId}, QueryID: ${queryId}, BodyID: ${bodyId}`);
 
@@ -74,7 +75,7 @@ async function resolveClientId(req: express.Request): Promise<string | null> {
   }
 
   const cid = headerId || queryId || bodyId;
-  if (cid) {
+  if (cid && cid !== '[object Object]') {
     console.log(`[RESOLVE] Resolved via ID signal: ${cid}`);
     return String(cid);
   }
@@ -103,7 +104,7 @@ async function resolveClientId(req: express.Request): Promise<string | null> {
         businessName: 'Platform Central',
         email: 'central@platform.com',
         password: 'platform_prime_placeholder',
-        role: 'superadmin',
+        role: 'client',
         status: 'active'
       });
       console.log(`[RESOLVE] Provisioned default client: ${homepageId}`);
@@ -289,7 +290,7 @@ router.get('/content/config', async (req, res) => {
         }
       },
       ai: {
-        title: settings.chatbotTitle || 'Assistant',
+        title: settings.chatbotTitle || settings.businessName || 'Assistant',
         color: settings.chatbotPrimaryColor || '#6366f1',
         greeting: settings.chatbotGreeting || 'Hello! How can I help you today?',
         avatar: settings.chatbotAvatar || ''
@@ -384,7 +385,7 @@ router.post('/onboarding-request', async (req, res) => {
         type: 'info',
         title: 'New Onboarding Request',
         message: `Business "${name}" has submitted an onboarding request application.`,
-        link: '/superadmin/onboarding',
+        link: '/dashboard',
         clientId: 'platform-prime'
       });
     } catch (notifErr) {
@@ -461,7 +462,7 @@ router.post('/onboarding/:token', async (req, res) => {
     const { token } = req.params;
     const { 
       businessName, businessType, subdomain, email, password, 
-      contactPhone, contactEmail, workingHours, customFields = {}, tier = 'starter'
+      contactPhone, contactEmail, workingHours, customFields = {} 
     } = req.body;
 
     const link = await Invite.findOne({ token, status: 'pending' });
@@ -481,11 +482,7 @@ router.post('/onboarding/:token', async (req, res) => {
         email,
         password: hash,
         customFields,
-<<<<<<< HEAD
-        tier: tier || 'starter',
-=======
         isActivated: true,
->>>>>>> origin/main
         apiKey: 'pk_live_' + crypto.randomBytes(16).toString('hex')
       });
     } else {
@@ -497,14 +494,9 @@ router.post('/onboarding/:token', async (req, res) => {
       client.password = hash;
       client.isActivated = true;
       client.customFields = { ...client.customFields, ...customFields };
-<<<<<<< HEAD
-      if (tier) client.tier = tier;
-      if (email) client.email = email;
-=======
       if (email) {
         client.email = email;
       }
->>>>>>> origin/main
       await client.save();
     }
 
@@ -513,7 +505,7 @@ router.post('/onboarding/:token', async (req, res) => {
         type: 'success',
         title: 'New Onboarding Completed',
         message: `${businessName || client.businessName} has completed their onboarding registration successfully!`,
-        link: '/superadmin/clients',
+        link: '/dashboard',
         clientId: 'platform-prime'
       });
     } catch (notifErr) {
@@ -521,7 +513,7 @@ router.post('/onboarding/:token', async (req, res) => {
     }
 
     if (subdomain) {
-      const pSettings = await PlatformSettings.findOne();
+      const pSettings = null;
       if (pSettings?.restrictSubdomains) {
         // If restricted, we don't automatically create the subdomain domain mapping
         // but we still store it in the client record for potential later approval
@@ -537,31 +529,6 @@ router.post('/onboarding/:token', async (req, res) => {
           });
         }
       }
-    }
-
-    // Create quota record based on tier
-    const tierLimits: Record<string, any> = {
-      starter: { aiTokensLimit: 10000, chatMessagesLimit: 1000, storageLimit: 1073741824 },
-      professional: { aiTokensLimit: 100000, chatMessagesLimit: 10000, storageLimit: 10737418240 },
-      enterprise: { aiTokensLimit: null, chatMessagesLimit: null, storageLimit: null }
-    };
-    
-    const tierConfig = tierLimits[tier] || tierLimits.starter;
-    const existingQuota = await Quota.findOne({ clientId: link.clientId });
-    if (!existingQuota) {
-      await Quota.create({
-        clientId: link.clientId,
-        tier: tier || 'starter',
-        aiTokensLimit: tierConfig.aiTokensLimit || 999999999,
-        chatMessagesLimit: tierConfig.chatMessagesLimit || 999999999,
-        storageLimit: tierConfig.storageLimit || 1099511627776,
-        enabledFeatures: {
-          webChat: true,
-          telegram: tier === 'professional' || tier === 'enterprise',
-          whatsapp: tier === 'enterprise',
-          aiAssistant: true
-        }
-      });
     }
 
     const currentMonth = format(new Date(), 'yyyy-MM');
@@ -662,7 +629,9 @@ router.get('/settings', async (req, res) => {
       aboutText: finalSettings.aboutText || finalSettings.branding?.aboutText,
       primaryColor: finalSettings.primaryColor || finalSettings.branding?.primaryColor,
       fontFamily: finalSettings.fontFamily || finalSettings.branding?.fontFamily,
-      heroImage: finalSettings.branding?.heroImage
+      heroImage: finalSettings.branding?.heroImage,
+      chatbotTitle: finalSettings.chatbotTitle || finalSettings.businessName || 'Assistant',
+      chatbotSubtitle: finalSettings.chatbotSubtitle || 'Digital Representative'
     });
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch settings');
@@ -683,7 +652,7 @@ router.post('/booking', async (req, res) => {
         businessName: 'Platform Central',
         email: 'central@platform.com',
         password: 'platform_prime_placeholder',
-        role: 'superadmin',
+        role: 'client',
         status: 'active'
       });
     }
@@ -757,7 +726,7 @@ router.post('/booking', async (req, res) => {
 router.post('/contact', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const pSettings = await PlatformSettings.findOne();
+    const pSettings = null;
     if (pSettings?.allowAnonymousContact === false) {
        // Optional: Block if anonymous is disabled
        // For now just logging or we could enforce auth if needed
@@ -773,7 +742,7 @@ router.post('/contact', async (req, res) => {
         businessName: 'Platform Central',
         email: 'central@platform.com',
         password: 'platform_prime_placeholder',
-        role: 'superadmin',
+        role: 'client',
         status: 'active'
       });
     }
@@ -912,14 +881,15 @@ router.post('/ai/chat', async (req, res) => {
       return envRes.sendError(401, 'API_ERROR', 'AI Assistant is currently unavailable for this account.');
     }
 
-    const { checkAIQuota, recordAIUsage } = await import('../services/quotaService');
-    const quotaCheck = await checkAIQuota(clientId, 100, 'chat');
-    if (!quotaCheck.allowed) {
-      return envRes.sendError(429, 'QUOTA_EXCEEDED', quotaCheck.reason || 'AI token quota exceeded for this billing cycle.');
+    const { getClientQuota } = await import('../services/quotaService');
+    const quotaCheck = await getClientQuota(clientId);
+    if (quotaCheck.aiTokensUsed >= quotaCheck.aiTokensLimit) {
+      return envRes.sendError(429, 'QUOTA_EXCEEDED', 'AI token quota exceeded for this billing cycle.');
     }
 
-    const { Groq } = await import('groq-sdk');
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || 'dummy' });
+    const { recordAIUsage } = await import('../services/quotaService');
+    const { getGroqClient, DEFAULT_MODEL } = await import('../utils/ai');
+    const groq = getGroqClient();
 
     const userFirstName = userName ? userName.split(' ')[0] : (userEmail?.split('@')[0] || '');
     const nameInstruction = userFirstName 
@@ -927,43 +897,55 @@ router.post('/ai/chat', async (req, res) => {
       : 'The user has not provided a name yet.';
 
     const businessContext = `
-      You are the AI Assistant for ${client.businessName}.
-      Business Type: ${client.businessType || 'General'}
-      About: ${settings?.aboutText || ''}
-      Services offered: ${settings?.services?.map((s: any) => `${s.name}: ${s.description}`).join(', ') || ''}
-      Working Hours: ${settings?.workingHours?.filter((h: any) => h.isOpen).map((h: any) => `${h.day}: ${h.openTime}-${h.closeTime}`).join(', ') || ''}
-      Contact Email: ${settings?.contactEmail || client.email}
-      Contact Phone: ${settings?.contactPhone || ''}
+      # ROLE & IDENTITY
+      You are "${settings?.chatbotTitle || 'Assistant'}", the official representative for ${client.businessName}.
       
-      User Context:
+      ## CORE DIRECTIVES
+      - Be technical, data-driven, and highly professional.
+      - Priority 1: Use only the "BUSINESS KNOWLEDGE" provided below.
+      - If information is missing from "BUSINESS KNOWLEDGE", do NOT invent features or pricing. Explicitly state you don't have that specific data and offer to connect them to a human agent.
+      ${settings?.aiBehaviorInstructions ? `\n## CUSTOM DIRECTIVES\n${settings.aiBehaviorInstructions}` : ""}
+      
+      ## BUSINESS KNOWLEDGE
+      - Business Name: ${client.businessName}
+      - About: ${settings?.aboutText || 'A professional business providing high-quality services.'}
+      - Services Catalog: ${settings?.services?.map((s: any) => `${s.name} (Rate: $${s.price || 'Contact for pricing'}, Duration: ${s.durationMinutes || 60}min): ${s.description}`).join(' | ') || 'Consult with us for service details.'}
+      - FAQs Knowledge Base: ${settings?.faqs?.map((f: any) => `Q: ${f.question} -> A: ${f.answer}`).join('\n') || 'No specific FAQs provided yet.'}
+      - Working Hours: ${settings?.workingHours?.filter((h: any) => h.isOpen).map((h: any) => `${h.day}: ${h.openTime}-${h.closeTime}`).join(', ') || 'Contact for operating hours.'}
+      - Contact Email: ${settings?.contactEmail || client.email}
+      - Contact Phone: ${settings?.contactPhone || 'Contact for phone details.'}
+      
+      ## USER CONTEXT
       - Current User: ${userFirstName || 'Guest'}
       - User Email: ${userEmail || 'undisclosed'}
       
-      CRITICAL INSTRUCTION:
+      ## OPERATIONAL INSTRUCTIONS:
       ${nameInstruction}
-      - Always address the user by their first name if known.
-      - Be professional, technical, and data-driven.
-      - Guide users to use the booking tool for formal sessions.
+      - Always prioritize providing exact data from the "Services Catalog" or "FAQs".
+      - Guide users to use the booking tool/link for official appointments.
+      - Maintain a technical, helpful tone.
     `.trim();
 
-    const completion = await groq.chat.completions.create({
+    const response = await groq.chat.completions.create({
+      model: DEFAULT_MODEL,
       messages: [
         { role: 'system', content: businessContext },
         ...(history || []).map((h: any) => ({
           role: h.role === 'user' ? 'user' : 'assistant',
-          content: h.content || h.text || ''
+          content: h.text || h.content || ''
         })),
         { role: 'user', content: message }
       ],
-      model: 'llama-3.3-70b-versatile'
+      temperature: 0.15
     });
 
-    const text = completion.choices[0].message.content || '';
+    const aiResponse = response.choices[0]?.message?.content || "I'm sorry, I encountered an internal logic error and could not generate a response.";
+    const tokensUsed = response.usage?.total_tokens || 100;
     
     // Log AI usage via QuotaService
-    await recordAIUsage(clientId, 'chat', '/ai/chat', 'groq-llama-3.3-70b', 100, { userEmail });
+    await recordAIUsage(clientId, 'chat', '/ai/chat', DEFAULT_MODEL, tokensUsed, { userEmail });
 
-    envRes.sendSuccess({ text });
+    envRes.sendSuccess({ text: aiResponse });
 
     // Sync to Leads if user info is provided
     if (userName && userEmail) {
@@ -1019,118 +1001,6 @@ router.post('/ai/chat/identify', async (req, res) => {
   }
 });
 
-<<<<<<< HEAD
-// AI TRAINING ENDPOINTS - Exclusively for superadmin tenant 'platform-prime'
-
-// Get all AI training knowledge
-router.get('/ai/training/knowledge', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const superadminId = 'platform-prime';
-    const knowledge = await AITrainingKnowledge.find({ 
-      clientId: superadminId, 
-      status: 'active' 
-    }).sort({ category: 1, createdAt: -1 }).lean();
-    envRes.sendSuccess(knowledge);
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
-  }
-});
-
-// Get AI training knowledge by category
-router.get('/ai/training/knowledge/:category', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const superadminId = 'platform-prime';
-    const { category } = req.params;
-    const knowledge = await AITrainingKnowledge.find({ 
-      clientId: superadminId, 
-      category,
-      status: 'active' 
-    }).sort({ createdAt: -1 }).lean();
-    envRes.sendSuccess(knowledge);
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch knowledge: ' + err.message);
-  }
-});
-
-// Create new AI training knowledge entry - requires superadmin auth
-router.post('/ai/training/knowledge', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { title, content, category, tags } = req.body;
-    
-    if (!title || !content || !category) {
-      return envRes.sendError(400, 'VALIDATION_ERROR', 'title, content, and category are required');
-    }
-
-    const superadminId = 'platform-prime';
-    const knowledge = await AITrainingKnowledge.create({
-      clientId: superadminId,
-      title,
-      content,
-      category,
-      tags: tags || [],
-      status: 'active'
-    });
-
-    envRes.sendSuccess(knowledge, 'Training knowledge created');
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to create knowledge: ' + err.message);
-  }
-});
-
-// Update AI training knowledge - requires superadmin auth
-router.put('/ai/training/knowledge/:id', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { id } = req.params;
-    const { title, content, category, tags, status } = req.body;
-    const superadminId = 'platform-prime';
-
-    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
-      { _id: id, clientId: superadminId },
-      { 
-        ...(title && { title }),
-        ...(content && { content }),
-        ...(category && { category }),
-        ...(tags && { tags }),
-        ...(status && { status })
-      },
-      { new: true }
-    );
-
-    if (!knowledge) {
-      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
-    }
-
-    envRes.sendSuccess(knowledge, 'Knowledge updated');
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to update knowledge: ' + err.message);
-  }
-});
-
-// Delete AI training knowledge - requires superadmin auth
-router.delete('/ai/training/knowledge/:id', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { id } = req.params;
-    const superadminId = 'platform-prime';
-
-    const knowledge = await AITrainingKnowledge.findOneAndUpdate(
-      { _id: id, clientId: superadminId },
-      { status: 'archived' },
-      { new: true }
-    );
-
-    if (!knowledge) {
-      return envRes.sendError(404, 'NOT_FOUND', 'Knowledge entry not found');
-    }
-
-    envRes.sendSuccess({ success: true }, 'Knowledge archived');
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to archive knowledge: ' + err.message);
-=======
 // Check public quota
 router.get('/quota-check', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -1151,7 +1021,37 @@ router.get('/quota-check', async (req, res) => {
     });
   } catch (err: any) {
     envRes.sendError(500, 'API_ERROR', 'Failed to check quota: ' + err.message);
->>>>>>> origin/main
+  }
+});
+
+// Tracking visitor activity
+router.post('/track', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+
+    const { page, route, referrer, sessionId, interactedWithBot } = req.body;
+    
+    if (!sessionId) return envRes.sendError(400, 'BAD_REQUEST', 'sessionId is required');
+
+    const ip = req.headers['x-forwarded-for']?.toString() || req.socket.remoteAddress || '';
+    const location = await getGeoLocation(ip.split(',')[0].trim());
+
+    await Visit.create({
+      clientId,
+      sessionId,
+      page: page || 'Home',
+      route: route || '/',
+      referrer,
+      userAgent: req.headers['user-agent'],
+      interactedWithBot: !!interactedWithBot,
+      location
+    });
+
+    envRes.sendSuccess({ success: true });
+  } catch (err: any) {
+    envRes.sendError(500, 'API_ERROR', 'Tracking failed: ' + err.message);
   }
 });
 
