@@ -26,7 +26,7 @@ export async function initializeTierDefinitions() {
   ];
 
   for (const t of tiers) {
-    await TierDefinition.findOneAndUpdate({ name: t.name }, t, { upsert: true, new: true });
+    await TierDefinition.findOneAndUpdate({ name: t.name }, t, { upsert: true, returnDocument: 'after' });
   }
 }
 
@@ -56,17 +56,40 @@ export async function assignTierToClient(clientId: string, tierName: string) {
       quotaResetDate: resetDate,
       status: 'active'
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return quota;
 }
 
 export async function getClientQuota(clientId: string) {
-  return await Quota.findOne({ clientId });
+  let quota = await Quota.findOne({ clientId });
+  if (!quota) {
+    console.log(`[QUOTA_HEAL] Quota document not found for client: ${clientId}. Initializing defaults.`);
+    try {
+      const client = await Client.findOne({ clientId });
+      const tier = client?.tier || 'starter';
+      quota = await assignTierToClient(clientId, tier);
+    } catch (err) {
+      console.error(`[QUOTA_HEAL] Failed to auto-assign tier/quota for ${clientId}:`, err);
+      const tierDef = await getTierDefinition('starter');
+      return {
+        clientId,
+        tier: 'starter',
+        aiTokensLimit: tierDef?.limits?.aiTokensPerMonth || 10000,
+        aiTokensUsed: 0,
+        chatMessagesLimit: tierDef?.limits?.chatMessagesPerMonth || 1000,
+        chatMessagesUsed: 0,
+        storageLimit: tierDef?.limits?.storageGB || 1,
+        storageUsed: 0,
+        status: 'active'
+      };
+    }
+  }
+  return quota;
 }
 
 export async function checkAIQuota(clientId: string, tokensNeeded: number, feature: string) {
-  let quota = await Quota.findOne({ clientId });
+  let quota = await getClientQuota(clientId);
   if (!quota) {
     return { allowed: false, reason: 'No quota found' };
   }

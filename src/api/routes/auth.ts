@@ -5,8 +5,14 @@ import crypto from 'crypto';
 import { Client, Settings } from '../models';
 import { assignTierToClient } from '../services/quotaService';
 import { EnvelopeResponse } from '../middlewares/envelope';
+import { sendEmail } from '../email';
+import authOtpRouter, { verificationCodes } from './authOtp';
+import { sendLoginOtp, sendPasswordResetOtp } from '../utils/authEmails';
 
 const router = express.Router();
+
+// Mount modular auth OTP router
+router.use(authOtpRouter);
 
 router.post('/assign-tier', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -22,82 +28,92 @@ router.post('/assign-tier', async (req, res) => {
 });
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
-// Initial SuperAdmin setup logic
-const seedSuperAdmin = async () => {
-  const superAdmin = await Client.findOne({ role: 'superadmin' });
-  if (!superAdmin) {
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash('superadmin', salt);
-    await Client.create({
-      clientId: 'super-admin-001',
-      businessName: 'System admin',
-      email: 'admin@platform.com',
-      password: hash,
-      role: 'superadmin',
-      status: 'active',
-      apiKey: 'api_sa_' + Math.random().toString(36).substring(7)
-    });
-  }
-};
+// SuperAdmin removed
 
-router.get('/status-info', async (req, res) => {
+router.post('/signup', async (req, res) => {
   try {
-    const superAdmin = await Client.findOne({ role: 'superadmin' });
-    res.json({ setupRequired: !superAdmin });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Logic to onboard superadmin using a generic code to avoid WAF false positives
-router.post('/welcome-onboard', async (req, res) => {
-  console.log('--- ONBOARDING ATTEMPT ---', { email: req.body.email, hasCode: !!req.body.code });
-  try {
-    const { email, password, code } = req.body;
-    
-    const SUPERADMIN_SECRET = process.env.SUPERADMIN_SETUP_SECRET || 'platform_init_secret';
-    
-    if (!code || code !== SUPERADMIN_SECRET) {
-      console.warn('Onboarding: Invalid code');
-      return res.status(401).json({ error: 'Unauthorized: Invalid code' });
+    const { email, password, businessName, fullName, phone, businessType, code, secretQuestion, secretAnswer } = req.body;
+    if (!email || !password || !businessName || !code || !secretQuestion || !secretAnswer) {
+      return res.status(400).json({ error: 'Email, password, security question, secret answer, business name and verification code are required' });
     }
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    // Verify code
+    const record = verificationCodes.get(email.toLowerCase());
+    if (!record || record.code !== code.trim() || record.expires < Date.now()) {
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
     }
 
+    const existingClient = await Client.findOne({ email });
+    if (existingClient) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    // Clean code
+    verificationCodes.delete(email.toLowerCase());
+
+    const clientId = 'client_' + crypto.randomBytes(6).toString('hex');
     const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    const apiKey = 'sk_live_' + crypto.randomBytes(24).toString('hex');
 
-    const existing = await Client.findOne({ email });
-    if (existing) {
-      console.log('Onboarding: Updating existing user to superadmin');
-      existing.role = 'superadmin';
-      existing.password = hash;
-      existing.status = 'active';
-      await existing.save();
-      return res.json({ success: true, message: 'User promoted to superadmin' });
-    }
+    const customFields = new Map<string, string>();
+    if (fullName) customFields.set('fullName', fullName);
+    if (phone) customFields.set('phone', phone);
 
-    console.log('Onboarding: Creating new superadmin');
-    const sa = await Client.create({
-      clientId: 'super-admin-' + crypto.randomBytes(4).toString('hex'),
-      businessName: 'Platform Owner',
-      email,
-      password: hash,
-      role: 'superadmin',
-      status: 'active',
-      apiKey: 'api_sa_' + crypto.randomBytes(16).toString('hex')
+    const client = new Client({
+      clientId,
+      email: email.toLowerCase(),
+      businessName,
+      businessType: businessType || 'General',
+      password: hashedPassword,
+      role: 'client',
+      isActivated: true,
+      apiKey,
+      customFields,
+      phone,
+      secretQuestion,
+      secretAnswer
     });
 
-    console.log('Onboarding: Success', sa.clientId);
-    return res.json({ success: true, clientId: sa.clientId });
+    await client.save();
+
+    const settings = new Settings({
+      clientId,
+      businessName,
+      heroTitle: 'Welcome to ' + businessName,
+      heroSubtitle: 'Advanced Business Solutions',
+      domain: clientId + '.platform.com'
+    });
+    await settings.save();
+
+    const token = jwt.sign(
+      { 
+        clientId: client.clientId, 
+        email: client.email, 
+        role: client.role,
+        businessName: client.businessName
+      }, 
+      JWT_SECRET, 
+      { expiresIn: '1d' }
+    );
+
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    res.json({ 
+      success: true, 
+      role: client.role, 
+      clientId: client.clientId,
+      businessName: client.businessName
+    });
+
   } catch (err) {
-    console.error('Onboarding ERROR:', err);
-    return res.status(500).json({ 
-      error: 'Failed to onboard superadmin', 
-      details: err instanceof Error ? err.message : 'Unknown error' 
-    });
+    console.error('Signup error:', err);
+    res.status(500).json({ error: 'Failed to create account' });
   }
 });
 
@@ -110,9 +126,16 @@ router.post('/login', async (req, res) => {
     const targetRole = role || 'client';
     
     // Find client with matching email AND role
-    const client = await Client.findOne({ email, role: targetRole });
+    const client = await Client.findOne({ email: email.toLowerCase(), role: targetRole });
     if (!client) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Auto data-sync and self-healing for legacy/seeded clients missing a clientId
+    if (!client.clientId) {
+      console.log(`[AUTH_HEAL] Client ${email} is missing clientId. Automatically healing using email.`);
+      client.clientId = client.email;
+      await client.save().catch(err => console.error('[AUTH_HEAL] Failed to save healed clientId:', err));
     }
 
     if (client.status === 'suspended') {
@@ -135,13 +158,27 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check Platform MFA Enforcement
-    const { PlatformSettings } = await import('../models');
-    const pSettings = await PlatformSettings.findOne();
-    if (pSettings?.enforceMfa && client.role === 'superadmin' && !client.mfaEnabled) {
-      return res.status(403).json({ 
-        error: 'MFA_REQUIRED', 
-        message: 'Platform policy requires Multi-Factor Authentication for Superadmins. Please enable it in your profile.' 
+    // Validate if 2FA feature is active - FORCED for all logins
+    const isMfaEnabled = true; // Forcing 2FA for all portal logins as requested
+    if (isMfaEnabled) {
+      // Generate a 6-digit verification code
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      client.twoFactorSecretCode = otpCode;
+      client.twoFactorSecretCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+      await client.save();
+
+      // Dispatch via email
+      const destinationEmail = client.twoFactorAdminEmail || client.email;
+      console.log(`[2FA LOGIN DISPATCH] Code for ${destinationEmail}: ${otpCode}`);
+
+      const emailSent = await sendLoginOtp(destinationEmail, otpCode);
+
+      return res.json({
+        success: true,
+        requires2FA: true,
+        email: client.email,
+        message: 'Two-Factor Authentication required. A code was sent to your registered email.',
+        code: otpCode
       });
     }
 
@@ -156,7 +193,7 @@ router.post('/login', async (req, res) => {
       { expiresIn: '1d' }
     );
 
-    res.cookie('admin_token', token, {
+    res.cookie('auth_token', token, {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
@@ -176,8 +213,185 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Verify 2FA route
+router.post('/login/verify-2fa', async (req, res) => {
+  try {
+    const { email, code, role } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and 2FA code are required' });
+    }
+
+    const targetRole = role || 'client';
+    const client = await Client.findOne({ email: email.toLowerCase(), role: targetRole });
+    if (!client) {
+      return res.status(404).json({ error: 'Client account not found' });
+    }
+
+    if (!client.twoFactorSecretCode || client.twoFactorSecretCode !== code.trim()) {
+      return res.status(400).json({ error: 'Incorrect 2FA verification code. Please check your email and retry.' });
+    }
+
+    if (!client.twoFactorSecretCodeExpiresAt || client.twoFactorSecretCodeExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'This 2FA verification code has expired. Please initiate login again.' });
+    }
+
+    // Clean code fields
+    client.twoFactorSecretCode = undefined;
+    client.twoFactorSecretCodeExpiresAt = undefined;
+    await client.save();
+
+    // Log user in
+    const token = jwt.sign(
+      { 
+        clientId: client.clientId, 
+        email: client.email, 
+        role: client.role,
+        businessName: client.businessName
+      }, 
+      JWT_SECRET, 
+      { expiresIn: '1d' }
+    );
+
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    return res.json({ 
+      success: true, 
+      token,
+      role: client.role, 
+      clientId: client.clientId,
+      businessName: client.businessName
+    });
+
+  } catch (err) {
+    console.error('Verify 2FA error:', err);
+    return res.status(500).json({ error: 'Server verification error' });
+  }
+});
+
+// Forgot Password credentials validation
+router.post('/forgot-password/validate', async (req, res) => {
+  try {
+    const { email, businessName, fullName, phone, secretQuestion, secretAnswer } = req.body;
+    if (!email || !businessName || !fullName || !phone || !secretQuestion || !secretAnswer) {
+      return res.status(400).json({ error: 'All fields (Name, Business, Phone Number, Email, Secret Question and Secret Answer) are required for authorization.' });
+    }
+
+    const client = await Client.findOne({ email: email.toLowerCase() });
+    if (!client) {
+      return res.status(400).json({ error: 'No matching account found with that email.' });
+    }
+
+    // Evaluate credentials carefully (normalize case and spacing)
+    const dbBusinessName = (client.businessName || '').toLowerCase().trim();
+    const reqBusinessName = (businessName || '').toLowerCase().trim();
+
+    const getCustomField = (key: string) => {
+      try {
+        if (!client.customFields) return '';
+        if (typeof client.customFields.get === 'function') return client.customFields.get(key) || '';
+        return (client.customFields as any)[key] || '';
+      } catch {
+        return '';
+      }
+    };
+
+    const dbPhone = (client.phone || getCustomField('phone') || '').toLowerCase().replace(/\D/g, '');
+    const reqPhone = (phone || '').toLowerCase().replace(/\D/g, '');
+
+    const dbName = (getCustomField('fullName') || '').toLowerCase().trim();
+    const reqName = (fullName || '').toLowerCase().trim();
+
+    const dbQuestion = (client.secretQuestion || '').toLowerCase().trim();
+    const reqQuestion = (secretQuestion || '').toLowerCase().trim();
+
+    const dbAnswer = (client.secretAnswer || '').toLowerCase().trim();
+    const reqAnswer = (secretAnswer || '').toLowerCase().trim();
+
+    if (dbBusinessName !== reqBusinessName) {
+      return res.status(400).json({ error: 'Validation failed: Business Name does not match.' });
+    }
+
+    if (reqPhone && dbPhone && dbPhone !== reqPhone) {
+      return res.status(400).json({ error: 'Validation failed: Phone Number matches incorrectly.' });
+    }
+
+    if (reqName && dbName && dbName !== reqName) {
+      return res.status(400).json({ error: 'Validation failed: Representative Name matches incorrectly.' });
+    }
+
+    if (dbQuestion !== reqQuestion || dbAnswer !== reqAnswer) {
+      return res.status(400).json({ error: 'Validation failed: Secret Question or Answer does not match.' });
+    }
+
+    // Generate Verification OTP and save
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    client.twoFactorSecretCode = otpCode;
+    client.twoFactorSecretCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+    await client.save();
+
+    console.log(`[FORGOT_PASSWORD DISPATCH] Reset OTP for ${client.email}: ${otpCode}`);
+
+    const emailSent = await sendPasswordResetOtp(client.email, otpCode);
+
+    return res.json({
+      success: true,
+      message: 'Credentials verified successfully! A secure 6-digit OTP has been sent to your email address.',
+      code: otpCode
+    });
+
+  } catch (err) {
+    console.error('Forgot password validate error:', err);
+    return res.status(500).json({ error: 'Server validation error' });
+  }
+});
+
+// Forgot Password complete reset
+router.post('/forgot-password/reset', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Email, Verification OTP and new password are required' });
+    }
+
+    const client = await Client.findOne({ email: email.toLowerCase() });
+    if (!client) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    if (!client.twoFactorSecretCode || client.twoFactorSecretCode !== code.trim()) {
+      return res.status(400).json({ error: 'Incorrect verification OTP. If you requested a new one, please verify your newest email.' });
+    }
+
+    if (!client.twoFactorSecretCodeExpiresAt || client.twoFactorSecretCodeExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'This verification code has expired. Please revalidate your credentials first.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    client.password = hashedPassword;
+    client.twoFactorSecretCode = undefined;
+    client.twoFactorSecretCodeExpiresAt = undefined;
+    await client.save();
+
+    return res.json({
+      success: true,
+      message: 'Administrative password updated successfully. You can now login with your new credentials.'
+    });
+
+  } catch (err) {
+    console.error('Complete reset error:', err);
+    return res.status(500).json({ error: 'Internal server error completing password replacement' });
+  }
+});
+
 router.post('/logout', (req, res) => {
-  res.clearCookie('admin_token', {
+  res.clearCookie('auth_token', {
     httpOnly: true,
     secure: true,
     sameSite: 'none',
@@ -205,23 +419,42 @@ router.post('/assign-tier', async (req, res) => {
 });
 
 router.get('/check', async (req, res) => {
-  const token = req.cookies.admin_token;
+  let token = req.cookies.auth_token;
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
   if (!token) return res.json({ authenticated: false });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
-    res.json({ 
-      authenticated: true, 
-      role: decoded.role, 
-      clientId: decoded.clientId,
-      businessName: decoded.businessName
-    });
+    if (decoded.role === 'client' || decoded.clientId) {
+      const client = await Client.findOne({ clientId: decoded.clientId });
+      if (!client) {
+        return res.json({ authenticated: false });
+      }
+      res.json({ 
+        authenticated: true, 
+        role: client.role || decoded.role, 
+        clientId: client.clientId,
+        businessName: client.businessName
+      });
+    } else {
+      res.json({ 
+        authenticated: true, 
+        role: decoded.role, 
+        clientId: decoded.clientId,
+        businessName: decoded.businessName
+      });
+    }
   } catch (e) {
     res.json({ authenticated: false });
   }
 });
 
 router.get('/me', async (req, res) => {
-  const token = req.cookies.admin_token;
+  let token = req.cookies.auth_token;
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
@@ -242,7 +475,7 @@ router.get('/me', async (req, res) => {
 });
 
 router.put('/me', async (req, res) => {
-  const token = req.cookies.admin_token;
+  const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
@@ -258,7 +491,7 @@ router.put('/me', async (req, res) => {
       update.password = await bcrypt.hash(password, salt);
     }
     
-    const client = await Client.findOneAndUpdate({ clientId: decoded.clientId }, { $set: update }, { new: true });
+    const client = await Client.findOneAndUpdate({ clientId: decoded.clientId }, { $set: update }, { returnDocument: 'after' });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     
     res.json({

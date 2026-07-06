@@ -22,5 +22,13 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "rewrite_auth_emails.js",
+    "fix_urls.js",
+    "fix_urls.ts",
+    "fix_urls_knowledge.ts"
+  ]
 }

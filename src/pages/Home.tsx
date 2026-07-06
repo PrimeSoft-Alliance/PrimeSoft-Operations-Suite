@@ -1,449 +1,531 @@
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Shield, Globe, Cpu, Code, CheckCircle, Database, PhoneCall, Zap } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { cn } from '../lib/utils';
+import { 
+  ArrowRight, Shield, Zap, Globe, Users, Target, Database, Search, 
+  Image as ImageIcon, Calendar, Code, MessageSquare, Check, CheckCircle2, 
+  Layers, ChevronRight, HelpCircle, HardDrive, RefreshCw, Smartphone, 
+  BarChart3, Settings, ShieldAlert, Cpu
+} from 'lucide-react';
 
 export default function Home() {
-  const [settings, setSettings] = useState<any>(null);
-  
-  // Landing page is exclusively for superadmin tenant
-  const superadminClientId = 'platform-prime';
-
-  useEffect(() => {
-    // Fetch superadmin settings for landing page
-    fetch(`/v1/public/settings?clientId=${superadminClientId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data?.success) setSettings(data.data);
-        else setSettings(data);
-      })
-      .catch(console.error);
-  }, []);
-
-  const businessName = settings?.businessName || '';
-  const heroTitle = settings?.heroTitle || 'Architecting Tomorrow';
-  const heroSubtitle = settings?.heroSubtitle || 'We build high-performance software for visionary companies.';
-
-  const services = settings?.services || [];
-
-  const fadeUpVariant = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
-  };
-
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: { staggerChildren: 0.2 }
-    }
-  };
-
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col min-h-screen bg-slate-50 font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+      {/* Navigation */}
+      <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+          <Link to="/" className="flex items-center gap-2 font-black text-xl sm:text-2xl tracking-tighter text-slate-900">
+            <div className="bg-indigo-600 p-2 rounded-lg text-white">
+              <Layers className="w-5 h-5" />
+            </div>
+            <span>OminiRep</span>
+          </Link>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link to="/client/login" className="font-bold text-xs sm:text-sm text-slate-600 hover:text-indigo-650 transition-colors">
+              Sign In
+            </Link>
+            <Link to="/signup" className="bg-indigo-600 text-white px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md shadow-indigo-600/10 hover:bg-indigo-700 transition-all hover:shadow-lg hover:shadow-indigo-600/25">
+              Deploy Agent
+            </Link>
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section */}
-      <section className="relative bg-white overflow-hidden min-h-[90vh] flex items-center pt-20">
-        {/* Abstract Background */}
-        <div className="absolute inset-0 z-0 overflow-hidden">
-          <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_70%_20%,rgba(99,102,241,0.08),transparent_50%)]" />
-          <div className="absolute bottom-0 left-0 w-full h-full bg-[radial-gradient(circle_at_30%_80%,rgba(16,185,129,0.05),transparent_50%)]" />
-          <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'radial-gradient(#6366f1 1px, transparent 1px)', backgroundSize: '40px 40px'}} />
-        </div>
-        
-        <div className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 w-full py-20">
-          <motion.div 
-            initial="hidden"
-            animate="visible"
-            variants={staggerContainer}
-            className="flex flex-col items-center text-center max-w-5xl mx-auto"
-          >
-            <motion.div variants={fadeUpVariant} className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-slate-50 border border-slate-100 text-slate-500 font-black text-[10px] uppercase tracking-[0.2em] mb-10 shadow-sm">
-              <span className="flex w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
-              {settings?.heroBadge || 'Engineering Excellence'}
-            </motion.div>
-
-            <motion.h1 variants={fadeUpVariant} className="text-6xl sm:text-7xl lg:text-8xl font-black text-gray-900 tracking-tight leading-[0.9] mb-10">
-              {heroTitle.split(' ').map((word: string, i: number, arr: string[]) => (
-                <React.Fragment key={i}>
-                  {i >= arr.length - 2 ? <span className="text-indigo-600">{word}</span> : word}
-                  {' '}
-                </React.Fragment>
-              ))}
-            </motion.h1>
-
-            <motion.p variants={fadeUpVariant} className="text-xl sm:text-2xl text-gray-400 mb-12 leading-relaxed max-w-3xl font-medium tracking-tight">
-              {heroSubtitle}
-            </motion.p>
-
-            <motion.div variants={fadeUpVariant} className="flex flex-col sm:flex-row gap-6 w-full sm:w-auto">
-              <Link to="/get-started" className="inline-flex justify-center items-center px-10 py-5 bg-indigo-600 text-white font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all shadow-2xl shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-1 group">
-                Launch Platform <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link
-                to="/book-discovery"
-                className="inline-flex justify-center items-center px-10 py-5 bg-white text-gray-900 border-2 border-gray-100 font-black uppercase tracking-widest text-xs rounded-[2rem] transition-all hover:bg-gray-50 hover:border-gray-200"
-              >
-                Book Discovery Session
-              </Link>
-            </motion.div>
-            
-            {settings?.clientStats?.length > 0 && (
-                <motion.div variants={fadeUpVariant} className="mt-24 grid grid-cols-2 md:grid-cols-3 gap-12 sm:gap-20 border-t border-gray-50 pt-16 w-full">
-                {settings.clientStats.map((stat: any, idx: number) => (
-                    <div key={idx} className={cn("text-center", idx === 2 ? "hidden md:block" : "")}>
-                    <div className="text-4xl font-black text-gray-900 mb-2 tracking-tighter">{stat.value}</div>
-                    <div className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">{stat.label}</div>
-                    </div>
-                ))}
-                </motion.div>
-            )}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Services Preview */}
-      {services.length > 0 && (
-      <section className="py-24 bg-slate-50 relative overflow-hidden">
-        <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={fadeUpVariant}
-            className="text-center mb-16"
-          >
-            <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3 text-shadow-sm">{settings?.servicesBadge || 'OUR SOLUTIONS'}</h2>
-            <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">{settings?.servicesTitle || 'Software & IT Services'}</h2>
-          </motion.div>
+      <section className="relative py-12 sm:py-16 md:py-24 lg:py-28 bg-white border-b border-slate-100 overflow-hidden">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-slate-50 rounded-full blur-3xl -z-10 translate-x-12 -translate-y-12"></div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] uppercase tracking-wider mb-6">
+            Formerly Ask OminiCSR
+          </div>
           
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={staggerContainer}
-            className="grid md:grid-cols-4 sm:grid-cols-2 gap-6"
-          >
-            {services.slice(0, 4).map((s: any, i: number) => {
-              const Icon = [Zap, Shield, Globe, Database][i % 4];
-              return (
-                <motion.div 
-                  key={i} 
-                  variants={fadeUpVariant}
-                  whileHover={{ y: -5 }}
-                  className="group p-10 rounded-[2.5rem] bg-white border border-slate-100 shadow-sm hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300"
-                >
-                  <div className="w-16 h-16 bg-slate-50 group-hover:bg-indigo-600 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:text-white mb-8 transition-all duration-300 transform group-hover:rotate-6">
-                    <Icon className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-xl font-black text-gray-900 mb-3 tracking-tight">{s.name}</h3>
-                  <p className="text-gray-500 leading-relaxed text-sm font-medium">{s.description}</p>
-                </motion.div>
-              );
-            })}
-          </motion.div>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 leading-[1.2] md:leading-[1.15] mb-6">
+            Your AI Representative for <span className="text-indigo-600">Sales, Support & Success.</span>
+          </h1>
+          
+          <p className="text-base sm:text-md md:text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed mb-10 font-semibold">
+            OminiRep lets you deploy friendly, smart digital assistants on your website, WhatsApp, and social channels to answer customer questions, book appointments, and capture leads 24/7.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 w-full max-w-sm sm:max-w-none mx-auto">
+            <Link to="/signup" className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+              Deploy Your AI Representative
+              <ArrowRight className="w-4 h-4 shrink-0" />
+            </Link>
+            <Link to="/client/login" className="w-full sm:w-auto px-6 sm:px-8 py-3.5 sm:py-4 bg-slate-50 hover:bg-slate-100 text-slate-900 border border-slate-200 font-bold text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center">
+              Enter Workspace Portal
+            </Link>
+          </div>
         </div>
       </section>
-      )}
 
-
-      {/* Portfolio Section */}
-      {settings?.portfolioProjects?.length > 0 && (
-        <section className="py-24 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <motion.div 
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={fadeUpVariant}
-              className="text-center mb-16"
-            >
-              <h2 className="text-sm font-bold text-primary tracking-wider uppercase mb-3">{settings?.portfolioBadge || 'Portfolio'}</h2>
-              <h2 className="text-4xl font-extrabold text-gray-900 tracking-tight">{settings?.portfolioTitle || 'Recent Projects'}</h2>
-            </motion.div>
-
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {settings.portfolioProjects.map((project: any, i: number) => (
-                <motion.div
-                  key={i}
-                  variants={fadeUpVariant}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="bg-slate-50 rounded-3xl overflow-hidden border border-slate-200 group"
-                >
-                  <div className="h-56 overflow-hidden">
-                    <img 
-                      src={project.image || "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80"} 
-                      alt={project.title}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
+      {/* What is OminiRep? Section */}
+      <section className="py-12 sm:py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 items-center">
+            <div>
+              <span className="text-xs font-black tracking-widest text-indigo-600 uppercase">Interactive Digital Helpers</span>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-950 mt-2 mb-6 tracking-tight">What is OminiRep?</h2>
+              <p className="text-slate-600 font-semibold text-sm leading-relaxed mb-4">
+                OminiRep acts as an online digital employee that learns directly from your business manuals, FAQs, and files. We help you give your customers instant, accurate answers around the clock with zero guesswork.
+              </p>
+              <p className="text-slate-500 font-medium text-sm leading-relaxed mb-6">
+                We combine friendly chat assistants, calendar booking, and major messaging channels into a single easy-to-use workspace for your business.
+              </p>
+            </div>
+            
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 md:p-8 shadow-sm">
+              <h3 className="text-xs uppercase font-extrabold text-slate-400 tracking-wider mb-4">Full Representative Capabilities</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  'Customer Support', 'Shopping Support', 'Capturing Leads', 
+                  'Appointment Booking', 'Order Status Lookups', 'New User Onboarding', 
+                  'Common FAQ Solutions', 'Helpful Recommendations', 'Customer Engagement', 'Website Assistance'
+                ].map((cap, idx) => (
+                  <div key={idx} className="flex items-center gap-2.5 text-xs font-bold text-slate-700">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-505 text-indigo-500 shrink-0" />
+                    <span>{cap}</span>
                   </div>
-                  <div className="p-6">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-widest mb-2">{project.tech}</div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{project.title}</h3>
-                    <p className="text-gray-500 text-sm leading-relaxed mb-4">{project.description}</p>
-                  </div>
-                </motion.div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
-      {/* Trust & Guarantee Section */}
-      <section className="py-24 bg-white border-y border-slate-100 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <motion.div 
-              initial={{ opacity: 0, x: -50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.7 }}
-              className="relative"
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-100 to-blue-50 transform translate-x-4 translate-y-4 rounded-[2.5rem] -z-10"></div>
-              <img 
-                src={settings?.trustImage || "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&q=80"} 
-                alt="Tech Team Collaboration" 
-                className="w-full h-full object-cover rounded-[2rem] shadow-xl border border-white"
-              />
-              <div className="absolute -bottom-6 -left-6 bg-white p-6 rounded-2xl shadow-lg border border-slate-50 flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 text-primary rounded-full flex items-center justify-center">
-                  <Shield className="w-6 h-6" />
+      {/* Core Vision Section */}
+      <section className="py-12 sm:py-16 bg-white border-b border-slate-105 border-slate-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <span className="text-xs font-black tracking-widest text-indigo-600 uppercase">Our Core Goal</span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 tracking-tight mt-2 mb-6">All in One Place</h2>
+          <p className="text-slate-600 font-semibold text-sm sm:text-md leading-relaxed max-w-2xl mx-auto">
+            You shouldn't have to pay for five different tools to chat with customers, take bookings, and manage leads. OminiRep brings everything together into a digital helper that feels like a natural part of your team.
+          </p>
+        </div>
+      </section>
+
+      {/* Use Cases Section */}
+      <section className="py-12 sm:py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Tailored Solutions</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-1 tracking-tight">How Businesses Use OminiRep</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+            {/* E-commerce Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 md:p-8 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl w-fit mb-6">
+                  <Cpu className="w-6 h-6" />
                 </div>
-                <div>
-                  <div className="font-bold text-gray-900">{settings?.trustCardTitle || 'Enterprise Ready'}</div>
-                  <div className="text-sm text-gray-500">{settings?.trustCardSubtitle || 'Security Verified'}</div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-950 mb-3">E-Commerce Assistance</h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-semibold mb-6">
+                  Our helper recommends products, compares items for shoppers, answers sizing or shipping questions, and guides buyers to check out.
+                </p>
+                <div className="space-y-2 border-t border-slate-100 pt-4">
+                  {['Recommend and compare products', 'Help shoppers with their carts', 'Provide order shipping updates', 'Answer refund questions clearly'].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </motion.div>
-            <motion.div 
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true }}
-              variants={staggerContainer}
-            >
-              <motion.h2 variants={fadeUpVariant} className="text-4xl font-extrabold text-gray-900 tracking-tight mb-6">{settings?.trustTitle || 'Built on Trust'}</motion.h2>
-              <motion.p variants={fadeUpVariant} className="text-lg text-gray-600 mb-8 leading-relaxed">
-                {settings?.trustDescription || 'We deliver software that powers mission-critical operations worldwide.'}
-              </motion.p>
-              <motion.ul variants={staggerContainer} className="space-y-4">
-                {(settings?.trustPoints || [
-                  "Modern tech stack selection",
-                  "Agile development methodology",
-                  "Post-deployment support & maintenance",
-                  "Enterprise-ready scalability"
-                ]).map((item: string, idx: number) => (
-                  <motion.li variants={fadeUpVariant} key={idx} className="flex items-center text-gray-700 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <CheckCircle className="w-6 h-6 text-emerald-500 mr-3 flex-shrink-0" />
-                    {item}
-                  </motion.li>
-                ))}
-              </motion.ul>
-            </motion.div>
+            </div>
+
+            {/* Service card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 md:p-8 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl w-fit mb-6">
+                  <Calendar className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-950 mb-3">Service & Local Businesses</h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-semibold mb-6">
+                  Perfect for clinics, salons, hotels, consultants, restaurants, and local services who want to automate bookings and capture leads automatically.
+                </p>
+                <div className="space-y-2 border-t border-slate-100 pt-4">
+                  {['Book appointments automatically', 'Provide quick pricing estimates', 'Explain your services and options', 'Ask preliminary questions'].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* SaaS card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 md:p-8 flex flex-col justify-between shadow-sm">
+              <div>
+                <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-xl w-fit mb-6">
+                  <Globe className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-950 mb-3">Software & Online Services</h3>
+                <p className="text-xs text-slate-500 leading-relaxed font-semibold mb-6">
+                  Give your users immediate help with tutorial lookups, step-by-step guides, payment questions, and subscription choices.
+                </p>
+                <div className="space-y-2 border-t border-slate-100 pt-4">
+                  {['Friendly helper for customer setup', 'Walk users through key features', 'Resolve billing and pricing questions', 'Answer setup questions instantly'].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs font-semibold text-slate-700">
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-24 bg-slate-900 text-white relative">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1558611848-73f7eb4001a1?auto=format&fit=crop&q=80')] opacity-5 bg-cover mix-blend-overlay"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={fadeUpVariant}
-            className="text-center mb-16"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">{settings?.testimonialsTitle || 'Client Success'}</h2>
-          </motion.div>
-          <motion.div 
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            variants={staggerContainer}
-            className="grid md:grid-cols-2 lg:grid-cols-3 gap-8"
-          >
-            {(settings?.testimonials || [
-              { text: "This platform transformed our legacy systems into a modern cloud environment. Their speed and precision are unmatched.", name: "Sarah Jenkins", role: "CTO", initials: "SJ" },
-              { text: "The solution they built for us has doubled our user engagement. Professional and visionary team.", name: "Michael Ross", role: "CEO", initials: "MR" },
-              { text: "Best consulting we've ever had. They actually understand business goals, not just code.", name: "David Thompson", role: "Director", initials: "DT", hideMobile: true }
-            ]).map((t: any, i: number) => (
-              <motion.div 
-                key={i}
-                variants={fadeUpVariant}
-                whileHover={{ y: -5 }}
-                className={`bg-slate-800/80 p-8 rounded-3xl border border-slate-700 backdrop-blur-md shadow-xl transition-all ${t.hideMobile ? 'hidden md:block' : ''}`}
-              >
-                <div className="flex text-amber-400 mb-6">
-                  {[...Array(5)].map((_, i) => <Star key={i} className="w-5 h-5 fill-current" />)}
-                </div>
-                <p className="text-slate-300 mb-8 font-medium italic leading-relaxed">"{t.text}"</p>
-                <div className="flex items-center space-x-4 mt-auto">
-                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-lg font-bold text-white shadow-inner">{t.initials || (t.name ? t.name[0] : 'U')}</div>
+      {/* AI Knowledge & Document Loading Section */}
+      <section className="py-12 sm:py-16 md:py-20 bg-white border-b border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 items-center">
+          <div>
+            <span className="text-xs font-black tracking-widest text-indigo-600 uppercase">Knowledge Loading</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 tracking-tight mt-2 mb-6">Under the Hood: Smart Answers, No Guesswork</h2>
+            <p className="text-slate-650 leading-relaxed mb-4 text-sm font-medium">
+              Your company gets a secure, private assistant. Simply upload your PDFs, Word documents, spreadsheets, links, FAQs, or catalog lists.
+            </p>
+            <p className="text-slate-600 leading-relaxed mb-6 text-sm font-semibold">
+              When a customer asks a question, our system searches your documents instantly, finds the exact matching paragraphs, and composes a safe, correct, and professional response using your facts.
+            </p>
+          </div>
+          
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 sm:p-6 md:p-8">
+            <h3 className="text-xs uppercase font-extrabold text-slate-400 tracking-wider mb-6 text-center">How OminiRep Finds the Right Answer</h3>
+            <div className="space-y-4">
+              {[
+                { step: '01', title: 'User Inquiry', desc: 'Customer asks a question via your website chat or WhatsApp.' },
+                { step: '02', title: 'Semantic Understanding', desc: 'The assistant figures out the exact meaning of the question.' },
+                { step: '03', title: 'Quick Fact Search', desc: 'Looks up facts in your uploaded business documents.' },
+                { step: '04', title: 'Sentence Matching', desc: 'Pulls the most relevant sentences that match what the user is asking.' },
+                { step: '05', title: 'Context Preparation', desc: 'Hands the relevant sentences to our secure AI helper model.' },
+                { step: '06', title: 'Polished Response', desc: 'Produces a friendly, accurate response backed by your facts.' }
+              ].map((stepObj) => (
+                <div key={stepObj.step} className="flex gap-4 items-start bg-white p-3 rounded-xl border border-slate-200">
+                  <div className="text-xs font-black text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md font-mono shrink-0">
+                    {stepObj.step}
+                  </div>
                   <div>
-                    <p className="font-bold text-white">{t.name}</p>
-                    <p className="text-sm opacity-80">{t.role}</p>
+                    <h4 className="font-bold text-xs text-slate-900">{stepObj.title}</h4>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed mt-0.5">{stepObj.desc}</p>
                   </div>
                 </div>
-              </motion.div>
-            ))}
-          </motion.div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="py-24 bg-primary relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/10 mix-blend-overlay"></div>
-        <div className="absolute -top-32 -right-32 w-96 h-96 bg-white/10 rounded-full mix-blend-screen filter blur-[80px] opacity-40"></div>
-        
-        <motion.div 
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          variants={fadeUpVariant}
-          className="relative max-w-4xl mx-auto px-4 text-center z-10"
-        >
-          <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">{settings?.ctaTitle || 'Ready to Scale?'}</h2>
-          <p className="text-xl text-white opacity-90 mb-10 font-light">{settings?.ctaSubtitle || 'Our architects are ready to build your next generation platform.'}</p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link 
-              to="/book-discovery"
-              className="inline-flex justify-center items-center px-8 py-4 bg-white text-primary font-bold rounded-xl shadow-lg shadow-black/20 hover:shadow-xl hover:shadow-black/30 hover:-translate-y-1 transition-all group"
-            >
-              Book Discovery Call <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Link>
-            <Link to="/client/login" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
-               Client Login
-            </Link>
-            <Link to="/admin/login" className="inline-flex justify-center items-center px-8 py-4 bg-black/20 hover:bg-black/30 text-white font-bold rounded-xl transition-all border border-white/20 backdrop-blur-sm">
-               Admin Login
-            </Link>
+      {/* Advanced Capabilities (Grid) */}
+      <section className="py-12 sm:py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12sm:mb-16">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Key Features</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-1 tracking-tight">Our Primary Features</h2>
           </div>
-        </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+            {/* Vector Search */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><Database className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Secure Document Search</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Connects your documents, files, and guides to build an instant reference library for your assistant.
+              </p>
+            </div>
+
+            {/* Product Intelligence */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><Cpu className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Smart Product Assistant</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Analyzes customer needs, suggests alternative products, and checks size or availability options.
+              </p>
+            </div>
+
+            {/* Image Recognition */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><ImageIcon className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Image Helper</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Allows buyers to upload pictures of products so the assistant can recognize them and find matching items.
+              </p>
+            </div>
+
+            {/* Metadata Engine */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><Search className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Catalog Detailer</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Instantly serves details like pricing, sizes, inventory levels, colors, and shipping fees.
+              </p>
+            </div>
+
+            {/* Booking & Reservations */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><Calendar className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Calendar Syncing</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Automate scheduling. Checks your real-time availability, reserves spots, and works with your Google Calendar.
+              </p>
+            </div>
+
+            {/* AI Sandbox */}
+            <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200">
+              <div className="text-indigo-600 mb-4"><Code className="w-6 h-6" /></div>
+              <h3 className="font-extrabold text-md sm:text-lg text-slate-950 mb-2">Testing Sandbox</h3>
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Test your assistant with mock questions, inspect what documents it reads, and refine its tone easily.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
+
+      {/* Multi-tenant, White-Label, Analytics */}
+      <section className="py-12 sm:py-16 md:py-20 bg-white border-b border-slate-150">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+          <div className="space-y-4">
+            <div className="mx-auto md:mx-0 w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+              <Shield className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-md sm:text-lg text-slate-950">Total Privacy & Security</h3>
+            <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+              Every business gets completely separate folders, settings, and documents. Your business information remains strictly yours.
+            </p>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="mx-auto md:mx-0 w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+              <Users className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-md sm:text-lg text-slate-950">Agency Rebranding</h3>
+            <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+              Rebrand the portal with your own logo and colors, create client workspaces, and offer digital workers under your brand.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="mx-auto md:mx-0 w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <h3 className="font-extrabold text-md sm:text-lg text-slate-950">Simple Performance Statistics</h3>
+            <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+              See intuitive counters like total conversations, leads collected, bookings completed, and customer feedback.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Widget & WhatsApp Section */}
+      <section className="py-12 sm:py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-12 items-center">
+          <div>
+            <span className="text-xs font-black tracking-widest text-indigo-600 uppercase">Seamless Channels</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-2 mb-6 tracking-tight">Website Widget & Messaging Apps</h2>
+            <p className="text-slate-650 font-semibold text-sm leading-relaxed mb-6">
+              Speak to customers where they are: either via a modern website chat widget or directly on WhatsApp.
+            </p>
+            
+            <div className="space-y-4">
+              <div className="bg-white border border-slate-200 p-4 rounded-xl flex gap-4 items-start">
+                <Smartphone className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900">Standard WhatsApp Setup</h4>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">A shared number for quick, simple setup and affordable pricing options.</p>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-xl flex gap-4 items-start">
+                <CheckCircle2 className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900">Your Own Business Number</h4>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Use your own phone number, enable custom message routing, and get higher sending limits.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white border border-slate-200 p-5 sm:p-6 md:p-8 rounded-2xl">
+            <h3 className="font-extrabold text-sm text-slate-950 mb-3">Easy Website Installation</h3>
+            <p className="text-xs text-slate-500 font-semibold mb-4 leading-relaxed">
+              Add a snippet of code to your website to display your assistant instantly. Simply place this code within your website HTML.
+            </p>
+            <div className="bg-slate-900 rounded-xl p-4 text-slate-300 font-mono text-xs overflow-x-auto">
+              <div className="text-slate-500">&lt;!-- Embed OminiRep AI Representative --&gt;</div>
+              <div className="text-indigo-400">&lt;div <span className="text-slate-200">id</span>="ai-assistant-widget" <span className="text-slate-200">client_id</span>="YOUR-CLIENT-ID"&gt;&lt;/div&gt;</div>
+              <div className="text-indigo-400">&lt;script <span className="text-slate-200">src</span>="https://your-domain.com/widget.js"&gt;&lt;/script&gt;</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Operational Logic Section */}
+      <section className="py-12 sm:py-16 md:py-20 bg-white border-b border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Smart Workflows</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-1 tracking-tight">Automated Customer Workflows</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-slate-50 p-5 sm:p-6 rounded-xl border border-slate-200">
+              <h3 className="font-extrabold text-sm text-slate-950 mb-2">Smart Conversation Memory</h3>
+              <p className="text-xs text-slate-500 leading-normal font-semibold">
+                Remembers past customer conversations, context, and schedules to offer highly personalized follow-ups.
+              </p>
+            </div>
+            <div className="bg-slate-50 p-5 sm:p-6 rounded-xl border border-slate-200">
+              <h3 className="font-extrabold text-sm text-slate-950 mb-2">Automatic Lead Collection</h3>
+              <p className="text-xs text-slate-500 leading-normal font-semibold">
+                Identifies potential buyers, collects contact fields, notes what they want, and updates your dashboard automatically.
+              </p>
+            </div>
+            <div className="bg-slate-50 p-5 sm:p-6 rounded-xl border border-slate-200">
+              <h3 className="font-extrabold text-sm text-slate-950 mb-2">Helpful Recommendation Mode</h3>
+              <p className="text-xs text-slate-500 leading-normal font-semibold">
+                A friendly approach to showing your catalog, answering product questions, and helping shoppers choose the right option.
+              </p>
+            </div>
+            <div className="bg-slate-50 p-5 sm:p-6 rounded-xl border border-slate-200">
+              <h3 className="font-extrabold text-sm text-slate-950 mb-2">Hand-off to Human Team</h3>
+              <p className="text-xs text-slate-500 leading-normal font-semibold">
+                Seamlessly routes more complex inquiries to your real support team and notifies local staff immediately.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Infrastructure Deployments Options */}
+      <section className="py-12 sm:py-16 md:py-20 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-12">
+            <span className="text-xs font-bold uppercase tracking-wider text-indigo-600">Reliable Hosting</span>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-1 tracking-tight">Flexible Infrastructure Options</h2>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
+            {/* Cloud */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 flex flex-col justify-between shadow-sm">
+              <div>
+                <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded w-fit block mb-4">Standard Option</span>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-950 mb-2">Fully Hosted Cloud Portal</h3>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed mb-6">Hassle-free setup on our secure, managed cloud servers. We handle maintenance, updates, and daily performance.</p>
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>No server setup or maintenance needed</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Instant automatic updates and security checks</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Standard file storage, chats, and widgets included</span>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-8">
+                <Link to="/signup" className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl block text-center shadow-md">
+                  Deploy Cloud Portal
+                </Link>
+              </div>
+            </div>
+
+            {/* Dedicated */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 flex flex-col justify-between shadow-sm">
+              <div>
+                <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded w-fit block mb-4">Enterprise Option</span>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-950 mb-2">Dedicated Server Setup</h3>
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed mb-6">A tailored database and private server setup built for teams that require isolated, higher-capacity resources.</p>
+                <div className="space-y-3 pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Dedicated server instances for high performance</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Custom WhatsApp connections and dedicated assistance</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-700">
+                    <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span>Higher usage counts and custom storage levels</span>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-8">
+                <a href="mailto:support@primesoftalliance.com" className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl block text-center shadow-md">
+                  Request Private Proposal
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Workforce Roadmap */}
+      <section className="py-12 sm:py-16 md:py-20 bg-white border-b border-slate-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+          <span className="text-xs font-black tracking-widest text-indigo-600 uppercase">Product Future</span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-950 mt-2 mb-6 tracking-tight">Your Future Digital Workforce</h2>
+          <p className="text-slate-650 font-semibold text-sm leading-relaxed mb-8">
+            We are expanding so you can deploy specialized digital assistants for sales, support, HR, or clinical bookings, all working together in one unified dashboard.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {['Sales Representative', 'Customer Support Rep', 'Customer Success Associate', 'Booking Coordinator', 'Human Resource Clerk', 'Recruitment Specialist', 'Real Estate Agent', 'Medical Receptionist', 'E-commerce Operator'].map((spec) => (
+              <span key={spec} className="bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200">
+                {spec}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-slate-900 py-12 sm:py-16 text-slate-400 border-t border-slate-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+            <div>
+              <div className="font-sans font-black text-lg sm:text-xl tracking-tighter text-white mb-4">OminiRep</div>
+              <p className="text-xs font-semibold leading-relaxed text-slate-400">
+                Professional customer assistant software. Your AI Representative for sales, support, and success. Supported of PrimeSoft Alliance.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-bold text-xs uppercase tracking-widest text-slate-100 mb-4">SaaS Platform</h4>
+              <div className="flex flex-col gap-2.5 text-xs font-semibold">
+                <Link to="/signup" className="hover:text-white transition">Deploy Agent</Link>
+                <Link to="/client/login" className="hover:text-white transition">Client Dashboard</Link>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-bold text-xs uppercase tracking-widest text-slate-100 mb-4">Legal & Compliance</h4>
+              <div className="flex flex-col gap-2.5 text-xs font-semibold">
+                <Link to="/privacy?tab=terms" className="hover:text-white transition">Terms of Service</Link>
+                <Link to="/privacy?tab=privacy" className="hover:text-white transition">Privacy Policy & Acceptable Use</Link>
+                <Link to="/privacy?tab=dpa" className="hover:text-white transition">Data Processing Addendum (DPA)</Link>
+                <Link to="/privacy?tab=subscription" className="hover:text-white transition">SaaS Subscription Terms</Link>
+                <Link to="/privacy?tab=refunds" className="hover:text-white transition">Refund & Cancellation Rules</Link>
+              </div>
+            </div>
+            <div>
+              <h4 className="font-bold text-xs uppercase tracking-widest text-slate-100 mb-4">Power Providers</h4>
+              <p className="text-xs leading-normal mb-3 text-slate-400">
+                Supported, operated, and guaranteed under the strict B2B service-level agreements of PrimeSoft Alliance.
+              </p>
+              <span className="text-[10px] font-mono font-bold bg-slate-800 text-slate-300 px-2.5 py-1 rounded">SLA 99.99% Reliability Guarantee</span>
+            </div>
+          </div>
+          
+          <div className="border-t border-slate-800 pt-8 mt-12 flex flex-col sm:flex-row justify-between items-center text-xs opacity-50 font-semibold text-slate-400 gap-4">
+            <span className="text-center sm:text-left">&copy; {new Date().getFullYear()} OminiRep Platform. Deployments maintained by PrimeSoft Alliance. All rights reserved.</span>
+            <span>Corporate Governance Framework: ISO/IEC Compliant</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
-}
-
-function Star(props: any) {
-  return (
-    <svg viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385c.148.621-.531 1.114-1.059.777l-4.704-3.003a.563.563 0 00-.598 0l-4.704 3.003c-.528.337-1.207-.156-1.059-.777l1.285-5.385a.563.563 0 00-.182-.557l-4.204-3.602a.563.563 0 00.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
-    </svg>
-  );
-}
-
-function DiscoveryForm({ clientId }: { clientId: string }) {
-   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-   const [formData, setFormData] = useState({
-      name: '',
-      email: '',
-      phone: '',
-      businessName: '',
-      message: ''
-   });
-
-   const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      setStatus('loading');
-      try {
-         const res = await fetch('/v1/public/onboarding-request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-client-id': clientId },
-            body: JSON.stringify(formData)
-         });
-         const data = await res.json();
-         if (data.success) setStatus('success');
-         else setStatus('error');
-      } catch (err) {
-         setStatus('error');
-      }
-   };
-
-   if (status === 'success') {
-      return (
-         <div className="text-center py-20 space-y-6">
-            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-               <CheckCircle className="w-10 h-10" />
-            </div>
-            <h3 className="text-3xl font-black text-slate-900 tracking-tight">Request Logged</h3>
-            <p className="text-slate-500 font-medium">An implementation agent will review your profile and reach out within 24 hours.</p>
-         </div>
-      );
-   }
-
-   return (
-      <form onSubmit={handleSubmit} className="space-y-6">
-         <div className="grid sm:grid-cols-2 gap-6">
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-               <input 
-                 required
-                 type="text"
-                 value={formData.name}
-                 onChange={e => setFormData({...formData, name: e.target.value})}
-                 placeholder="Kayode Olufowobi"
-                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
-               />
-            </div>
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Work Email</label>
-               <input 
-                 required
-                 type="email"
-                 value={formData.email}
-                 onChange={e => setFormData({...formData, email: e.target.value})}
-                 placeholder="name@company.com"
-                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
-               />
-            </div>
-         </div>
-         <div className="grid sm:grid-cols-2 gap-6">
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Business Name</label>
-               <input 
-                 required
-                 type="text"
-                 value={formData.businessName}
-                 onChange={e => setFormData({...formData, businessName: e.target.value})}
-                 placeholder="Acme Corp"
-                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
-               />
-            </div>
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Phone Number</label>
-               <input 
-                 required
-                 type="tel"
-                 value={formData.phone}
-                 onChange={e => setFormData({...formData, phone: e.target.value})}
-                 placeholder="+971 ..."
-                 className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
-               />
-            </div>
-         </div>
-         <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Implementation Scope</label>
-            <textarea 
-              rows={3}
-              value={formData.message}
-              onChange={e => setFormData({...formData, message: e.target.value})}
-              placeholder="Tell us about your technical requirements..."
-              className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-900 placeholder:text-slate-300 transition-all"
-            />
-         </div>
-         <button 
-           disabled={status === 'loading'}
-           className="w-full py-5 bg-indigo-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50"
-         >
-            {status === 'loading' ? 'Transmitting Request...' : 'Submit Discovery Request'}
-         </button>
-         {status === 'error' && <p className="text-center text-xs font-bold text-rose-500">Transmission failure. Please try direct contact.</p>}
-      </form>
-   );
 }

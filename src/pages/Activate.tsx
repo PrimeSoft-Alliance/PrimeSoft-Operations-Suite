@@ -27,7 +27,7 @@ export default function Activate() {
         setStatus({ type: 'success', message: 'Account activated successfully! Redirecting to login...' });
         setTimeout(() => navigate('/client/login'), 3000);
       } else {
-        setStatus({ type: 'error', message: data.error || 'Activation failed. Please check your token and email.' });
+        setStatus({ type: 'error', message: typeof data.error === 'object' ? (data.error.message || JSON.stringify(data.error)) : (data.error || 'Activation failed. Please check your token and email.') });
       }
     } catch (err) {
       setStatus({ type: 'error', message: 'Connection error. Please try again.' });
@@ -114,9 +114,6 @@ export default function Activate() {
         </motion.div>
 
         <div className="mt-8 text-center">
-          <Link to="/client/login" className="text-xs font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors flex items-center justify-center gap-2">
-            <Home className="w-4 h-4" /> Return to Gateway
-          </Link>
         </div>
       </div>
     </div>

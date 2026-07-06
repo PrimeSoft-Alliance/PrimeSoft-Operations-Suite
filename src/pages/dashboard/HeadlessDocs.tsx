@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Terminal, Copy, Check, Globe, MessageSquare, Calendar, Database, Key, Zap, Shield, Code, Palette, Share2 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 export default function HeadlessDocs() {
   const [apiKey, setApiKey] = useState('loading...');
@@ -123,19 +123,15 @@ export default function HeadlessDocs() {
                 <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                   <Share2 className="w-6 h-6 text-indigo-600" /> 1-Click Client SDK
                 </h3>
-                <p className="text-gray-600">The easiest way to add AI Chat, Bookings, and Contact leads to any external HTML site or CMS (WordPress, Wix, Webflow).</p>
+                <p className="text-gray-600">The easiest way to add an intelligent Conversational AI Assistant to any external HTML site or CMS (WordPress, Wix, Webflow).</p>
                 <CodeBlock 
-                  title="Include in <head> or <body>"
-                  code={`<script 
-  src="${window.location.origin}/platform-sdk.js" 
-  data-client-id="${clientId}"
-  data-auto-detect="true">
-</script>`} 
+                  title="Include in <body>"
+                  code={`<script src="${window.location.origin}/widget.js" data-client-id="${clientId}" async></script>`} 
                 />
                 <div className="grid grid-cols-2 gap-4 text-xs font-medium text-gray-500 pt-2">
                   <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Auto-Theme Matching</div>
                   <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Zero Code Widget Injection</div>
-                  <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Dynamic Form Landing Pages</div>
+                  <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Conversational AI Intelligence</div>
                   <div className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" /> Cross-Origin Event Sync</div>
                 </div>
               </div>
@@ -148,55 +144,19 @@ export default function HeadlessDocs() {
                 
                 <div className="space-y-6">
                   <CodeBlock 
-                    title="GET content (CMS)"
-                    code={`// Fetch hero, about, services, and branding
-fetch('${window.location.origin}/v1/public/content?clientId=${clientId}')
-  .then(res => res.json());`}
-                  />
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <CodeBlock 
-                      title="POST chat (AI)"
-                      code={`fetch('${window.location.origin}/v1/public/ai/chat', {
+                    title="POST chat (AI)"
+                    code={`fetch('${window.location.origin}/v1/public/ai/chat', {
   method: 'POST',
   headers: { 'x-client-id': '${clientId}', 'Content-Type': 'application/json' },
   body: JSON.stringify({ message: 'Hi' })
 });`}
-                    />
-                    <CodeBlock 
-                      title="POST leads (Forms)"
-                      code={`fetch('${window.location.origin}/v1/public/contact', {
-  method: 'POST',
-  headers: { 'x-client-id': '${clientId}', 'Content-Type': 'application/json' },
-  body: JSON.stringify({ name: 'John', email: '...', message: '...' })
-});`}
-                    />
-                  </div>
+                  />
                 </div>
               </div>
            </div>
         </div>
       </div>
 
-       <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white p-10 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl group-hover:bg-indigo-600/20 transition-all duration-1000"></div>
-        <div className="relative z-10 flex flex-col md:flex-row gap-8 items-center text-center md:text-left">
-          <div className="flex-1 space-y-4">
-            <h2 className="text-3xl font-extrabold tracking-tight">Need a Bespoke Integration?</h2>
-            <p className="text-lg text-indigo-100/70 max-w-xl italic">
-              "We don't just provide APIs, we provide strategic digital partnerships. Let's build your next innovation together."
-            </p>
-          </div>
-          <div className="shrink-0 flex flex-col sm:flex-row gap-4">
-            <button className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-2 justify-center">
-              Partner with our Engineers
-            </button>
-            <button className="bg-white/10 text-white border border-white/20 backdrop-blur-md px-8 py-4 rounded-2xl font-bold hover:bg-white/20 transition-all flex items-center gap-2 justify-center">
-              Review API Docs v1.2
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

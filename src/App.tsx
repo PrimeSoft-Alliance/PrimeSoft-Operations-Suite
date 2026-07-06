@@ -1,114 +1,90 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import Signup from './pages/Signup';
+
+// Existing imports
 import Home from './pages/Home';
-import About from './pages/About';
-import Booking from './pages/Booking';
-import BookDiscovery from './pages/BookDiscovery';
-import Inquiry from './pages/Inquiry';
-import ChatbotMini from './pages/ChatbotMini';
-import Onboarding from './pages/Onboarding';
-import PublicOnboarding from './pages/PublicOnboarding';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import Activate from './pages/Activate';
 
 import DashboardLayout from './pages/dashboard/DashboardLayout';
 import DashboardHome from './pages/dashboard/DashboardHome';
-import BookingsManager from './pages/dashboard/BookingsManager';
 import LeadsManager from './pages/dashboard/LeadsManager';
-import TicketingNexus from './pages/dashboard/TicketingNexus';
-import OperationsNexus from './pages/dashboard/OperationsNexus';
+import ContactsManager from './pages/dashboard/ContactsManager';
 import SettingsManager from './pages/dashboard/SettingsManager';
 import AvailabilityManager from './pages/dashboard/AvailabilityManager';
 import EmailTemplatesManager from './pages/dashboard/EmailTemplatesManager';
 import HeadlessDocs from './pages/dashboard/HeadlessDocs';
-import WebsiteManager from './pages/dashboard/WebsiteManager';
-import ClientInquiries from './pages/dashboard/Inquiries';
+import KnowledgeManager from './pages/dashboard/KnowledgeManager';
+import ProductManager from './pages/dashboard/ProductManager';
+import Analytics from './pages/dashboard/Analytics';
+import Notifications from './pages/dashboard/Notifications';
+import SupportSuite from './pages/dashboard/SupportSuite';
 import ClientBookings from './pages/dashboard/Bookings';
 import Login from './pages/Login';
-import Setup from './pages/Setup';
-import Privacy from './pages/Privacy';
-import Terms from './pages/Terms';
-import SuperAdminLayout from './pages/superadmin/SuperAdminLayout';
-import ClientsManager from './pages/superadmin/ClientsManager';
-import GlobalStats from './pages/superadmin/GlobalStats';
+import Integrations from './pages/dashboard/Integrations';
+import WhatsAppIntegration from './pages/dashboard/integrations/WhatsAppIntegration';
+import TelegramIntegration from './pages/dashboard/integrations/TelegramIntegration';
+import EmailIntegration from './pages/dashboard/integrations/EmailIntegration';
+import CalendarIntegration from './pages/dashboard/integrations/CalendarIntegration';
+import MissedCalls from './pages/dashboard/MissedCalls';
+import Marketing from './pages/dashboard/Marketing';
+import Numbers from './pages/dashboard/Numbers';
+import CallForwardingSetup from './pages/dashboard/CallForwardingSetup';
+import SharedInbox from './pages/dashboard/SharedInbox';
 
-import SuperadminUsage from './pages/superadmin/SuperadminUsage';
-import SuperadminTemplates from './pages/superadmin/SuperadminTemplates';
-import SuperadminLogs from './pages/superadmin/SuperadminLogs';
-import OnboardingRequests from './pages/superadmin/OnboardingRequests';
-import PromptGenerator from './pages/superadmin/PromptGenerator';
-import SystemHealth from './pages/superadmin/SystemHealth';
-import DomainsManager from './pages/superadmin/DomainsManager';
-import NotificationsManager from './pages/superadmin/NotificationsManager';
-import PlatformSettings from './pages/superadmin/PlatformSettings';
-import MissionControl from './pages/superadmin/MissionControl';
-import SuperAdminInquiries from './pages/superadmin/Inquiries';
-import SuperAdminBookings from './pages/superadmin/Bookings';
-<<<<<<< HEAD
-import AITrainingManager from './pages/superadmin/AITrainingManager';
-=======
-import QuotaDashboard from './pages/superadmin/QuotaDashboard';
->>>>>>> origin/main
+import BookingSuccess from './pages/BookingSuccess';
+import ChatbotMini from './pages/ChatbotMini';
 
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="about" element={<About />} />
-          <Route path="booking" element={<Booking />} />
-          <Route path="book-discovery" element={<BookDiscovery />} />
-          <Route path="inquiry" element={<Inquiry />} />
-          <Route path="privacy" element={<Privacy />} />
-          <Route path="terms" element={<Terms />} />
-          <Route path="get-started" element={<PublicOnboarding />} />
-        </Route>
-        
-        <Route path="/client/login" element={<Login loginRole="client" />} />
-        <Route path="/admin/login" element={<Login loginRole="superadmin" />} />
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/booking-success/:id" element={<BookingSuccess />} />
+      <Route path="/chatbot-mini" element={<ChatbotMini />} />
+      
+      <Route path="/client/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/activate" element={<Activate />} />
-        <Route path="/setup" element={<Setup />} />
-        <Route path="/chatbot-mini" element={<ChatbotMini />} />
-        <Route path="/onboarding/:token" element={<Onboarding />} />
         
         <Route path="/dashboard" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
-          <Route path="nexus" element={<OperationsNexus />} />
           <Route path="bookings" element={<ClientBookings />} />
-          <Route path="inquiries" element={<ClientInquiries />} />
+          <Route path="support" element={<SupportSuite />} />
+          <Route path="integrations" element={<Integrations />} />
+          <Route path="integrations/whatsapp" element={<WhatsAppIntegration />} />
+          <Route path="integrations/telegram" element={<TelegramIntegration />} />
+          <Route path="integrations/email" element={<EmailIntegration />} />
+          <Route path="integrations/calendar" element={<CalendarIntegration />} />
+          <Route path="integrations/call-forwarding" element={<CallForwardingSetup />} />
+          <Route path="missed-calls" element={<MissedCalls />} />
+          <Route path="marketing" element={<Marketing />} />
+          <Route path="numbers" element={<Numbers />} />
+          <Route path="inquiries" element={<Navigate to="/dashboard/support" replace />} />
+          <Route path="tickets" element={<Navigate to="/dashboard/support" replace />} />
           <Route path="leads" element={<LeadsManager />} />
-          <Route path="tickets" element={<TicketingNexus />} />
+          <Route path="contacts" element={<ContactsManager />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="notifications" element={<Notifications />} />
           <Route path="availability" element={<AvailabilityManager />} />
           <Route path="email-templates" element={<EmailTemplatesManager />} />
           <Route path="developer" element={<HeadlessDocs />} />
           <Route path="settings" element={<SettingsManager />} />
-          <Route path="website" element={<WebsiteManager />} />
-        </Route>
-
-        <Route path="/superadmin" element={<SuperAdminLayout />}>
-          <Route index element={<GlobalStats />} />
-          <Route path="hub" element={<MissionControl />} />
-          <Route path="clients" element={<ClientsManager />} />
-          <Route path="leads" element={<LeadsManager />} />
-          <Route path="bookings" element={<SuperAdminBookings />} />
-          <Route path="inquiries" element={<SuperAdminInquiries />} />
-          <Route path="onboarding" element={<OnboardingRequests />} />
-          <Route path="prompts" element={<PromptGenerator />} />
-          <Route path="domains" element={<DomainsManager />} />
-          <Route path="usage" element={<SuperadminUsage />} />
-          <Route path="logs" element={<SuperadminLogs />} />
-          <Route path="health" element={<SystemHealth />} />
-          <Route path="notifications" element={<NotificationsManager />} />
-          <Route path="settings" element={<PlatformSettings />} />
-<<<<<<< HEAD
-          <Route path="ai-training" element={<AITrainingManager />} />
-=======
-          <Route path="quotas" element={<QuotaDashboard />} />
->>>>>>> origin/main
+          <Route path="knowledge" element={<KnowledgeManager />} />
+          <Route path="shared-inbox" element={<SharedInbox />} />
+          <Route path="catalog" element={<ProductManager />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
   );
 }

@@ -1,177 +1,87 @@
 import express from 'express';
 import { EnvelopeResponse } from '../middlewares/envelope';
-import { Groq } from 'groq-sdk';
+import { AI_MODELS } from '../utils/ai';
 import { incrementAiUsage } from '../../lib/usage';
-import { Settings } from '../models';
+import Groq from 'groq-sdk';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY || 'dummy_key',
-});
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// AI Form Generator (Groq)
-router.post('/generate-form', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const { prompt } = req.body;
-    if (!prompt) return envRes.sendError(400, 'BAD_REQUEST', 'Prompt is required');
+const PROMPTS_DIR = path.join(process.cwd(), 'prompts');
 
-    if (!process.env.GROQ_API_KEY) {
-      return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
-    }
-
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert lead generation strategist and technical form architect. 
-          Generate a high-converting lead funnel structure.
-          Return ONLY a JSON object that defines a form. 
-          The object must have:
-          - name: A catchy title for the form
-          - description: A value-driven description
-          - fields: An array of field objects, each with:
-            - id: random string
-            - type: one of [text, textarea, email, select, rating, checkbox, radio, file]
-            - label: clear, friendly label
-            - name: camelCase identifier
-            - required: boolean
-            - placeholder: optional text
-            - helpText: optional guidance
-            - options: array of strings (only for select, radio, checkbox)
-          - theme: object with primaryColor (hex)
-          
-          No markdown, no prose, strictly JSON.`
-        },
-        {
-          role: 'user',
-          content: `Generate a lead funnel for: "${prompt}"`
-        }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      response_format: { type: 'json_object' }
-    });
-
-    const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
-    await incrementAiUsage(clientId, 'form-gen', 'assistant', `AI Form Generation: ${prompt}`);
-
-    const result = JSON.parse(completion.choices[0].message.content || '{}');
-    envRes.sendSuccess(result);
-  } catch (error: any) {
-    console.error('AI Form Generation Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate form structure');
-  }
-});
-
-// AI Brand Generator
+// AI Brand Generator with Extended Thinking (Groq)
 router.post('/generate-branding', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { businessName, services } = req.body;
-    
-    if (!process.env.GROQ_API_KEY) {
-      return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
-    }
+    const { businessName, services, prompt: userPrompt } = req.body;
 
-     const completion = await groq.chat.completions.create({
+    const promptPath = path.join(PROMPTS_DIR, 'brand-strategist.md');
+    const systemPrompt = fs.existsSync(promptPath) 
+      ? fs.readFileSync(promptPath, 'utf8').replace('${businessName}', businessName || 'Our Partner')
+      : 'You are a brand strategist expert. Generate comprehensive branding strategies in JSON format.';
+
+    const result = await groq.chat.completions.create({
+      model: AI_MODELS.FLASH,
       messages: [
         {
-          role: 'system',
-          content: 'You are a professional brand designer. Return ONLY a JSON object with primaryColor, secondaryColor, fontFamily (Inter, Outfit, Space Grotesk, or Montserrat), heroTitle (high-converting), heroSubtitle (persuasive), and a layoutStyle (modern, minimal, or bold). No markdown, no prose.'
-        },
-        {
           role: 'user',
-          content: `You are a world-class brand strategist and UI/UX designer. 
-Generate a professional brand identity for a business named "${businessName}". 
-Services offered: ${services}.
-
-Return ONLY a JSON object with:
-{
-  "primaryColor": "A hex code that matches the industry vibe",
-  "fontFamily": "One of: Inter, Outfit, Space Grotesk, Montserrat",
-  "heroTitle": "A high-converting 3-6 word headline",
-  "heroSubtitle": "A compelling 15-25 word value proposition",
-  "heroImage": "A high-quality Unsplash image URL that matches the brand",
-  "aiBehaviorInstructions": "Specific tone and style instructions for an AI receptionist for this business"
-}`
+          content: userPrompt || `Generate branding for ${businessName || 'Our Partner'}. Services: ${services || 'various'}. Return valid JSON format.`
         }
       ],
-      model: 'llama-3.3-70b-versatile',
-      response_format: { type: 'json_object' }
+      temperature: 0.2,
+      max_tokens: 2000,
+      system: systemPrompt,
     });
 
     const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
-    await incrementAiUsage(clientId, 'branding-gen', 'assistant', 'AI Branding Generation');
+    if (clientId) {
+      await incrementAiUsage(clientId, 'branding-gen', 'assistant', 'AI Branding Generation');
+    }
 
-    const result = JSON.parse(completion.choices[0].message.content || '{}');
-    envRes.sendSuccess(result);
+    const content = result.choices[0]?.message?.content || '{}';
+    const resultJson = JSON.parse(content.replace(/```json/g, '').replace(/```/g, '').trim());
+    
+    envRes.sendSuccess(resultJson);
   } catch (error: any) {
     console.error('AI Branding Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate branding');
+    envRes.sendError(500, 'API_ERROR', 'Failed to generate branding. Ensure you have a valid Groq API key in GROQ_API_KEY.');
   }
 });
 
-// AI Website Content Generator
-router.post('/generate-website-section', async (req, res) => {
+// POST /v1/ai/format-message
+router.post('/format-message', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
-    const { section, businessName, services } = req.body;
-    
-    if (!process.env.GROQ_API_KEY) {
-      return envRes.sendError(500, 'API_ERROR', 'Groq API Key not configured');
+    const { message, instruction } = req.body;
+    if (!message) {
+      return envRes.sendError(400, 'MISSING_FIELDS', 'Message is required');
     }
 
-    let userContent = `Generate content for the "${section}" section of a website for a business named "${businessName}" offering ${services}.`;
+    const promptPath = path.join(PROMPTS_DIR, 'copywriter.md');
+    const systemPrompt = fs.existsSync(promptPath)
+      ? fs.readFileSync(promptPath, 'utf8').replace('${instruction}', instruction || 'Make it more professional and engaging')
+      : 'You are a professional copywriter. Polish and improve messages while maintaining the original meaning. Make them more engaging and professional.';
 
-    if (section === 'landing-hero') {
-      userContent += `
-        Return ONLY a JSON object with:
-        {
-          "heroBadge": "Short badge text",
-          "heroTitle": "Catchy title",
-          "heroSubtitle": "Compelling subtitle"
-        }`;
-    } else if (section === 'landing-services') {
-        userContent += `
-        Return ONLY a JSON object with:
-        {
-          "servicesBadge": "Short badge text",
-          "servicesTitle": "Services title",
-          "servicesSubtitle": "Services description"
-        }`;
-    } else if (section === 'landing-cta') {
-        userContent += `
-        Return ONLY a JSON object with:
-        {
-          "ctaTitle": "CTA title",
-          "ctaSubtitle": "CTA subtitle",
-          "ctaPrimaryBtn": "Button text",
-          "ctaSecondaryBtn": "Button text"
-        }`;
-    } else {
-        return envRes.sendError(400, 'API_ERROR', 'Unsupported section');
-    }
-
-     const completion = await groq.chat.completions.create({
+    const result = await groq.chat.completions.create({
+      model: AI_MODELS.FLASH,
       messages: [
-        { role: 'system', content: 'You are a professional web copywriter. Return ONLY a JSON object. No markdown, no prose.' },
-        { role: 'user', content: userContent }
+        {
+          role: 'user',
+          content: `Message to polish:\n"${message}"\n\nInstruction: ${instruction || 'Make it more professional and engaging'}`
+        }
       ],
-      model: 'llama-3.3-70b-versatile',
-      response_format: { type: 'json_object' }
+      temperature: 0.3,
+      max_tokens: 1000,
+      system: systemPrompt,
     });
 
-    const clientId = (req as any).clientId;
-    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
-    await incrementAiUsage(clientId, 'website-gen', 'assistant', `AI Website Content Generation: ${section}`);
-
-    const result = JSON.parse(completion.choices[0].message.content || '{}');
-    envRes.sendSuccess(result);
+    const formattedText = result.choices[0]?.message?.content || message;
+    envRes.sendSuccess({ formattedText: formattedText.trim() });
   } catch (error: any) {
-    console.error('AI Website Generation Error:', error);
-    envRes.sendError(500, 'API_ERROR', 'Failed to generate website content');
+    console.error('AI Format Message Error:', error);
+    envRes.sendError(500, 'API_ERROR', 'Failed to format message. Ensure your Groq API key is properly configured.');
   }
 });
 
