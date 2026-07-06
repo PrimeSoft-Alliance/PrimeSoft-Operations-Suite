@@ -1,91 +1,146 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useClientId } from '../../lib/useClientId';
-import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Download, Trash2, Mail, Phone, Tag, MapPin, Calendar, ExternalLink, Zap, Database, KanbanSquare, List, GripHorizontal, CheckCircle2, Building2, User, Clock, Globe, X, Send, ChevronRight, MoreHorizontal, Trophy, XCircle, RefreshCw, MessageCircle } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { 
+  Search, Filter, Download, Trash2, Mail, Phone, Tag, MapPin, Calendar, 
+  ExternalLink, Zap, Database, KanbanSquare, List, GripHorizontal, 
+  CheckCircle2, Building2, User, Clock, Globe, X, Send, ChevronRight, 
+  MoreHorizontal, Trophy, XCircle, RefreshCw, MessageCircle, Activity,
+  ShieldCheck, TrendingUp, Inbox, Smartphone, LayoutDashboard, Star,
+  Plus, Info, MessageSquare, Upload, Flame, Target, Briefcase, Loader2, Users
+} from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { getSocket } from '../../lib/socket';
-
-const STAGES = ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost'];
+import { LongPressWrapper } from '../../components/LongPressWrapper';
+import { SelectionToolbar } from '../../components/SelectionToolbar';
 
 export default function LeadsManager() {
   const { clientId: cidHook } = useClientId();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const leadIdParam = searchParams.get('id');
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedLead, setSelectedLead] = useState<any | null>(null);
-  const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'cards'>('cards');
-  const [replyMessage, setReplyMessage] = useState('');
-  const [replySubject, setReplySubject] = useState('');
-  const [isReplying, setIsReplying] = useState(false);
-  const [replyStatus, setReplyStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [replyMode, setReplyMode] = useState<'email' | 'whatsapp'>('email');
-  const activityEndRef = useRef<HTMLDivElement>(null);
+  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+
+  // Modals state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+
+  // Form states
+  const [createForm, setCreateForm] = useState({
+    contactFirst: '',
+    contactLast: '',
+    company: '',
+    contactEmail: '',
+    contactPhone: '',
+    stage: 'Prospect',
+    leadRating: 'warm',
+    city: '',
+    country: '',
+    value: 0
+  });
+
+  const [editForm, setEditForm] = useState({
+    id: '',
+    contactFirst: '',
+    contactLast: '',
+    company: '',
+    contactEmail: '',
+    contactPhone: '',
+    stage: 'Prospect',
+    leadRating: 'warm',
+    city: '',
+    country: '',
+    value: 0
+  });
+
+  const [actionSuccess, setActionSuccess] = useState('');
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (cidHook) {
       fetchLeads();
-
       const socket = getSocket(cidHook);
-      
       socket.on('lead_update', (updatedLead) => {
+        // Simple update logic
         setLeads(prev => prev.map(l => l._id === updatedLead._id ? updatedLead : l));
-        if (selectedLead?._id === updatedLead._id) {
-          setSelectedLead(updatedLead);
-        }
+        if (selectedLead?._id === updatedLead._id) setSelectedLead(updatedLead);
       });
-
-      socket.on('activity_update', ({ leadId, activity }) => {
-        setLeads(prev => prev.map(l => {
-          if (l._id === leadId) {
-            const exists = l.activities.some((a: any) => a._id === activity._id);
-            if (exists) return l;
-            return {
-              ...l,
-              activities: [...l.activities, activity],
-              lastActivity: new Date()
-            };
-          }
-          return l;
-        }));
-
-        if (selectedLead?._id === leadId) {
-          setSelectedLead((prev: any) => {
-            const exists = prev.activities.some((a: any) => a._id === activity._id);
-            if (exists) return prev;
-            return {
-              ...prev,
-              activities: [...prev.activities, activity],
-              lastActivity: new Date()
-            };
-          });
-        }
-      });
-
       return () => {
         socket.off('lead_update');
-        socket.off('activity_update');
       };
     }
   }, [cidHook, selectedLead?._id]);
 
   useEffect(() => {
-    if (activityEndRef.current) {
-      activityEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (leads.length > 0 && leadIdParam) {
+      const found = leads.find(l => l._id === leadIdParam);
+      if (found) {
+        setSelectedLead(found);
+        setIsViewModalOpen(true);
+      }
     }
-  }, [selectedLead?.activities]);
+  }, [leads, leadIdParam]);
+
+  useEffect(() => {
+    if (selectedLeads.length === 0 && isSelectionMode) {
+      setIsSelectionMode(false);
+    }
+  }, [selectedLeads, isSelectionMode]);
+
+  const toggleSelection = (id: string) => {
+    setSelectedLeads(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleLongPress = (id: string) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedLeads([id]);
+    }
+  };
+
+  const handleCardClick = (lead: any) => {
+    if (isSelectionMode) {
+      toggleSelection(lead._id);
+    } else {
+      openLeadDetails(lead);
+    }
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
     try {
       const res = await fetch('/v1/leads', { headers: { 'x-client-id': cidHook } });
       const data = await res.json();
-      const leadsList = data.success ? data.data : data;
-      if (Array.isArray(leadsList)) {
-        setLeads(leadsList.map((l: any) => ({ ...l, stage: l.stage || 'New' })));
+      if (data.success) {
+        const list = data.data || [];
+        
+        // calculate scoring for each lead
+        const scoredList = list.map((lead: any) => {
+           let score = 0;
+           if (lead.contactEmail) score += 20;
+           if (lead.contactPhone) score += 20;
+           if (lead.company) score += 10;
+           if (lead.stage === 'Qualified') score += 30;
+           else if (lead.stage === 'Negotiation') score += 40;
+           else if (lead.stage === 'Proposal') score += 20;
+           
+           if (lead.leadRating === 'hot') score += 20;
+           else if (lead.leadRating === 'warm') score += 10;
+           
+           return { ...lead, score: Math.min(score, 100) };
+        });
+
+        setLeads(scoredList);
       }
     } catch (err) {
       console.error('Fetch error:', err);
@@ -94,405 +149,463 @@ export default function LeadsManager() {
     }
   };
 
-  const deleteLead = async (id: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!window.confirm('Delete this lead forever?')) return;
-    try {
-      await fetch(`/v1/leads/${id}`, { method: 'DELETE', headers: { 'x-client-id': cidHook } });
-      fetchLeads();
-      if (selectedLead?._id === id) setSelectedLead(null);
-    } catch (err) { }
+  const handleExportCsv = () => {
+    if (!cidHook) return;
+    window.location.href = `/v1/contacts/export-csv?clientId=${encodeURIComponent(cidHook)}`;
   };
 
-  const updateStage = async (id: string, stage: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    try {
-      await fetch(`/v1/leads/${id}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
-        body: JSON.stringify({ stage })
-      });
-      fetchLeads();
-      if (selectedLead?._id === id) {
-        setSelectedLead({ ...selectedLead, stage });
-      }
-    } catch (e) { }
-  };
+  const handleCreateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionError('');
+    setActionSuccess('');
 
-  const sendReply = async () => {
-    if (!selectedLead || !replyMessage) return;
-    setReplyStatus('sending');
-    try {
-      const endpoint = replyMode === 'whatsapp' ? '/v1/whatsapp/send' : `/v1/leads/${selectedLead._id}/reply`;
-      const body = replyMode === 'whatsapp' 
-        ? { to: selectedLead.contactPhone, message: replyMessage }
-        : { message: replyMessage, subject: replySubject };
+    if (!createForm.contactFirst.trim()) {
+      setActionError('First name is required');
+      return;
+    }
 
-      const res = await fetch(endpoint, {
+    try {
+      const res = await fetch('/v1/leads', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
-        body: JSON.stringify(body)
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-id': cidHook
+        },
+        body: JSON.stringify(createForm)
       });
+
       const data = await res.json();
-      if (data.success) {
-        setReplyStatus('success');
-        setReplyMessage('');
-        setIsReplying(false);
-        // Socket handle updates, but we can refresh just in case
-        setTimeout(() => setReplyStatus('idle'), 3000);
-      } else {
-        setReplyStatus('error');
+      if (!data.success) {
+        setActionError(data.error?.message || 'Failed to create lead');
+        return;
       }
+
+      await fetchLeads();
+      setActionSuccess('Lead registered successfully!');
+      setIsCreateModalOpen(false);
+      setCreateForm({
+        contactFirst: '', contactLast: '', company: '', contactEmail: '',
+        contactPhone: '', stage: 'Prospect', leadRating: 'warm', city: '', country: '', value: 0
+      });
     } catch (err) {
-      setReplyStatus('error');
+      setActionError('Failed to register lead.');
     }
   };
 
-  const simulateReply = async () => {
-    if (!selectedLead) return;
-    setIsSimulating(true);
-    try {
-      await fetch(`/v1/leads/${selectedLead._id}/simulate-reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-client-id': cidHook },
-        body: JSON.stringify({ 
-          message: replyMode === 'whatsapp' ? "Hello! This is a WhatsApp reply." : undefined,
-          type: replyMode === 'whatsapp' ? 'whatsapp' : 'email'
-        })
-      });
-    } catch (err) {}
-    setIsSimulating(false);
+  const handleOpenEditModal = (lead: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditForm({
+      id: lead._id,
+      contactFirst: lead.contactFirst || '',
+      contactLast: lead.contactLast || '',
+      company: lead.company || '',
+      contactEmail: lead.contactEmail || '',
+      contactPhone: lead.contactPhone || '',
+      stage: lead.stage || 'Prospect',
+      leadRating: lead.leadRating || 'warm',
+      city: lead.location?.city || '',
+      country: lead.location?.country || '',
+      value: lead.value || 0
+    });
+    setIsEditModalOpen(true);
   };
 
-  const filteredLeads = leads.filter(l =>
-    `${l.contactFirst || ''} ${l.contactLast || ''} ${l.company || ''} ${l.contactEmail || ''}`.toLowerCase().includes((search || '').toLowerCase())
-  );
+  const handleEditLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionError('');
+    setActionSuccess('');
+
+    try {
+      const res = await fetch(`/v1/leads/${editForm.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-id': cidHook
+        },
+        body: JSON.stringify({
+          contactFirst: editForm.contactFirst,
+          contactLast: editForm.contactLast,
+          company: editForm.company,
+          contactEmail: editForm.contactEmail,
+          contactPhone: editForm.contactPhone,
+          stage: editForm.stage,
+          leadRating: editForm.leadRating,
+          value: Number(editForm.value),
+          location: {
+            city: editForm.city,
+            country: editForm.country
+          }
+        })
+      });
+
+      if (res.ok) {
+        setIsEditModalOpen(false);
+        setActionSuccess('Lead updated.');
+        fetchLeads();
+        if (selectedLead && selectedLead._id === editForm.id) {
+          setIsViewModalOpen(false);
+        }
+      } else {
+        setActionError('Failed to update lead');
+      }
+    } catch (err) {
+      setActionError('Error updating lead.');
+    }
+  };
+
+  const handleBulkDeleteLeads = async () => {
+    if (selectedLeads.length === 0) return;
+    if (!confirm(`Are you sure you want to delete the ${selectedLeads.length} selected leads?`)) return;
+    try {
+      const res = await fetch('/v1/leads', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-client-id': cidHook
+        },
+        body: JSON.stringify({ ids: selectedLeads })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSelectedLeads([]);
+        fetchLeads();
+        if (selectedLead && selectedLeads.includes(selectedLead._id)) {
+          setIsViewModalOpen(false);
+          setSelectedLead(null);
+        }
+      } else {
+        alert(data.error?.message || 'Failed to delete selected leads.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteLead = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this lead?')) return;
+    try {
+      await fetch(`/v1/leads/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-client-id': cidHook }
+      });
+      setSelectedLeads(prev => prev.filter(item => item !== id));
+      fetchLeads();
+      if (selectedLead?._id === id) {
+        setIsViewModalOpen(false);
+        setSelectedLead(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleMessageLead = (lead: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    navigate(`/dashboard/shared-inbox?email=${encodeURIComponent(lead.contactEmail || '')}&phone=${encodeURIComponent(lead.contactPhone || '')}`);
+  };
+
+  const openLeadDetails = (lead: any) => {
+    setSelectedLead(lead);
+    setIsViewModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (isViewModalOpen) {
+      window.history.pushState({ viewModal: true }, '');
+    }
+    
+    const handlePopState = (e: PopStateEvent) => {
+      if (isViewModalOpen) {
+        setIsViewModalOpen(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isViewModalOpen]);
+
+  const filteredLeads = leads.filter(l => {
+    const q = searchQuery.toLowerCase();
+    const name = `${l.contactFirst} ${l.contactLast}`.toLowerCase();
+    return name.includes(q) || 
+           (l.contactEmail || '').toLowerCase().includes(q) || 
+           (l.company || '').toLowerCase().includes(q);
+  });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:h-[calc(100vh-4rem)] md:-m-6 overflow-hidden">
-      {/* Header - Mobile Sticky */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-4 md:px-8 md:py-6 flex flex-col gap-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
-              Leads
-              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-widest">{filteredLeads.length}</span>
-            </h1>
-            <p className="hidden md:block text-slate-500 text-xs font-medium">Manage your sales pipeline and customer interactions.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchLeads} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-400">
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            </button>
-            <div className="hidden md:flex bg-slate-100 p-1 rounded-lg">
-              <button 
-                onClick={() => setViewMode('cards')} 
-                className={cn("p-1.5 rounded-md transition-all", viewMode === 'cards' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600')}
-              >
-                <GridIcon className="w-4 h-4" />
-              </button>
-              <button 
-                onClick={() => setViewMode('list')} 
-                className={cn("p-1.5 rounded-md transition-all", viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-400 hover:text-slate-600')}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+    <div className="space-y-8 animate-in fade-in duration-300">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-slate-200/60">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Leads & Prospects</h1>
+          <p className="text-sm font-medium text-slate-500 mt-1">Manage and score your contacts. Duplicates are auto-merged.</p>
         </div>
-
-        <div className="relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search leads..."
-            className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
-          />
+        <div className="flex items-center gap-3">
+          <button
+             onClick={handleExportCsv}
+             className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs font-black rounded-xl hover:bg-slate-50 transition-all flex items-center gap-2"
+          >
+             <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
+             onClick={() => setIsCreateModalOpen(true)}
+             className="px-4 py-2 bg-indigo-600 text-white text-xs font-black rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-600/10 flex items-center gap-2"
+          >
+             <Plus className="w-4 h-4" /> Add Lead
+          </button>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar pb-24 md:pb-8">
-        {loading && leads.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
-        ) : filteredLeads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <User className="w-8 h-8 text-slate-300" />
-            </div>
-            <h3 className="font-bold text-slate-900">No leads found</h3>
-            <p className="text-sm text-slate-500 mt-1">Try adjusting your search or filters.</p>
-          </div>
-        ) : (
-          <div className={cn(
-            "grid gap-4",
-            viewMode === 'cards' ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid-cols-1"
-          )}>
-            {filteredLeads.map(lead => (
-              <LeadCard 
-                key={lead._id} 
-                lead={lead} 
-                onClick={() => setSelectedLead(lead)}
-                onUpdateStage={(stage) => updateStage(lead._id, stage)}
-                onDelete={() => deleteLead(lead._id)}
+      {/* Main layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Side: Search & Filters */}
+        <div className="lg:col-span-3 space-y-6">
+          <div className="bg-white border border-slate-200/80 p-6 rounded-[2rem] shadow-sm space-y-4">
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Filter className="w-4 h-4 text-indigo-600" /> Filter Board
+            </h3>
+            
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text"
+                placeholder="Search leads..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               />
-            ))}
+            </div>
+            
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mt-4">
+              <h4 className="text-xs font-bold text-indigo-900 mb-1 flex items-center gap-1"><Flame className="w-3.5 h-3.5"/> Smart Scoring</h4>
+              <p className="text-[11px] text-indigo-700">Leads are automatically scored out of 100 based on completeness and stage.</p>
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* Right Side: Cards */}
+        <div className="lg:col-span-9 space-y-4">
+          <SelectionToolbar
+            isVisible={isSelectionMode}
+            selectedCount={selectedLeads.length}
+            totalCount={filteredLeads.length}
+            onDelete={handleBulkDeleteLeads}
+            onCancel={() => {
+              setIsSelectionMode(false);
+              setSelectedLeads([]);
+            }}
+            onSelectAll={() => setSelectedLeads(filteredLeads.map(l => l._id))}
+            onDeselectAll={() => setSelectedLeads([])}
+            itemName="leads"
+          />
+
+          {loading ? (
+             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+               <Loader2 className="w-8 h-8 animate-spin mb-4 text-indigo-600" />
+               <p className="text-sm font-medium">Scoring and merging leads...</p>
+             </div>
+          ) : filteredLeads.length === 0 ? (
+            <div className="bg-white border border-slate-200 border-dashed rounded-[2rem] p-12 text-center flex flex-col items-center">
+              <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                <Users className="w-8 h-8 text-slate-300" />
+              </div>
+              <h3 className="text-sm font-black text-slate-900 mb-1">No Leads Found</h3>
+              <p className="text-xs text-slate-500 mb-6 max-w-sm">Add new leads or adjust your search filters to see prospects.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredLeads.map(lead => {
+                const isSelected = selectedLeads.includes(lead._id);
+
+                return (
+                  <LongPressWrapper 
+                    key={lead._id}
+                    layoutId={lead._id}
+                    disabled={isSelectionMode}
+                    onLongPress={() => handleLongPress(lead._id)}
+                    onClick={() => handleCardClick(lead)}
+                    className={cn(
+                      "bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-lg hover:border-indigo-300 transition-all cursor-pointer group flex flex-col relative overflow-hidden",
+                      isSelected && "border-indigo-500 ring-2 ring-indigo-500 ring-inset bg-indigo-50/10"
+                    )}
+                  >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <AnimatePresence>
+                          {isSelectionMode && (
+                            <motion.div
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              className="absolute top-4 left-4 z-20"
+                            >
+                              <div className={cn(
+                                "w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all",
+                                isSelected 
+                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/30" 
+                                  : "bg-white border-slate-200 text-transparent"
+                              )}>
+                                <CheckCircle2 className="w-4 h-4" />
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 font-bold">
+                          {lead.contactFirst?.charAt(0) || ''}{lead.contactLast?.charAt(0) || ''}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black uppercase">
+                          <Flame className="w-3 h-3" /> Score: {lead.score}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-medium mt-1 uppercase">{lead.stage}</span>
+                      </div>
+                    </div>
+                    
+                    <h3 className="text-sm font-bold text-slate-900 truncate">
+                      {lead.contactFirst} {lead.contactLast}
+                    </h3>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 mt-1 truncate">
+                      <Building2 className="w-3.5 h-3.5" /> {lead.company || 'No Company'}
+                    </p>
+                    
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-xs text-slate-600 truncate">
+                        <Mail className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">{lead.contactEmail || 'No Email'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-600 truncate">
+                        <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">{lead.contactPhone || 'No Phone'}</span>
+                      </div>
+                    </div>
+
+                    {!isSelectionMode && (
+                      <div className="mt-5 flex gap-2 w-full">
+                        <button 
+                          onClick={(e) => handleMessageLead(lead, e)}
+                          className="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-1"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" /> Message
+                        </button>
+                        <button 
+                          onClick={(e) => handleOpenEditModal(lead, e)}
+                          className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </LongPressWrapper>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Detail Panel / Drawer */}
       <AnimatePresence>
-        {selectedLead && (
-          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedLead(null)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
+        {isViewModalOpen && selectedLead && (
+          <div className="fixed lg:inset-0 top-16 lg:top-0 inset-x-0 bottom-0 lg:z-50 z-20 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm lg:bg-opacity-50 bg-transparent">
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative bg-white w-full max-w-4xl h-[90vh] md:h-full md:max-h-[85vh] rounded-t-[2rem] md:rounded-[2rem] shadow-2xl flex flex-col overflow-hidden"
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="bg-white w-full max-w-2xl sm:rounded-[2rem] rounded-t-[2rem] shadow-2xl h-full sm:max-h-[90vh] flex flex-col overflow-hidden sm:mt-0"
             >
-              {/* Drawer Header */}
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-black">
-                    {selectedLead.contactFirst?.[0] || 'L'}
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 sticky top-0 z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg">
+                    {selectedLead.contactFirst?.charAt(0) || ''}{selectedLead.contactLast?.charAt(0) || ''}
                   </div>
                   <div>
-                    <h2 className="font-black text-slate-900 text-lg md:text-xl">{selectedLead.contactFirst} {selectedLead.contactLast}</h2>
-                    <p className="text-xs text-slate-500 font-medium">{selectedLead.company || 'Direct Insight'}</p>
+                    <h2 className="text-xl font-black text-slate-900">{selectedLead.contactFirst} {selectedLead.contactLast}</h2>
+                    <p className="text-xs font-medium text-slate-500">{selectedLead.company || 'Independent'}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedLead(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                  <X className="w-6 h-6 text-slate-400" />
-                </button>
               </div>
 
-              {/* Drawer Body */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="grid grid-cols-1 lg:grid-cols-2">
-                  {/* Left Column: Info & Actions */}
-                  <div className="p-6 border-r border-slate-50">
-                    <div className="space-y-6">
-                      <div className="flex flex-wrap gap-2">
-                        <span className={cn(
-                          "text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full",
-                          selectedLead.stage === 'Closed Won' ? 'bg-emerald-100 text-emerald-700' :
-                          selectedLead.stage === 'Closed Lost' ? 'bg-rose-100 text-rose-700' : 'bg-indigo-100 text-indigo-700'
-                        )}>
-                          {selectedLead.stage}
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-slate-100 text-slate-600">
-                          {selectedLead.source}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                          <Mail className="w-5 h-5 text-indigo-500" />
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</p>
-                            <p className="text-sm font-bold text-slate-900 truncate">{selectedLead.contactEmail}</p>
-                          </div>
+              <div className="p-6 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Lead Info */}
+                  <div className="space-y-6">
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-indigo-500" /> Contact Details
+                      </h4>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-sm">
+                          <Mail className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-700 font-medium">{selectedLead.contactEmail || '-'}</span>
                         </div>
-                        {selectedLead.contactPhone && (
-                          <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                            <Phone className="w-5 h-5 text-indigo-500" />
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone Number</p>
-                              <p className="text-sm font-bold text-slate-900 truncate">{selectedLead.contactPhone}</p>
-                            </div>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                          <MapPin className="w-5 h-5 text-indigo-500" />
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</p>
-                            <p className="text-sm font-bold text-slate-900 truncate">{selectedLead.location?.city || 'Unknown'}, {selectedLead.location?.country || ''}</p>
-                          </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <Phone className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-700 font-medium">{selectedLead.contactPhone || '-'}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <MapPin className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-700 font-medium">
+                            {selectedLead.location?.city || selectedLead.city || 'Unknown'}, {selectedLead.location?.country || selectedLead.country || 'Unknown'}
+                          </span>
                         </div>
                       </div>
+                    </div>
 
-                      {/* Quick Actions */}
-                      <div className="grid grid-cols-2 gap-3 pt-4">
-                        <button 
-                          onClick={() => updateStage(selectedLead._id, 'Closed Won')}
-                          className="flex items-center justify-center gap-2 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
-                        >
-                          <Trophy className="w-4 h-4" /> Won
-                        </button>
-                        <button 
-                          onClick={() => updateStage(selectedLead._id, 'Closed Lost')}
-                          className="flex items-center justify-center gap-2 py-3 bg-rose-600 text-white rounded-xl font-bold text-sm hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
-                        >
-                          <XCircle className="w-4 h-4" /> Lost
-                        </button>
+                    <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-black text-amber-800 uppercase">Lead Score</span>
+                        <span className="text-lg font-black text-amber-600">{selectedLead.score}/100</span>
                       </div>
-
-                      {/* Additional Fields Block */}
-                      {selectedLead.data && Object.keys(selectedLead.data).length > 0 && (
-                        <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Submission Payload</h4>
-                          <div className="space-y-4">
-                            {Object.entries(selectedLead.data).map(([key, value]) => {
-                               if (typeof value === 'object') return null;
-                               return (
-                                <div key={key} className="border-b border-slate-200/50 pb-2">
-                                  <p className="text-[10px] font-bold text-indigo-600/60 uppercase">{key.replace(/_/g, ' ')}</p>
-                                  <p className="text-sm font-bold text-slate-800">{String(value)}</p>
-                                </div>
-                               );
-                            })}
-                          </div>
-                        </div>
-                      )}
+                      <div className="w-full bg-amber-200 h-2 rounded-full overflow-hidden">
+                        <div className="bg-amber-500 h-full rounded-full" style={{ width: `${selectedLead.score}%` }} />
+                      </div>
+                      <p className="text-[10px] font-medium text-amber-700 mt-2 text-center">Score factors: Complete details, stage progress.</p>
                     </div>
                   </div>
 
-                  {/* Right Column: Timeline & Messaging */}
-                  <div className="p-6 bg-slate-50/30 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-6">
-                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <Clock className="w-4 h-4" /> Activity Feed
+                  {/* Activities / Meta */}
+                  <div className="space-y-6">
+                    <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <Briefcase className="w-4 h-4 text-emerald-500" /> Pipeline Info
                       </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-black uppercase block mb-1">Current Stage</span>
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">
+                            {selectedLead.stage}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-black uppercase block mb-1">Estimated Value</span>
+                          <span className="text-sm font-bold text-slate-900">${(selectedLead.value || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-col gap-2 pt-2">
                       <button 
-                        onClick={() => setIsReplying(true)}
-                        className="text-xs text-indigo-600 font-bold hover:underline"
+                        onClick={() => handleMessageLead(selectedLead)}
+                        className="w-full py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-md shadow-indigo-600/10"
                       >
-                        Send Email
+                        <MessageSquare className="w-4 h-4" /> Message Lead
                       </button>
-                    </div>
-
-                    <div className="flex-1 space-y-4 min-h-0 overflow-y-auto mb-4 px-2 py-4 bg-slate-50/50 rounded-3xl border border-slate-100 shadow-inner">
-                      {selectedLead.activities?.length > 0 ? (
-                        selectedLead.activities.map((activity: any, idx: number) => {
-                          const isIncoming = activity.metadata?.incoming;
-                          const isWhatsApp = activity.type === 'whatsapp' || activity.metadata?.platform === 'whatsapp';
-                          return (
-                            <div key={idx} className={cn(
-                              "flex flex-col gap-1 max-w-[85%]",
-                              isIncoming ? "self-start items-start" : "self-end items-end ml-auto"
-                            )}>
-                              <div className={cn(
-                                "p-3 rounded-2xl text-xs md:text-sm font-medium shadow-sm transition-all group relative",
-                                isIncoming 
-                                  ? "bg-white border border-slate-200 text-slate-800 rounded-bl-none" 
-                                  : isWhatsApp 
-                                    ? "bg-emerald-600 text-white rounded-br-none"
-                                    : "bg-indigo-600 text-white rounded-br-none"
-                              )}>
-                                {activity.metadata?.body || activity.description}
-                                <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                   {isWhatsApp && <div className="bg-emerald-500 text-white p-1 rounded-full shadow-md ring-2 ring-white"><MessageCircle className="w-2.5 h-2.5" /></div>}
-                                   {!isWhatsApp && activity.type === 'email' && <div className="bg-indigo-500 text-white p-1 rounded-full shadow-md ring-2 ring-white"><Mail className="w-2.5 h-2.5" /></div>}
-                                </div>
-                              </div>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter mx-1">
-                                {format(new Date(activity.date), 'MMM d, h:mm a')}
-                              </span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-10 text-center opacity-50">
-                          <Database className="w-8 h-8 text-slate-200 mb-2" />
-                          <p className="text-[10px] font-black uppercase text-slate-400">No history yet</p>
-                        </div>
-                      )}
-                      <div ref={activityEndRef} />
-                    </div>
-
-                    {/* Integrated Reply Interface */}
-                    <div className="space-y-3">
-                      {!isReplying && (
-                        <div className="flex gap-2">
-                           <button 
-                            onClick={() => { setReplyMode('email'); setIsReplying(true); }}
-                            className="flex-1 bg-white border border-slate-200 text-slate-900 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm"
-                           >
-                             <Mail className="w-3.5 h-3.5 text-indigo-600" /> Email
-                           </button>
-                           <button 
-                            onClick={() => { setReplyMode('whatsapp'); setIsReplying(true); }}
-                            className="flex-1 bg-white border border-slate-200 text-slate-900 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-50 hover:border-emerald-200 transition-all shadow-sm"
-                           >
-                             <MessageCircle className="w-3.5 h-3.5 text-emerald-600" /> WhatsApp
-                           </button>
-                           <button 
-                            disabled={isSimulating}
-                            onClick={simulateReply}
-                            className="bg-slate-900 text-white p-3 rounded-2xl hover:bg-slate-800 transition-all shadow-sm disabled:opacity-50"
-                            title="Simulate Inbound Reply"
-                           >
-                             <RefreshCw className={cn("w-4 h-4", isSimulating && "animate-spin")} />
-                           </button>
-                        </div>
-                      )}
-                      
-                      {isReplying && (
-                        <motion.div 
-                          initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                          className={cn(
-                            "bg-white border-2 rounded-[2rem] p-4 shadow-xl ring-4",
-                            replyMode === 'whatsapp' ? "border-emerald-100 ring-emerald-50" : "border-indigo-100 ring-indigo-50"
-                          )}
-                        >
-                           <div className="flex justify-between items-center mb-3 px-1">
-                             <h5 className={cn(
-                               "text-[10px] font-black uppercase tracking-widest",
-                               replyMode === 'whatsapp' ? "text-emerald-600" : "text-indigo-600"
-                             )}>
-                               {replyMode === 'whatsapp' ? 'WhatsApp Reply' : 'Email Reply'}
-                             </h5>
-                             <button onClick={() => setIsReplying(false)} className="p-1 hover:bg-slate-100 rounded-full"><X className="w-4 h-4 text-slate-400" /></button>
-                           </div>
-
-                           {replyMode === 'email' && (
-                             <input 
-                                type="text" 
-                                placeholder="Subject line..." 
-                                value={replySubject} 
-                                onChange={e => setReplySubject(e.target.value)}
-                                className="w-full mb-3 bg-slate-50 border-none rounded-xl px-4 py-2 text-sm font-bold placeholder:text-slate-300 focus:ring-2 focus:ring-indigo-100 transition-all outline-none"
-                             />
-                           )}
-
-                           <textarea 
-                             rows={4}
-                             placeholder={replyMode === 'whatsapp' ? "Type WhatsApp message..." : "Write your email response..."}
-                             value={replyMessage}
-                             onChange={e => setReplyMessage(e.target.value)}
-                             className={cn(
-                               "w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-medium placeholder:text-slate-300 transition-all outline-none resize-none",
-                               replyMode === 'whatsapp' ? "focus:ring-2 focus:ring-emerald-100" : "focus:ring-2 focus:ring-indigo-100"
-                             )}
-                           />
-                           <div className="mt-4 flex justify-end gap-2">
-                             <button 
-                              disabled={replyStatus === 'sending' || !replyMessage}
-                              onClick={sendReply}
-                              className={cn(
-                                "w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 disabled:opacity-40",
-                                replyMode === 'whatsapp' ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-indigo-600 text-white hover:bg-slate-900"
-                              )}
-                             >
-                               <Send className={cn("w-3.5 h-3.5", replyStatus === 'sending' && "animate-pulse")} /> 
-                               {replyStatus === 'sending' ? 'Dispatching...' : 'Dispatch Message'}
-                             </button>
-                           </div>
-                        </motion.div>
-                      )}
+                      <button 
+                        onClick={() => handleOpenEditModal(selectedLead)}
+                        className="w-full py-3 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                      >
+                        Edit Details
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteLead(selectedLead._id)}
+                        className="w-full py-3 text-rose-600 bg-rose-50 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                      >
+                        Delete Lead
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -501,86 +614,125 @@ export default function LeadsManager() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Create / Edit Modals */}
+      <AnimatePresence>
+        {(isCreateModalOpen || isEditModalOpen) && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 100, scale: 1 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 100, scale: 1 }}
+              className="bg-white w-full max-w-lg rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <h2 className="text-lg font-black text-slate-900">
+                  {isEditModalOpen ? 'Edit Lead' : 'Add New Lead'}
+                </h2>
+                <button 
+                  onClick={() => { setIsCreateModalOpen(false); setIsEditModalOpen(false); }}
+                  className="p-2 bg-slate-50 hover:bg-slate-100 rounded-2xl text-slate-500 transition-colors shrink-0"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                <form onSubmit={isEditModalOpen ? handleEditLead : handleCreateLead} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">First Name</label>
+                      <input 
+                        required
+                        type="text" 
+                        value={isEditModalOpen ? editForm.contactFirst : createForm.contactFirst}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, contactFirst: e.target.value}) : setCreateForm({...createForm, contactFirst: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Last Name</label>
+                      <input 
+                        type="text" 
+                        value={isEditModalOpen ? editForm.contactLast : createForm.contactLast}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, contactLast: e.target.value}) : setCreateForm({...createForm, contactLast: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Company</label>
+                    <input 
+                      type="text" 
+                      value={isEditModalOpen ? editForm.company : createForm.company}
+                      onChange={e => isEditModalOpen ? setEditForm({...editForm, company: e.target.value}) : setCreateForm({...createForm, company: e.target.value})}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Email</label>
+                      <input 
+                        type="email" 
+                        value={isEditModalOpen ? editForm.contactEmail : createForm.contactEmail}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, contactEmail: e.target.value}) : setCreateForm({...createForm, contactEmail: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Phone</label>
+                      <input 
+                        type="text" 
+                        value={isEditModalOpen ? editForm.contactPhone : createForm.contactPhone}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, contactPhone: e.target.value}) : setCreateForm({...createForm, contactPhone: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Stage</label>
+                      <select 
+                        value={isEditModalOpen ? editForm.stage : createForm.stage}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, stage: e.target.value}) : setCreateForm({...createForm, stage: e.target.value})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      >
+                        <option value="Prospect">Prospect</option>
+                        <option value="Qualified">Qualified</option>
+                        <option value="Proposal">Proposal</option>
+                        <option value="Negotiation">Negotiation</option>
+                        <option value="Closed Won">Closed Won</option>
+                        <option value="Closed Lost">Closed Lost</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Value ($)</label>
+                      <input 
+                        type="number" 
+                        value={isEditModalOpen ? editForm.value : createForm.value}
+                        onChange={e => isEditModalOpen ? setEditForm({...editForm, value: Number(e.target.value)}) : setCreateForm({...createForm, value: Number(e.target.value)})}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {actionError && <div className="text-xs text-rose-500 font-bold bg-rose-50 p-3 rounded-lg">{actionError}</div>}
+                  {actionSuccess && <div className="text-xs text-emerald-500 font-bold bg-emerald-50 p-3 rounded-lg">{actionSuccess}</div>}
+
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button type="button" onClick={() => { setIsCreateModalOpen(false); setIsEditModalOpen(false); }} className="px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancel</button>
+                    <button type="submit" className="px-5 py-2.5 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-600/10">Save Lead</button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
-  );
-}
-
-function LeadCard({ lead, onClick, onUpdateStage, onDelete }: any) {
-  return (
-    <motion.div 
-      layoutId={lead._id}
-      onClick={onClick}
-      whileHover={{ y: -4 }}
-      className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-200 group cursor-pointer hover:shadow-xl hover:border-indigo-200 transition-all duration-300"
-    >
-      <div className="flex justify-between items-start mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black group-hover:scale-110 transition-transform">
-            {lead.contactFirst?.[0] || 'L'}
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-bold text-slate-900 text-sm truncate">{lead.contactFirst} {lead.contactLast}</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">{lead.company || lead.source}</p>
-          </div>
-        </div>
-        <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
-          <button 
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="p-1.5 text-slate-300 hover:text-rose-500 rounded-lg hover:bg-rose-50"
-          >
-            <Trash2 className="w-4 h-4 " />
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-2 mb-4">
-         <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <Mail className="w-3.5 h-3.5 text-slate-300" />
-            <span className="truncate">{lead.contactEmail}</span>
-         </div>
-         {lead.contactPhone && (
-           <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
-              <Phone className="w-3.5 h-3.5 text-slate-300" />
-              <span>{lead.contactPhone}</span>
-           </div>
-         )}
-      </div>
-
-      <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-           <div className={cn(
-             "w-2 h-2 rounded-full",
-             lead.stage === 'Closed Won' ? 'bg-emerald-500' :
-             lead.stage === 'Closed Lost' ? 'bg-rose-500' : 'bg-indigo-500'
-           )} />
-           <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">{lead.stage}</span>
-        </div>
-        <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-           <Calendar className="w-3 h-3" /> {format(new Date(lead.createdAt || Date.now()), 'MMM d')}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function GridIcon(props: any) {
-  return (
-    <svg 
-      {...props}
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" 
-      height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    >
-      <rect width="7" height="7" x="3" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="3" rx="1" />
-      <rect width="7" height="7" x="14" y="14" rx="1" />
-      <rect width="7" height="7" x="3" y="14" rx="1" />
-    </svg>
   );
 }

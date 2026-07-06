@@ -56,23 +56,9 @@ export async function resolveClientId(req: Request): Promise<string | null> {
     console.error('[RESOLVE] Custom domain resolution error:', e);
   }
 
-  // 4. Default for Platform Domains
-  const isPlatform = 
-    host.includes('run.app') || 
-    host.includes('aistudio') || 
-    host.includes('localhost') || 
-    host === '0.0.0.0' || 
-    host === '127.0.0.1' ||
-    host.includes('googleusercontent.com') ||
-    host.includes('onrender.com') ||
-    host.includes('vercel.app') ||
-    host.includes('railway.app') ||
-    host.includes('fly.dev');
-
-  if (isPlatform) {
-    const homepageId = 'platform-prime';
-    if (await validateClientIdExists(homepageId)) return homepageId;
-  }
+  // 4. Fallback to platform-prime if on a platform domain
+  const isPlatformDomain = host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0';
+  if (isPlatformDomain) return 'platform-prime';
 
   return null;
 }

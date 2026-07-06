@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { 
   Save, Clock, Globe, Mail, CheckCircle, X, MessageCircle, 
   User, Database, Shield, Code, Copy, Layout, Key, Play, RefreshCw,
-  Trash2
+  Trash2, Bell
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -18,7 +18,7 @@ export default function SettingsManager() {
   const [securitySuccess, setSecuritySuccess] = useState('');
   const [securityError, setSecurityError] = useState('');
   const [copied, setCopied] = useState(false);
-  
+
   useEffect(() => {
     fetch(`/v1/settings?t=${Date.now()}`)
       .then(async res => {
@@ -52,10 +52,25 @@ export default function SettingsManager() {
     setSaveSuccess(false);
     
     try {
+      const payload = { ...settings };
+      // Strip integrations and other external configs to prevent race condition overwrites
+      delete payload.telegramConfig;
+      delete payload.telegramBotToken;
+      delete payload.whatsappConfig;
+      delete payload.emailConfig;
+      delete payload.calendarConfig;
+      delete payload.externalDbConfig;
+      delete payload.externalDatabases;
+      delete payload.headlessConfig;
+      delete payload._id;
+      delete payload.__v;
+      delete payload.createdAt;
+      delete payload.updatedAt;
+
       const res = await fetch('/v1/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data?.success) setSettings(data.data);
@@ -88,7 +103,7 @@ export default function SettingsManager() {
         setSettings(updatedSettings);
         setTimeout(() => setSecuritySuccess(''), 5000);
       } else {
-        setSecurityError(data.error || 'Failed to update security credentials');
+        setSecurityError(typeof data.error === 'object' ? (data.error.message || JSON.stringify(data.error)) : (data.error || 'Failed to update security credentials'));
       }
     } catch (err) {
       setSecurityError('Failed to update security credentials');
@@ -175,6 +190,17 @@ export default function SettingsManager() {
               <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm font-semibold text-gray-900" value={settings.businessName || ''} onChange={e => updateField('businessName', e.target.value)} />
             </div>
             <div>
+              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">Business Category / Type</label>
+              <select className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm font-semibold" value={settings.businessType || ''} onChange={e => updateField('businessType', e.target.value)}>
+                <option value="ecommerce">E-Commerce & Retail Shop</option>
+                <option value="service">Appointment & Booking Service</option>
+                <option value="hybrid">Hybrid (Both Products & Services)</option>
+                <option value="consulting">Professional Consulting / Legal / Advisory</option>
+                <option value="medical">Medical or Healthcare Practice</option>
+                <option value="other">Other Business Model</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">Contact Email (for notifications)</label>
               <input required type="email" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm font-semibold text-gray-950" value={settings.contactEmail || ''} onChange={e => updateField('contactEmail', e.target.value)} />
             </div>
@@ -200,115 +226,68 @@ export default function SettingsManager() {
           </div>
         </section>
 
-        {/* Bot Integrations */}
+        {/* Notification Settings Card */}
         <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-indigo-600" />
-              Bot Integrations (Channels)
+              <Bell className="w-5 h-5 text-indigo-600" />
+              Notification Settings
             </h3>
-            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-100 rounded text-[10px] uppercase font-bold tracking-wider">Professional Channel Limits</span>
+            <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] uppercase font-bold tracking-wider">Alert Configuration</span>
           </div>
-          <p className="text-sm text-gray-500 mb-6 font-sans">Configure API integration keys to relay messages to Telegram or WhatsApp Chat channels.</p>
-          
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h4 className="font-bold text-sm text-gray-800">Telegram Channel Setup</h4>
-              <p className="text-xs text-gray-500 mb-2">Create a bot on Telegram using BotFather, then paste the HTTP API Token here. The webhook will be registered automatically upon saving.</p>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Bot Secret Token</label>
-                <input type="password" placeholder="123456:ABC-DEF..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.telegramBotToken || ''} onChange={e => updateField('telegramBotToken', e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-4">
-              <h4 className="font-bold text-sm text-gray-800">WhatsApp Business API Setup</h4>
-              <p className="text-xs text-gray-500 mb-2">Provide your Meta Developer App credentials. Your shared Webhook URL is <strong>{window.location.origin}/v1/whatsapp/webhook</strong></p>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number ID</label>
-                <input type="text" placeholder="e.g. 1160962507103323" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-505 outline-none font-mono" value={settings.whatsappPhoneNumberId || ''} onChange={e => updateField('whatsappPhoneNumberId', e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Meta Permanent Access Token</label>
-                <input type="password" placeholder="EAABwzL..." className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-550 outline-none font-mono" value={settings.whatsappAccessToken || ''} onChange={e => updateField('whatsappAccessToken', e.target.value)} />
-              </div>
-            </div>
+          <p className="text-sm text-gray-500 mb-6 font-sans">Toggle which events trigger email and workspace alerts. Core business operations are active by default.</p>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {[
+              { key: 'booking', label: 'Booking Notifications', desc: 'Alert when a booking is created, cancelled, or rescheduled.', defaultVal: true },
+              { key: 'ticket', label: 'Ticket Notifications', desc: 'Alert on ticket creation, status changes, and closures.', defaultVal: true },
+              { key: 'inquiries', label: 'Inquiries Notifications', desc: 'Alert when a new customer inquiry is received.', defaultVal: true },
+              { key: 'missedCalls', label: 'Missed Call Notifications', desc: 'Alert immediately when a customer call goes unanswered.', defaultVal: true },
+              { key: 'newLeads', label: 'New Leads Notifications', desc: 'Alert when a new lead is qualified by the AI system.', defaultVal: false },
+              { key: 'contact', label: 'Contact Notifications', desc: 'Alert when customer contacts or profile details change.', defaultVal: false },
+              { key: 'messages', label: 'Messages Notifications', desc: 'Alert on inbound shared-inbox chat and social messages.', defaultVal: false },
+              { key: 'others', label: 'Other Activities & System Alerts', desc: 'Alert on secondary background processes and system tasks.', defaultVal: false },
+            ].map(item => {
+              const currentVal = settings.notificationSettings?.[item.key] !== undefined
+                ? settings.notificationSettings[item.key]
+                : item.defaultVal;
+
+              return (
+                <div key={item.key} className="flex items-start justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl hover:border-slate-200 transition-all">
+                  <div className="space-y-1 pr-4">
+                    <h4 className="text-xs font-bold text-slate-800">{item.label}</h4>
+                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">{item.desc}</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer" 
+                      checked={currentVal} 
+                      onChange={() => {
+                        setSettings((prev: any) => ({
+                          ...prev,
+                          notificationSettings: {
+                            booking: prev.notificationSettings?.booking ?? true,
+                            ticket: prev.notificationSettings?.ticket ?? true,
+                            inquiries: prev.notificationSettings?.inquiries ?? true,
+                            missedCalls: prev.notificationSettings?.missedCalls ?? true,
+                            newLeads: prev.notificationSettings?.newLeads ?? false,
+                            contact: prev.notificationSettings?.contact ?? false,
+                            messages: prev.notificationSettings?.messages ?? false,
+                            others: prev.notificationSettings?.others ?? false,
+                            [item.key]: !currentVal
+                          }
+                        }));
+                      }} 
+                    />
+                    <div className="w-10 h-5.5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        {/* Outgoing Email (SMTP) */}
-        <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-indigo-600" />
-              Outgoing SMTP Servers
-            </h3>
-            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] uppercase font-bold tracking-wider">System Root Essential</span>
-          </div>
-          <p className="text-sm text-gray-500 mb-6 font-sans">Set up your private email delivery engines (such as SendGrid or Gmail SMTP) to dispatch instant alerts to team workers.</p>
-          
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">SMTP Server Host</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpHost || ''} onChange={e => updateField('smtpHost', e.target.value)} placeholder="smtp.gmail.com" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">SMTP Server Port</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpPort || ''} onChange={e => updateField('smtpPort', e.target.value)} placeholder="587 or 465" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">SMTP Host Username</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpUser || ''} onChange={e => updateField('smtpUser', e.target.value)} placeholder="e.g. alert@domain.com" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">SMTP Host Password</label>
-              <input type="password" className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpPass || ''} onChange={e => updateField('smtpPass', e.target.value)} placeholder="••••••••••••" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">Dispatch From Name</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpFromName || ''} onChange={e => updateField('smtpFromName', e.target.value)} placeholder="e.g. CSR System" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-650 uppercase mb-1.5 tracking-wider">Dispatch From Email</label>
-              <input className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" value={settings.smtpFromEmail || ''} onChange={e => updateField('smtpFromEmail', e.target.value)} placeholder="e.g. noreply@domain.com" />
-            </div>
-          </div>
-          
-          <div className="mt-8 pt-8 border-t border-slate-100">
-            <h4 className="font-bold text-sm text-gray-900 mb-2">Test Dispatch Link</h4>
-            <div className="flex gap-4">
-              <input id="test-email-input" type="email" className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm" placeholder="Enter recipient email..." defaultValue={settings.contactEmail || ''} />
-              <button 
-                type="button"
-                onClick={async () => {
-                  const email = (document.getElementById('test-email-input') as HTMLInputElement).value;
-                  if (!email) return alert('Recipient email is required.');
-                  try {
-                    const res = await fetch('/v1/test-email', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ email, smtp: {
-                        host: settings.smtpHost,
-                        port: settings.smtpPort,
-                        user: settings.smtpUser,
-                        pass: settings.smtpPass,
-                        fromName: settings.smtpFromName,
-                        fromEmail: settings.smtpFromEmail
-                      }})
-                    });
-                    const data = await res.json();
-                    alert(data.success ? '✓ SMTP dispatch test passed!' : '✗ Failed: ' + (data.error || data.details));
-                  } catch (err) {
-                    alert('✗ Connection timeout');
-                  }
-                }}
-                className="px-6 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-750 rounded-lg text-sm font-bold transition-colors cursor-pointer"
-              >
-                Send Test
-              </button>
-            </div>
-          </div>
-        </section>
- 
         {/* Headless SDK & Embed */}
         <section className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
           <div className="flex justify-between items-center mb-6">
@@ -332,7 +311,7 @@ export default function SettingsManager() {
           {settings.headlessConfig?.enabled && (
             <div className="space-y-6">
               <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl text-indigo-800 text-sm font-medium text-center">
-                ✨ AI Assistant is fully enabled and ready for integration.
+                Your AI Assistant is fully enabled and ready for integration.
               </div>
 
               <div className="bg-slate-900 rounded-2xl p-6 text-white overflow-hidden relative font-sans">

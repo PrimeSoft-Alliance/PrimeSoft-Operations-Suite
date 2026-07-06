@@ -7,13 +7,11 @@ import { Settings, Booking, Contact, Client, UsageStats, Lead, Visit } from '../
 import { sendEmail } from '../email';
 import { upsertLead } from '../leads';
 import { startOfDay, addMinutes, format } from 'date-fns';
+import { telnyxService } from '../services/telnyxService';
+
+import { resolveClientId } from '../utils/resolveClient';
 
 const router = express.Router();
-
-// Middleware to check maintenance mode
-router.use(async (req, res, next) => {
-  next();
-});
 
 // Helper to fetch geo-location from IP
 async function getGeoLocation(ip: string) {
@@ -33,94 +31,6 @@ async function getGeoLocation(ip: string) {
     console.warn('[GEO] Failed to fetch location:', err);
   }
   return { ip, city: 'Unknown', country: 'Unknown', region: 'Unknown' };
-}
-
-// Helper to resolve client identity from various signals
-async function resolveClientId(req: express.Request): Promise<string | null> {
-  const apiKey = req.headers['x-api-key'] || req.query.apiKey || req.headers['x-api-token'];
-  const extractString = (val: any): string | undefined => {
-    if (!val) return undefined;
-    if (typeof val === 'string') return val;
-    if (typeof val === 'object') {
-      if (val !== null && 'clientId' in val && typeof val.clientId === 'string') return val.clientId;
-      if (Array.isArray(val) && val.length > 0) return extractString(val[0]);
-    }
-    return undefined;
-  };
-  const headerId = extractString(req.headers['x-client-id']);
-  const queryId = extractString(req.query.clientId);
-  const bodyId = extractString(req.body?.clientId);
-
-  console.log(`[RESOLVE] Attempting to resolve client for host: ${req.hostname}. Signals - APIKey: ${!!apiKey}, HeaderID: ${headerId}, QueryID: ${queryId}, BodyID: ${bodyId}`);
-
-  if (apiKey) {
-    const client = await Client.findOne({ apiKey });
-    if (client) {
-      console.log(`[RESOLVE] Resolved via API Key: ${client.clientId}`);
-      return client.clientId;
-    }
-  }
-
-  const cid = headerId || queryId || bodyId;
-  if (cid && cid !== '[object Object]') {
-    console.log(`[RESOLVE] Resolved via ID signal: ${cid}`);
-    return String(cid);
-  }
-
-  // Fallback for Platform Main Site
-  const host = req.hostname;
-  
-  const homepageId = 'platform-prime';
-
-  if (host.includes('run.app') || host.includes('aistudio') || host.includes('localhost') || host === '0.0.0.0' || host.includes('127.0.0.1')) {
-    console.log(`[RESOLVE] Platform domain detected (${host}), defaulting to ${homepageId}`);
-    
-    // Auto-provision default client if it doesn't exist
-    let client = await Client.findOne({ clientId: homepageId });
-    if (!client) {
-      client = await Client.create({
-        clientId: homepageId,
-        businessName: 'Platform Central',
-        email: 'central@platform.com',
-        password: 'platform_prime_placeholder',
-        role: 'client',
-        status: 'active'
-      });
-      console.log(`[RESOLVE] Provisioned default client: ${homepageId}`);
-    }
-
-    // Ensure Settings exist for the client to avoid 404s
-    const settings = await Settings.findOne({ clientId: homepageId });
-    if (!settings) {
-      await Settings.create({ 
-        clientId: homepageId,
-        businessName: client.businessName,
-        email: client.email,
-        aboutText: 'Global platform hub for all integrated services.'
-      });
-      console.log(`[RESOLVE] Provisioned default settings for: ${homepageId}`);
-    }
-
-    return homepageId;
-  }
-
-  const customClient = await Client.findOne({ customDomain: host });
-  if (customClient) {
-    console.log(`[RESOLVE] Resolved via customDomain field: ${customClient.clientId}`);
-    return customClient.clientId;
-  }
-
-  // Ultimate self-healing fallback for public router
-  try {
-    const fallbackClient = await Client.findOne().sort({ createdAt: 1 });
-    if (fallbackClient) {
-      console.log(`[RESOLVE] Failed host resolution fallback to first client: ${fallbackClient.clientId}`);
-      return fallbackClient.clientId;
-    }
-  } catch (e) {}
-
-  console.warn(`[RESOLVE] Failed to resolve client for host: ${host}, defaulting to platform-prime`);
-  return 'platform-prime';
 }
 
 // Domain Resolution & Headless Config
@@ -195,19 +105,16 @@ router.get('/content', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Settings not found');
 
     res.json({
       heroTitle: settings.heroTitle,
       heroSubtitle: settings.heroSubtitle,
-      heroImage: settings.branding?.heroImage || settings.heroImage,
       aboutText: settings.aboutText,
-      aboutImage: settings.aboutImage,
       footerText: settings.footerText,
       services: settings.services,
-      portfolio: settings.portfolioProjects,
-      stats: settings.clientStats,
       contact: {
         email: settings.contactEmail,
         phone: settings.contactPhone,
@@ -220,26 +127,12 @@ router.get('/content', async (req, res) => {
 });
 
 // Headless CMS: Get Content Items
-router.get('/content/items', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const clientId = await resolveClientId(req);
-    const query: any = { clientId, status: 'published' };
-    if (req.query.type) query.type = req.query.type;
-    if (req.query.tag) query.tags = req.query.tag;
-
-    const items = await mongoose.models.ContentItem.find(query).sort({ updatedAt: -1 });
-    envRes.sendSuccess(items);
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch content items: ' + err.message);
-  }
-});
-
 // Headless CMS: Get SDK Config
 router.get('/content/config', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     const settings = await Settings.findOne({ clientId });
     if (!settings) return envRes.sendError(404, 'API_ERROR', 'Client settings not found');
 
@@ -268,24 +161,6 @@ router.get('/content/config', async (req, res) => {
     });
   } catch (err) {
     envRes.sendError(500, 'API_ERROR', 'Failed to fetch SDK config');
-  }
-});
-
-// Headless CMS: Get Content Item by Slug
-router.get('/content/items/:slug', async (req, res) => {
-  const envRes = res as any as EnvelopeResponse;
-  try {
-    const clientId = await resolveClientId(req);
-    const item = await mongoose.models.ContentItem.findOne({ 
-      clientId, 
-      slug: req.params.slug,
-      status: 'published'
-    });
-    
-    if (!item) return envRes.sendError(404, 'API_ERROR', 'Content item not found');
-    envRes.sendSuccess(item);
-  } catch (err: any) {
-    envRes.sendError(500, 'API_ERROR', 'Failed to fetch item: ' + err.message);
   }
 });
 
@@ -320,54 +195,21 @@ router.get('/settings', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     let settings = await Settings.findOne({ clientId });
     
     const settingsObj = settings ? settings.toObject() : {};
 
-    // Ensure all CMS fields exist
-    const defaults = {
-        heroBadge: 'Engineering Excellence',
-        servicesBadge: 'OUR SOLUTIONS',
-        servicesTitle: 'Software & IT Services',
-        servicesSubtitle: 'End-to-end digital services tailored for your growth and transformation.',
-        trustTitle: 'Built on Trust',
-        trustDescription: 'We deliver software that powers mission-critical operations worldwide.',
-        trustCardTitle: 'Secure & Robust',
-        trustCardSubtitle: 'Enterprise-grade security',
-        portfolioBadge: 'Portfolio',
-        portfolioTitle: 'Recent Projects',
-        ctaTitle: 'Ready to Scale?',
-        ctaSubtitle: 'Our architects are ready to build your next generation platform.',
-        ctaPrimaryBtn: 'Start Project',
-        ctaSecondaryBtn: 'Contact Sales',
-        aboutBadge: 'Our Story',
-        aboutHeroTitle: 'Building the',
-        aboutHeroHighlight: 'Digital Future',
-        aboutHeroSubtitle: 'Discover how we help companies navigate the complexities of modern software.',
-        aboutSectionTitle: 'Our Philosophy',
-        aboutSectionHighlight: 'Commitment',
-        contactTitle: 'Let\'s Build',
-        contactHighlight: 'Together',
-        contactSubtitle: 'Ready to deploy something extraordinary? Our technical team is standing by to roadmap your transformation.',
-        regionalFocus: 'Active in 12 Zones',
-        footerDescription: 'Empowering the next generation of digital transformation through precision engineering and visionary software solutions.',
-        footerContactTitle: 'Contact Us',
-        email: 'concierge@platform.com',
-        phone: '+1 (555) PLATFORM',
-        address: 'Silicon Quarter, DXB'
-    };
-
-    const finalSettings = { ...defaults, ...settingsObj };
+    const finalSettings = { ...settingsObj };
 
     envRes.sendSuccess({
       ...finalSettings,
       // Flatten common branding fields for SDK simplicity
-      heroTitle: finalSettings.heroTitle || finalSettings.branding?.heroTitle,
-      heroSubtitle: finalSettings.heroSubtitle || finalSettings.branding?.heroSubtitle,
-      aboutText: finalSettings.aboutText || finalSettings.branding?.aboutText,
-      primaryColor: finalSettings.primaryColor || finalSettings.branding?.primaryColor,
-      fontFamily: finalSettings.fontFamily || finalSettings.branding?.fontFamily,
-      heroImage: finalSettings.branding?.heroImage,
+      heroTitle: finalSettings.branding?.heroTitle,
+      heroSubtitle: finalSettings.branding?.heroSubtitle,
+      aboutText: finalSettings.branding?.aboutText,
+      primaryColor: finalSettings.branding?.primaryColor,
+      fontFamily: finalSettings.branding?.fontFamily,
       chatbotTitle: finalSettings.chatbotTitle || finalSettings.businessName || 'Assistant',
       chatbotSubtitle: finalSettings.chatbotSubtitle || 'Digital Representative'
     });
@@ -381,19 +223,27 @@ router.post('/booking', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   try {
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     
     // Ensure client exists and is active
+    try {
+      await Client.findOneAndUpdate(
+        { clientId: 'platform-prime' },
+        {
+          $setOnInsert: {
+            clientId: 'platform-prime',
+            businessName: 'Platform Central',
+            email: 'central@platform.com',
+            password: 'platform_prime_placeholder',
+            role: 'client',
+            status: 'active'
+          }
+        },
+        { upsert: true }
+      );
+    } catch (e) {}
+
     let client = await Client.findOne({ clientId });
-    if (!client && clientId === 'platform-prime') {
-      client = await Client.create({
-        clientId: 'platform-prime',
-        businessName: 'Platform Central',
-        email: 'central@platform.com',
-        password: 'platform_prime_placeholder',
-        role: 'client',
-        status: 'active'
-      });
-    }
 
     if (!client || client.status === 'suspended') {
       return envRes.sendError(401, 'API_ERROR', 'This business is currently not accepting bookings.');
@@ -447,8 +297,21 @@ router.post('/booking', async (req, res) => {
       tags: ['high-intent', 'booking-submission']
     });
 
-    sendEmail(settings.contactEmail || settings.email || 'admin@platform.com', 'External Booking Received', `New booking: ${fullName}\nService: ${serviceSelection}`);
-    sendEmail(email, 'Booking Request Received', `Hello ${fullName}, your booking has been received.`);
+    sendEmail(settings.contactEmail || settings.email || 'admin@platform.com', 'External Booking Received', `New booking: ${fullName}\nService: ${serviceSelection}`, undefined, clientId);
+    sendEmail(email, 'Booking Request Received', `Hello ${fullName}, your booking has been received.`, undefined, clientId);
+
+    try {
+      const { createSystemNotification } = await import('../utils/notifications');
+      await createSystemNotification(clientId, {
+        title: 'New Appointment Booking',
+        message: `${fullName} has requested a booking for ${serviceSelection} on ${preferredDate} at ${preferredStartTime}.`,
+        type: 'booking',
+        relatedId: booking._id,
+        link: '/dashboard/bookings'
+      });
+    } catch (e) {
+      console.error('[BOOKING_NOTIF] Error creating notification:', e);
+    }
 
     envRes.sendSuccess({ bookingId: booking._id  });
   } catch (err: any) {
@@ -471,19 +334,27 @@ router.post('/contact', async (req, res) => {
     }
 
     const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
     
     // Ensure client exists
+    try {
+      await Client.findOneAndUpdate(
+        { clientId: 'platform-prime' },
+        {
+          $setOnInsert: {
+            clientId: 'platform-prime',
+            businessName: 'Platform Central',
+            email: 'central@platform.com',
+            password: 'platform_prime_placeholder',
+            role: 'client',
+            status: 'active'
+          }
+        },
+        { upsert: true }
+      );
+    } catch (e) {}
+
     let client = await Client.findOne({ clientId });
-    if (!client && clientId === 'platform-prime') {
-      client = await Client.create({
-        clientId: 'platform-prime',
-        businessName: 'Platform Central',
-        email: 'central@platform.com',
-        password: 'platform_prime_placeholder',
-        role: 'client',
-        status: 'active'
-      });
-    }
 
     if (!client || client.status === 'suspended') {
       return envRes.sendError(401, 'API_ERROR', 'This business is currently not accepting messages.');
@@ -517,8 +388,21 @@ router.post('/contact', async (req, res) => {
       tags: ['contact-submission']
     });
 
-    sendEmail(settings.contactEmail, 'New Website Message', `From: ${name} (${email})\n\n${message}`);
-    sendEmail(email, 'Message Received', `Hello ${name}, thank you for reaching out. We'll be in touch soon.`);
+    sendEmail(settings.contactEmail, 'New Website Message', `From: ${name} (${email})\n\n${message}`, undefined, clientId);
+    sendEmail(email, 'Message Received', `Hello ${name}, thank you for reaching out. We'll be in touch soon.`, undefined, clientId);
+
+    try {
+      const { createSystemNotification } = await import('../utils/notifications');
+      await createSystemNotification(clientId, {
+        title: 'New Web Inquiry Message',
+        message: `${name} has sent a web inquiry message: "${subject || 'General Inquiry'}"`,
+        type: 'alert',
+        relatedId: contact._id,
+        link: '/dashboard/support'
+      });
+    } catch (e) {
+      console.error('[CONTACT_NOTIF] Error creating notification:', e);
+    }
 
     envRes.sendSuccess({ contactId: contact._id  });
   } catch (err: any) {
@@ -578,6 +462,130 @@ router.post('/track', async (req, res) => {
     envRes.sendSuccess({ success: true });
   } catch (err: any) {
     envRes.sendError(500, 'API_ERROR', 'Tracking failed: ' + err.message);
+  }
+});
+
+// Incoming public email routing / webhook (Zoho-style SMTP email integration handler)
+router.post('/email/incoming', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const { from, to, subject, text, html, fromName } = req.body;
+    let clientId = await resolveClientId(req);
+
+    // Try mapping the "to" email address to a client's settings to find the correct business
+    if (to) {
+      const matchSettings = await Settings.findOne({
+        $or: [
+          { contactEmail: to.toLowerCase().trim() },
+          { email: to.toLowerCase().trim() }
+        ]
+      });
+      if (matchSettings) {
+        clientId = matchSettings.clientId;
+      }
+    }
+
+    if (!clientId) {
+      return envRes.sendError(400, 'BAD_REQUEST', 'Unable to resolve business client ID for the incoming email.');
+    }
+
+    const fromEmail = (from || '').toLowerCase().trim();
+    const subjectStr = subject || '';
+    const bodyText = text || '';
+
+    // Step 1: Upsert sender as a Lead (Ensure contact exists in CRM system)
+    await upsertLead({
+      clientId,
+      email: fromEmail,
+      phone: '',
+      name: fromName || fromEmail.split('@')[0],
+      source: 'contact',
+      tags: ['email-contact'],
+      data: {
+        lastSubject: subjectStr,
+        channel: 'email'
+      }
+    });
+
+    const { Ticket, TicketMessage, Contact } = await import('../models');
+    const { createSystemNotification } = await import('../utils/notifications');
+
+    // Step 2: Search for an existing ticket reference matching Ticket #xxxxxx (last 6 hex characters of Ticket ID)
+    const ticketMatch = subjectStr.match(/Ticket\s*#\s*([a-fA-F0-9]{6,24})/);
+    let ticket = null;
+
+    if (ticketMatch) {
+      const hex = ticketMatch[1].toLowerCase();
+      if (hex.length === 24) {
+        ticket = await Ticket.findOne({ _id: hex, clientId });
+      } else if (hex.length === 6) {
+        const tickets = await Ticket.find({ clientId });
+        ticket = tickets.find((t: any) => t._id.toString().slice(-6).toLowerCase() === hex);
+      }
+    }
+
+    // Step 3: Route correctly
+    if (ticket) {
+      // It is a REPLY to an existing ticket!
+      const messageObj = await TicketMessage.create({
+        clientId,
+        ticketId: ticket._id,
+        senderRole: 'customer',
+        senderName: ticket.customerName,
+        content: bodyText || '(No text body entered)'
+      });
+
+      ticket.status = 'open';
+      ticket.hasUnreadMessages = true;
+      ticket.updatedAt = new Date();
+      await ticket.save();
+
+      // Trigger visual/system notification for the dashboard
+      await createSystemNotification(clientId, {
+        title: 'New Email Reply on Ticket',
+        message: `Reply from ${ticket.customerName} on Ticket #${ticket._id.toString().slice(-6)}: "${subjectStr}"`,
+        type: 'alert',
+        relatedId: ticket._id,
+        link: '/dashboard/tickets'
+      });
+
+      return envRes.sendSuccess({ success: true, type: 'ticket-reply', ticketId: ticket._id, messageId: messageObj._id });
+    } else {
+      // No ticket match found -> Treat as a brand new INQUIRY (stored in Contact collection)
+      const contactObj = await Contact.create({
+        clientId,
+        name: fromName || fromEmail.split('@')[0],
+        email: fromEmail,
+        subject: subjectStr || 'Business Inquiry',
+        message: bodyText || '(No text body entered)',
+        preferredContactMethod: 'email',
+        status: 'unread',
+        source: 'email'
+      });
+
+      // Trigger real-time visual notification for agent dashboard
+      await createSystemNotification(clientId, {
+        title: 'New Inquiry Message',
+        message: `New message inquiry via email from ${contactObj.name}: "${contactObj.subject}"`,
+        type: 'alert',
+        relatedId: contactObj._id,
+        link: '/dashboard/support'
+      });
+
+      // Send confirmation auto-reply back to customer
+      const clientRecord = await Client.findOne({ clientId }).lean();
+      const bizName = clientRecord?.businessName || 'Inquiry Team';
+      const emailSubject = `Inquiry Message Received - ${bizName}`;
+      const emailText = `Hello ${contactObj.name},\n\nThank you for reaching out to us. We have received your inquiry regarding "${contactObj.subject}".\n\nOur team is reviewing your message and will contact you shortly.\n\nBest regards,\nThe team at ${bizName}`;
+      const emailHtml = `<p>Hello <strong>${contactObj.name}</strong>,</p><p>Thank you for reaching out to us. We have received your inquiry regarding <strong>"${contactObj.subject}"</strong>.</p><p>Our team is reviewing your message and will contact you shortly.</p><p>Best regards,<br/>The team at <strong>${bizName}</strong></p>`;
+
+      await sendEmail(fromEmail, emailSubject, emailText, emailHtml, clientId);
+
+      return envRes.sendSuccess({ success: true, type: 'new-inquiry', contactId: contactObj._id });
+    }
+  } catch (err: any) {
+    console.error('Incoming email webhook process failed:', err);
+    envRes.sendError(500, 'API_ERROR', 'Failed to route incoming email: ' + err.message);
   }
 });
 

@@ -57,4 +57,25 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// DELETE /v1/notifications - Bulk delete notifications
+router.delete('/', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = getCid(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Invalid credentials');
+
+    const idsString = req.body.ids || req.query.ids;
+    const ids = Array.isArray(idsString) ? idsString : (typeof idsString === 'string' ? idsString.split(',') : []);
+
+    if (ids.length === 0) {
+      return envRes.sendError(400, 'BAD_REQUEST', 'No IDs provided for deletion');
+    }
+
+    await Notification.deleteMany({ _id: { $in: ids }, clientId });
+    envRes.sendSuccess({ success: true, message: `${ids.length} notifications deleted.` });
+  } catch (err) {
+    envRes.sendError(500, 'API_ERROR', 'Delete failed');
+  }
+});
+
 export default router;

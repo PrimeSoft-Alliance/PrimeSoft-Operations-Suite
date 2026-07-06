@@ -123,7 +123,7 @@ export default function HeadlessDocs() {
                 <h3 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                   <Share2 className="w-6 h-6 text-indigo-600" /> 1-Click Client SDK
                 </h3>
-                <p className="text-gray-600">The easiest way to add an intelligent AI Chatbot Assistant powered by Gemini to any external HTML site or CMS (WordPress, Wix, Webflow).</p>
+                <p className="text-gray-600">The easiest way to add an intelligent Conversational AI Assistant to any external HTML site or CMS (WordPress, Wix, Webflow).</p>
                 <CodeBlock 
                   title="Include in <body>"
                   code={`<script src="${window.location.origin}/widget.js" data-client-id="${clientId}" async></script>`} 

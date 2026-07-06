@@ -1,5 +1,5 @@
 import express from 'express';
-import { Lead, Booking, Contact, Client, Notification } from '../models';
+import { Lead, Booking, Contact, Client, Notification, Ticket, Conversation } from '../models';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { authMiddleware } from '../auth';
 import { sendEmail } from '../email';
@@ -179,11 +179,36 @@ router.put('/:id', async (req, res) => {
   if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
   
   try {
-    const lead = await Lead.findOneAndUpdate(
+    let lead = await Lead.findOneAndUpdate(
       { _id: req.params.id, clientId },
       { $set: req.body },
-      { new: true }
+      { returnDocument: 'after' }
     );
+
+    if (!lead) {
+      // Check if ID is from Booking or Contact
+      const b = await Booking.findOne({ _id: req.params.id, clientId });
+      const c = await Contact.findOne({ _id: req.params.id, clientId });
+      
+      const email = b?.email || c?.email || req.body.contactEmail;
+      const name = b?.fullName || c?.name;
+      const phone = b?.phoneNumber || b?.customerPhone || c?.phone || req.body.contactPhone;
+      
+      if (b || c || email || phone) {
+        lead = await Lead.create({
+          clientId,
+          contactId: c?._id || b?.contactId,
+          contactEmail: email,
+          contactPhone: phone,
+          contactFirst: name?.split(' ')[0] || req.body.contactFirst,
+          contactLast: name?.split(' ').slice(1).join(' ') || req.body.contactLast,
+          source: b ? 'booking' : 'contact',
+          stage: 'New',
+          ...req.body
+        });
+      }
+    }
+
     if (!lead) return envRes.sendError(404, 'NOT_FOUND', 'Lead not found');
     envRes.sendSuccess(lead);
   } catch (error) {
@@ -217,6 +242,7 @@ router.post('/:id/reply', async (req, res) => {
        if (email) {
           lead = await Lead.create({
             clientId,
+            contactId: c?._id || b?.contactId,
             contactEmail: email,
             contactFirst: name?.split(' ')[0],
             contactLast: name?.split(' ').slice(1).join(' '),
@@ -270,6 +296,7 @@ router.post('/:id/status', async (req, res) => {
         if (email) {
            lead = await Lead.create({
               clientId,
+              contactId: c?._id || b?.contactId,
               contactEmail: email,
               contactFirst: name?.split(' ')[0],
               contactLast: name?.split(' ').slice(1).join(' '),
@@ -297,7 +324,7 @@ router.post('/:id/status', async (req, res) => {
     if (stage === 'Closed Won') {
        const notif = await Notification.create({
          clientId,
-         title: 'Deal Closed! 🎉',
+         title: 'Deal Closed!',
          message: `Congratulations! ${lead.contactFirst} ${lead.contactLast} has been marked as WON.`,
          type: 'lead',
          relatedId: lead._id
@@ -348,14 +375,267 @@ router.post('/:id/simulate-reply', async (req, res) => {
   }
 });
 
+router.get('/:id/unified', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = getCid(req);
+  if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'clientId is missing');
+
+  try {
+    const id = req.params.id;
+    const mongoose = await import('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+        return envRes.sendError(400, 'BAD_REQUEST', 'Invalid customer seed ID format');
+    }
+    console.log(`[UNIFIED] Fetching unified customer profile for seed ID: ${id}`);
+
+    // 1. Locate the seed document from of any of the collections
+    let email: string[] = [];
+    let phone: string[] = [];
+    let name = '';
+    let telegramChatId = '';
+    let telegramUsername = '';
+    let whatsappJid = '';
+
+    const [lead, booking, contact, conversation] = await Promise.all([
+      Lead.findOne({ _id: id, clientId }).lean(),
+      Booking.findOne({ _id: id, clientId }).lean(),
+      Contact.findOne({ _id: id, clientId }).lean(),
+      Conversation.findOne({ _id: id, clientId }).lean()
+    ]);
+
+    if (lead) {
+      if (lead.contactEmail) email.push(lead.contactEmail.toLowerCase().trim());
+      if (lead.contactPhone) phone.push(lead.contactPhone.replace(/\D/g, ''));
+      name = `${lead.contactFirst || ''} ${lead.contactLast || ''}`.trim();
+      if (lead.data?.telegramChatId) telegramChatId = String(lead.data.telegramChatId);
+      if (lead.data?.telegramUsername) telegramUsername = String(lead.data.telegramUsername);
+      if (lead.data?.whatsappJid) whatsappJid = String(lead.data.whatsappJid);
+    } else if (booking) {
+      if (booking.email) email.push(booking.email.toLowerCase().trim());
+      if (booking.phoneNumber) phone.push(booking.phoneNumber.replace(/\D/g, ''));
+      name = booking.fullName;
+    } else if (contact) {
+      if (contact.email) email.push(contact.email.toLowerCase().trim());
+      if (contact.phone) phone.push(contact.phone.replace(/\D/g, ''));
+      name = contact.name;
+      if (contact.telegramChatId) telegramChatId = contact.telegramChatId;
+      if (contact.telegramUsername) telegramUsername = contact.telegramUsername;
+      if (contact.whatsappJid) whatsappJid = contact.whatsappJid;
+    } else if (conversation) {
+      name = conversation.customerName;
+      if (conversation.platform === 'telegram') {
+        telegramChatId = conversation.customerJid;
+      } else if (conversation.platform === 'whatsapp') {
+        whatsappJid = conversation.customerJid;
+        const potentialPhone = conversation.customerJid.split('@')[0];
+        if (potentialPhone) phone.push(potentialPhone.replace(/\D/g, ''));
+      }
+    } else {
+      return envRes.sendError(404, 'NOT_FOUND', 'Seed customer record not found');
+    }
+
+    // Expand search criteria using seed details
+    // Gather all matching emails and phones from any matching document
+    const queryEmail = email.filter(Boolean);
+    const queryPhone = phone.filter(Boolean);
+
+    const conditions: any[] = [];
+    if (queryEmail.length > 0) {
+      conditions.push({ contactEmail: { $in: queryEmail } });
+      conditions.push({ email: { $in: queryEmail } });
+      conditions.push({ customerEmail: { $in: queryEmail } });
+    }
+    if (queryPhone.length > 0) {
+      const phoneRegexes = queryPhone.map(p => new RegExp(p.slice(-8)));
+      conditions.push({ contactPhone: { $in: phoneRegexes } });
+      conditions.push({ phoneNumber: { $in: phoneRegexes } });
+      conditions.push({ phone: { $in: phoneRegexes } });
+    }
+    if (telegramChatId) {
+      conditions.push({ telegramChatId });
+      conditions.push({ customerJid: telegramChatId });
+      conditions.push({ 'data.telegramChatId': telegramChatId });
+    }
+    if (telegramUsername) {
+      conditions.push({ telegramUsername });
+      conditions.push({ 'data.telegramUsername': telegramUsername });
+    }
+    if (whatsappJid) {
+      conditions.push({ whatsappJid });
+      conditions.push({ customerJid: whatsappJid });
+      conditions.push({ 'data.whatsappJid': whatsappJid });
+    }
+
+    const searchQuery = conditions.length > 0 ? { clientId, $or: conditions } : { clientId, _id: id };
+
+    // Fetch related records
+    const [allLeads, allBookings, allContacts, allConversations, allTickets] = await Promise.all([
+      Lead.find(searchQuery).lean(),
+      Booking.find(searchQuery).lean(),
+      Contact.find(searchQuery).lean(),
+      Conversation.find({ clientId, customerJid: { $in: [telegramChatId, whatsappJid].filter(Boolean) } }).sort({ updatedAt: -1 }).lean(),
+      Ticket.find(searchQuery).lean()
+    ]);
+
+    // Consolidate list of emails, phones
+    allLeads.forEach((l: any) => {
+      if (l.contactEmail && !email.includes(l.contactEmail.toLowerCase().trim())) email.push(l.contactEmail.toLowerCase().trim());
+      if (l.contactPhone && !phone.includes(l.contactPhone.replace(/\D/g, ''))) phone.push(l.contactPhone.replace(/\D/g, ''));
+    });
+    allBookings.forEach((b: any) => {
+      if (b.email && !email.includes(b.email.toLowerCase().trim())) email.push(b.email.toLowerCase().trim());
+      if (b.phoneNumber && !phone.includes(b.phoneNumber.replace(/\D/g, ''))) phone.push(b.phoneNumber.replace(/\D/g, ''));
+    });
+    allContacts.forEach((c: any) => {
+      if (c.email && !email.includes(c.email.toLowerCase().trim())) email.push(c.email.toLowerCase().trim());
+      if (c.phone && !phone.includes(c.phone.replace(/\D/g, ''))) phone.push(c.phone.replace(/\D/g, ''));
+      if (c.telegramChatId && !telegramChatId) telegramChatId = c.telegramChatId;
+      if (c.telegramUsername && !telegramUsername) telegramUsername = c.telegramUsername;
+      if (c.whatsappJid && !whatsappJid) whatsappJid = c.whatsappJid;
+    });
+
+    // Extract best location
+    let finalLocation = { city: 'Unknown', country: 'Unknown', region: 'Unknown' };
+    const docsWithLocation = [...allLeads, ...allBookings, ...allContacts];
+    for (const d of docsWithLocation) {
+      if (d.location && d.location.city && d.location.city !== 'Unknown' && d.location.city !== 'Local') {
+        finalLocation = {
+          city: d.location.city,
+          country: d.location.country || 'Unknown',
+          region: d.location.region || 'Unknown'
+        };
+        break;
+      }
+    }
+
+    // Compile a beautiful timeline/activity profile
+    const activities: any[] = [];
+    allLeads.forEach((l: any) => {
+      if (l && l.activities) {
+        l.activities.forEach((act: any) => {
+          if (!act) return;
+          activities.push({
+            type: act.type || 'system',
+            description: act.description,
+            date: act.date || l.updatedAt || l.createdAt,
+            metadata: { ...act.metadata, source: 'Lead' }
+          });
+        });
+      }
+    });
+
+    allConversations.forEach((conv: any) => {
+      if (conv && conv.messages) {
+        conv.messages.forEach((msg: any) => {
+          if (!msg) return;
+          activities.push({
+            type: conv.platform === 'telegram' ? 'telegram' : 'whatsapp',
+            description: `${msg.sender === 'customer' ? 'Customer' : 'AI Assistant'}: ${msg.text || ''}`,
+            date: msg.timestamp || msg.date || conv.updatedAt || new Date(),
+            metadata: { incoming: msg.sender === 'customer', body: msg.text, platform: conv.platform }
+          });
+        });
+      }
+    });
+
+    allBookings.forEach((b: any) => {
+      if (!b) return;
+      activities.push({
+        type: 'booking',
+        description: `Booked appointment for ${b.serviceSelection || 'services'} on ${b.preferredDate || 'N/A'} at ${b.preferredStartTime || 'N/A'}`,
+        date: b.createdAt || b.preferredDate || new Date(),
+        metadata: { bookingId: b._id, status: b.status }
+      });
+    });
+
+    allTickets.forEach((t: any) => {
+      if (!t) return;
+      activities.push({
+        type: 'ticket',
+        description: `Support Ticket: "${t.subject || 'No Subject'}" (Status: ${t.status || 'open'})`,
+        date: t.createdAt || new Date(),
+        metadata: { ticketId: t._id, status: t.status }
+      });
+    });
+
+    allContacts.forEach((c: any) => {
+      if (c && c.source === 'web_form') {
+        activities.push({
+          type: 'email',
+          description: `Submitted web form inquiry: "${c.subject || 'Inquiry'}" - ${c.message || ''}`,
+          date: c.createdAt || new Date(),
+          metadata: { contactId: c._id }
+        });
+      }
+    });
+
+    // Filter out activities without dates and sort timeline descending (newest first)
+    const validActivities = activities.filter(a => a.date && !isNaN(new Date(a.date).getTime()));
+    validActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const profile = {
+      name: name || (lead ? `${lead.contactFirst || ''} ${lead.contactLast || ''}`.trim() : (booking?.fullName || contact?.name || conversation?.customerName || 'Unified Customer')),
+      emails: [...new Set(email.filter(Boolean))],
+      phones: [...new Set(phone.filter(Boolean))],
+      telegramChatId,
+      telegramUsername,
+      whatsappJid,
+      location: finalLocation,
+      leads: allLeads,
+      leadRating: allLeads[0]?.leadRating || 'none',
+      bookings: allBookings,
+      contacts: allContacts,
+      tickets: allTickets,
+      conversations: allConversations,
+      timeline: validActivities
+    };
+
+    envRes.sendSuccess(profile);
+  } catch (err: any) {
+    console.error('[UNIFIED_PROFILE_ERROR]', err);
+    envRes.sendError(500, 'API_ERROR', 'Failed to trace unified profile: ' + err.message);
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
   const clientId = getCid(req);
   try {
-    await Lead.findOneAndDelete({ _id: req.params.id, clientId });
+    const id = req.params.id;
+    await Promise.all([
+      Lead.findOneAndDelete({ _id: id, clientId }),
+      Contact.findOneAndDelete({ _id: id, clientId }),
+      Booking.findOneAndDelete({ _id: id, clientId })
+    ]);
     envRes.sendSuccess({ success: true });
   } catch (error) {
     envRes.sendError(500, 'API_ERROR', 'Failed to delete lead');
+  }
+});
+
+// DELETE /v1/leads - Bulk delete leads
+router.delete('/', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = getCid(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Invalid credentials');
+
+    const idsString = req.body.ids || req.query.ids;
+    const ids = Array.isArray(idsString) ? idsString : (typeof idsString === 'string' ? idsString.split(',') : []);
+
+    if (ids.length === 0) {
+      return envRes.sendError(400, 'BAD_REQUEST', 'No IDs provided for deletion');
+    }
+
+    await Promise.all([
+      Lead.deleteMany({ _id: { $in: ids }, clientId }),
+      Contact.deleteMany({ _id: { $in: ids }, clientId }),
+      Booking.deleteMany({ _id: { $in: ids }, clientId })
+    ]);
+
+    envRes.sendSuccess({ success: true, message: `${ids.length} leads successfully deleted.` });
+  } catch (err: any) {
+    envRes.sendError(500, 'DELETE_ERROR', err.message);
   }
 });
 

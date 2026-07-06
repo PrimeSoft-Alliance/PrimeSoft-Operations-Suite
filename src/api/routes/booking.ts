@@ -1,9 +1,10 @@
 import express from 'express';
-import { Booking, Settings, UsageStats, Client } from '../models';
+import { Booking, Settings, UsageStats, Client, Lead } from '../models';
 import { sendEmail } from '../email';
 import { startOfDay, endOfDay, parseISO, isBefore, isAfter, addMinutes, format } from 'date-fns';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { resolveClientId } from '../utils/resolveClient';
+import { identityService } from '../services/identityService';
 
 const router = express.Router();
 
@@ -104,6 +105,170 @@ router.post('/check-availability', async (req, res) => {
   }
 });
 
+import { bookingService } from '../services/bookingService';
+
+router.post('/:id/accept', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
+  try {
+    const booking = await bookingService.updateStatus(req.params.id, 'confirmed');
+    envRes.sendSuccess(booking);
+  } catch (err: any) {
+    envRes.sendError(500, 'SERVER_ERROR', err.message);
+  }
+});
+
+router.post('/:id/reject', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
+  try {
+    const booking = await bookingService.updateStatus(req.params.id, 'rejected', req.body.notes);
+    envRes.sendSuccess(booking);
+  } catch (err: any) {
+    envRes.sendError(500, 'SERVER_ERROR', err.message);
+  }
+});
+
+router.post('/:id/reschedule', async (req, res) => {
+  const envRes = res as EnvelopeResponse;
+  try {
+    const { date, startTime, endTime } = req.body;
+    const booking = await Booking.findByIdAndUpdate(req.params.id, {
+      $set: {
+        preferredDate: new Date(date),
+        preferredStartTime: startTime,
+        preferredEndTime: endTime,
+        status: 'rescheduled'
+      }
+    }, { new: true });
+    
+    await bookingService.generateICal(req.params.id);
+    
+    if (booking) {
+       const { notificationService } = await import('../services/notificationService');
+       await notificationService.sendBookingRescheduled(booking.clientId, booking);
+    }
+    
+    envRes.sendSuccess(booking);
+  } catch (err: any) {
+    envRes.sendError(500, 'SERVER_ERROR', err.message);
+  }
+});
+
+router.post('/:id/message', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  const clientId = await resolveClientId(req);
+  const { message, subject } = req.body;
+
+  if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Invalid credentials');
+  if (!message || !message.trim()) {
+    return envRes.sendError(400, 'BAD_REQUEST', 'Message is required');
+  }
+
+  try {
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Booking not found');
+    }
+
+    const { Contact, Conversation, TelnyxNumber } = await import('../models');
+    const { conversationService } = await import('../services/conversationService');
+    const { telegramManager } = await import('../services/telegramManager');
+    const { telnyxService } = await import('../services/telnyxService');
+
+    // Find contact by email or phone
+    const contact = await Contact.findOne({
+      clientId,
+      $or: [
+        { email: booking.email.toLowerCase().trim() },
+        { phone: booking.phoneNumber?.trim() }
+      ]
+    });
+
+    const finalSubject = subject || `Update regarding your booking for ${booking.serviceSelection}`;
+    const channelsSent: string[] = [];
+
+    // 1. SMTP/Email notification (Always sent)
+    await sendEmail(
+      booking.email,
+      finalSubject,
+      message,
+      `<p>${message.replace(/\n/g, '<br/>')}</p>`,
+      clientId
+    );
+    channelsSent.push('email');
+
+    // 2. Outbound medium matching
+    if (contact) {
+      // WhatsApp
+      if (contact.whatsappJid) {
+        try {
+          await conversationService.sendOutbound({
+            clientId,
+            contactId: contact._id.toString(),
+            channel: 'whatsapp',
+            text: message
+          });
+          channelsSent.push('whatsapp');
+        } catch (err: any) {
+          console.warn('[Booking Msg] WhatsApp delivery failed:', err.message);
+        }
+      }
+
+      // Telegram
+      if (contact.telegramChatId) {
+        try {
+          await telegramManager.sendMessage(clientId, contact.telegramChatId, { text: message });
+          channelsSent.push('telegram');
+
+          // Log Telegram outbound
+          let conv = await Conversation.findOne({ clientId, customerJid: contact.telegramChatId });
+          if (!conv) {
+            conv = new Conversation({ clientId, customerJid: contact.telegramChatId, platform: 'telegram', messages: [] });
+          }
+          conv.messages.push({
+            sender: 'assistant',
+            text: message,
+            timestamp: new Date()
+          });
+          await conv.save();
+        } catch (err: any) {
+          console.warn('[Booking Msg] Telegram delivery failed:', err.message);
+        }
+      }
+
+      // Telnyx SMS fallback if no messaging channel is active but phone is present
+      if (!contact.whatsappJid && !contact.telegramChatId && booking.phoneNumber) {
+        try {
+          const rentedNumber = await TelnyxNumber.findOne({ clientId });
+          const fromNumber = rentedNumber?.phoneNumber || '+15555555555';
+          await telnyxService.sendSMS(clientId, fromNumber, booking.phoneNumber, message);
+          channelsSent.push('sms');
+        } catch (err: any) {
+          console.warn('[Booking Msg] SMS delivery failed:', err.message);
+        }
+      }
+    }
+
+    envRes.sendSuccess({
+      success: true,
+      channelsSent,
+      message: `Message sent via: ${channelsSent.join(', ')}`
+    });
+
+  } catch (err: any) {
+    console.error('[Booking Msg Exception]', err);
+    envRes.sendError(500, 'SERVER_ERROR', err.message);
+  }
+});
+
+router.get('/:id/ics', async (req, res) => {
+  try {
+    const icsPath = await bookingService.generateICal(req.params.id);
+    res.redirect(icsPath);
+  } catch (err) {
+    res.status(500).send('Failed to generate calendar invite');
+  }
+});
+
 router.post('/', async (req, res) => {
   const envRes = res as EnvelopeResponse;
   try {
@@ -166,7 +331,7 @@ router.post('/', async (req, res) => {
       fullName, phoneNumber, email, serviceSelection,
       preferredDate: startOfDay(new Date(preferredDate)),
       preferredStartTime, preferredEndTime, notes,
-      status: 'pending',
+      status: 'awaiting',
       location
     });
 
@@ -179,45 +344,88 @@ router.post('/', async (req, res) => {
         type: 'booking',
         relatedId: booking._id
       });
-      // We need emitToClient here but it's not imported or passed as a utility easily without refactoring.
-      // Since booking.ts handles public routes, we'll try to get IO from the app.
       const io = req.app.get('io');
       if (io) io.to(clientId).emit('notification', { title: 'New Booking Request', type: 'booking' });
     } catch (err) {}
 
+    // Generate Calendar Invite
+    let attachments: any[] = [];
+    let providerMail: string = settings?.contactEmail || '';
+    let bizName = settings?.businessName || 'our business';
+    let calendarLink = `/api/bookings/${booking._id}/ics`;
+
+    try {
+      const { processBookingCalendarInvite } = await import('../services/bookingCalendarService');
+      const calData = await processBookingCalendarInvite(booking._id);
+      attachments = calData.attachments;
+      providerMail = calData.providerEmail;
+      bizName = calData.businessName;
+    } catch (err) {
+      console.warn('[CALENDAR] Failed to generate ICS on booking creation:', err);
+    }
+
     // Notify Business
-    if (settings) {
+    if (providerMail) {
+      const providerHtml = `
+        <p>New booking from <strong>${fullName}</strong>.</p>
+        <p><strong>Booking ID:</strong> <code>${booking._id}</code></p>
+        <p><strong>Service:</strong> ${serviceSelection}</p>
+        <p><strong>Date:</strong> ${preferredDate}</p>
+        <p><strong>Time:</strong> ${preferredStartTime}</p>
+        <br/>
+        <p><a href="${req.protocol}://${req.get('host')}${calendarLink}" style="padding: 10px 15px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 5px;">Add to Calendar</a></p>
+      `;
       sendEmail(
-        settings.contactEmail,
+        providerMail,
         'Project Request: New Booking Received',
-        `New booking from ${fullName}.\nService: ${serviceSelection}\nDate: ${preferredDate}\nTime: ${preferredStartTime}`,
+        `New booking from ${fullName}.\nBooking ID: ${booking._id}\nService: ${serviceSelection}\nDate: ${preferredDate}\nTime: ${preferredStartTime}`,
+        providerHtml,
+        clientId,
         undefined,
-        clientId
+        attachments
       );
     }
     
     // Notify Customer
-    const businessName = settings?.businessName || 'our business';
+    const customerHtml = `
+      <p>Hello ${fullName},</p>
+      <p>Thank you for choosing ${bizName}. We have received your booking for <strong>${serviceSelection}</strong> on <strong>${preferredDate}</strong> at <strong>${preferredStartTime}</strong>.</p>
+      <p><strong>Your Booking ID is:</strong> <code>${booking._id}</code> (Save this ID to update, reschedule, or cancel your booking with our AI assistant.)</p>
+      <p>Our team will review the request and get back to you shortly.</p>
+      <br/>
+      <p><a href="${req.protocol}://${req.get('host')}${calendarLink}" style="padding: 10px 15px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 5px;">Add to Calendar</a></p>
+      <br/>
+      <p>Best regards,<br/>${bizName} Team</p>
+    `;
+
     sendEmail(
       email,
-      `Booking Confirmation - ${businessName}`,
-      `Hello ${fullName}, \n\nThank you for choosing ${businessName}. We have received your booking for ${serviceSelection} on ${preferredDate} at ${preferredStartTime}.\n\nOur team will review the request and get back to you shortly.\n\nBest regards,\n${businessName} Team`,
+      `Booking Confirmation - ${bizName}`,
+      `Hello ${fullName}, \n\nThank you for choosing ${bizName}. We have received your booking for ${serviceSelection} on ${preferredDate} at ${preferredStartTime}.\n\nYour Booking ID is: ${booking._id} (Save this ID to update, reschedule, or cancel your booking with our AI assistant.)\n\nOur team will review the request and get back to you shortly.\n\nBest regards,\n${bizName} Team`,
+      customerHtml,
+      clientId,
       undefined,
-      clientId
+      attachments
     );
+
+    // Schedule Reminders
+    try {
+      const { scheduleReminders } = await import('../services/reminderService');
+      scheduleReminders(booking._id).catch(err => console.warn('Reminder scheduling failed:', err));
+    } catch (err) {}
 
     // Sync to Leads immediately
     try {
-      const { Lead } = await import('../models');
       const [first, ...lastParts] = (fullName || '').split(' ');
       
-      const criteria: any = { clientId };
-      const or = [];
-      if (email) or.push({ contactEmail: email.toLowerCase().trim() });
-      if (phoneNumber) or.push({ contactPhone: phoneNumber.trim() });
-      
-      let lead = null;
-      if (or.length > 0) lead = await Lead.findOne({ ...criteria, $or: or });
+      const contact = await identityService.resolveContact(clientId, {
+        email: email,
+        phone: phoneNumber,
+        name: fullName
+      }, 'booking');
+
+      const criteria: any = { clientId, contactId: contact._id };
+      let lead = await Lead.findOne(criteria);
 
       if (lead) {
         lead.lastActivity = new Date();
@@ -233,6 +441,7 @@ router.post('/', async (req, res) => {
       } else {
         await Lead.create({
           clientId,
+          contactId: contact._id,
           contactFirst: first || 'Unknown',
           contactLast: lastParts.join(' ') || '',
           contactEmail: email,
@@ -252,6 +461,146 @@ router.post('/', async (req, res) => {
     envRes.sendSuccess(booking);
   } catch (error) {
     envRes.sendError(500, 'SERVER_ERROR', 'Booking submission failed');
+  }
+});
+
+// Force-trigger/Simulate background alarms for a specific booking
+router.post('/:id/reminders/trigger', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { Booking: BookingModel, Settings: SettingsModel } = await import('../models');
+    const booking = await BookingModel.findById(id);
+    if (!booking) return res.status(404).json({ success: false, error: 'Booking not found' });
+
+    // Send immediate email notification to simulate the alarm
+    const settings = await SettingsModel.findOne({ clientId: booking.clientId });
+    const bizName = settings?.businessName || 'Our Business';
+    const { sendEmail } = await import('../email');
+
+    const bookingDateStr = booking.preferredDate instanceof Date 
+      ? booking.preferredDate.toDateString() 
+      : new Date(booking.preferredDate).toDateString();
+
+    const customerHtml = `
+      <p>Hello ${booking.fullName},</p>
+      <p>This is an automated <strong>[TEST ALARM REMINDER]</strong> for your upcoming booking for <strong>${booking.serviceSelection}</strong> on <strong>${bookingDateStr}</strong> at <strong>${booking.preferredStartTime}</strong>.</p>
+      <p>We look forward to seeing you!</p>
+      <br/>
+      <p>Best regards,<br/>${bizName} Team</p>
+    `;
+
+    await sendEmail(
+      booking.email,
+      `[TEST REMINDER] Upcoming Booking with ${bizName}`,
+      `This is a test reminder for your booking on ${bookingDateStr} at ${booking.preferredStartTime}.`,
+      customerHtml,
+      booking.clientId
+    );
+
+    return res.json({ success: true, message: 'Test alarm simulated and email dispatched.' });
+  } catch (err: any) {
+    console.error('[TEST-REMINDER-ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Real-world tenant wide live iCal/WebCal Feed subscription!
+router.get('/feed/:clientId.ics', async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { Booking: BookingModel, Settings: SettingsModel } = await import('../models');
+    const icalGenerator = await import('ical-generator');
+    const ical = (icalGenerator.default || icalGenerator) as any;
+    const ICalCalendarMethod = (icalGenerator.ICalCalendarMethod || (icalGenerator as any).ICalCalendarMethod) as any;
+
+    const bookings = await BookingModel.find({ clientId, status: { $ne: 'cancelled' } });
+    const settings = await SettingsModel.findOne({ clientId });
+    const bizName = settings?.businessName || 'OminiRep Client';
+
+    const calendar = ical({ name: `${bizName} Bookings Feed` });
+    calendar.method(ICalCalendarMethod.PUBLISH);
+
+    for (const booking of bookings) {
+      if (!booking.preferredDate || !booking.preferredStartTime) continue;
+      
+      try {
+        const start = new Date(booking.preferredDate);
+        const [hours, minutes] = (booking.preferredStartTime || '10:00').split(':').map(Number);
+        if (!isNaN(hours)) start.setHours(hours, minutes || 0);
+
+        const end = new Date(start);
+        end.setMinutes(end.getMinutes() + (booking.duration || 60));
+
+        calendar.createEvent({
+          id: booking._id.toString(),
+          start,
+          end,
+          summary: booking.title || `${booking.serviceSelection} - ${booking.fullName}`,
+          description: `Customer: ${booking.fullName}\nEmail: ${booking.email}\nPhone: ${booking.phoneNumber || booking.phone || 'N/A'}\nNotes: ${booking.notes || 'None'}\n\nManaged by OminiRep AI Representative`,
+          location: booking.meetingLocation || 'Online',
+          url: booking.meetingLink || '',
+          organizer: {
+            name: `${bizName} Team`,
+            email: 'no-reply@ominirep.com'
+          },
+          attendees: [
+            { name: booking.fullName, email: booking.email, rsvp: true }
+          ]
+        });
+      } catch (errEvent) {
+        console.warn(`[ICAL-FEED] Failed to generate event for booking ${booking._id}:`, errEvent);
+      }
+    }
+
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="ominirep_feed_${clientId}.ics"`);
+    res.send(calendar.toString());
+  } catch (err: any) {
+    console.error('[ICAL-FEED-ERROR]', err);
+    res.status(500).send('Failed to generate calendar subscription feed: ' + err.message);
+  }
+});
+
+// DELETE /v1/bookings - Bulk delete bookings
+router.delete('/', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Identification failure');
+
+    const idsString = req.body.ids || req.query.ids;
+    const ids = Array.isArray(idsString) ? idsString : (typeof idsString === 'string' ? idsString.split(',') : []);
+
+    if (ids.length === 0) {
+      return envRes.sendError(400, 'BAD_REQUEST', 'No IDs provided for deletion');
+    }
+
+    const { Booking } = await import('../models');
+    await Booking.deleteMany({ _id: { $in: ids }, clientId });
+
+    envRes.sendSuccess({ success: true, message: `${ids.length} bookings successfully deleted.` });
+  } catch (err: any) {
+    envRes.sendError(500, 'DELETE_ERROR', err.message);
+  }
+});
+
+// DELETE /v1/bookings/:id - Single delete booking
+router.delete('/:id', async (req, res) => {
+  const envRes = res as any as EnvelopeResponse;
+  try {
+    const clientId = await resolveClientId(req);
+    if (!clientId) return envRes.sendError(401, 'UNAUTHORIZED', 'Identification failure');
+
+    const { Booking } = await import('../models');
+    const result = await Booking.findOneAndDelete({ _id: req.params.id, clientId });
+
+    if (!result) {
+      return envRes.sendError(404, 'NOT_FOUND', 'Booking not found');
+    }
+
+    envRes.sendSuccess({ success: true, message: 'Booking successfully deleted.' });
+  } catch (err: any) {
+    envRes.sendError(500, 'DELETE_ERROR', err.message);
   }
 });
 

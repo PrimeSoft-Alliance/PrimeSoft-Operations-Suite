@@ -15,7 +15,10 @@ export const aiUsageTracking = async (req: Request, res: Response, next: NextFun
   const quotaCheck = await checkAIQuota(clientId, estimatedTokens, 'api');
   
   if (!quotaCheck.allowed) {
-    return envRes.sendError(402, 'QUOTA_EXCEEDED', quotaCheck.reason);
+    if (typeof envRes.sendError === 'function') {
+      return envRes.sendError(402, 'QUOTA_EXCEEDED', quotaCheck.reason);
+    }
+    return res.status(402).json({ error: quotaCheck.reason });
   }
 
   // Inject a method to track usage after successful response

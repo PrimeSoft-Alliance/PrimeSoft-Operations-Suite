@@ -26,7 +26,7 @@ export async function initializeTierDefinitions() {
   ];
 
   for (const t of tiers) {
-    await TierDefinition.findOneAndUpdate({ name: t.name }, t, { upsert: true, new: true });
+    await TierDefinition.findOneAndUpdate({ name: t.name }, t, { upsert: true, returnDocument: 'after' });
   }
 }
 
@@ -56,7 +56,7 @@ export async function assignTierToClient(clientId: string, tierName: string) {
       quotaResetDate: resetDate,
       status: 'active'
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return quota;
 }

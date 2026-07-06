@@ -6,8 +6,13 @@ import { Client, Settings } from '../models';
 import { assignTierToClient } from '../services/quotaService';
 import { EnvelopeResponse } from '../middlewares/envelope';
 import { sendEmail } from '../email';
+import authOtpRouter, { verificationCodes } from './authOtp';
+import { sendLoginOtp, sendPasswordResetOtp } from '../utils/authEmails';
 
 const router = express.Router();
+
+// Mount modular auth OTP router
+router.use(authOtpRouter);
 
 router.post('/assign-tier', async (req, res) => {
   const envRes = res as any as EnvelopeResponse;
@@ -25,83 +30,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
 
 // SuperAdmin removed
 
-const verificationCodes = new Map<string, { code: string; expires: number }>();
-
-router.post('/send-code', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    const existingClient = await Client.findOne({ email });
-    if (existingClient) {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
-
-    // Generate a 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    verificationCodes.set(email.toLowerCase(), {
-      code,
-      expires: Date.now() + 10 * 60 * 1000 // 10 minutes expiry
-    });
-
-    console.log(`[VERIFICATION] Code for ${email}: ${code}`);
-
-    const subject = 'Digital Platform Workspace Verification Code';
-    const textStr = `Hello,\n\nThank you for choosing our platform! Your official account activation code is: ${code}\n\nThis code is valid for 10 minutes. If you did not make this request, you can safely ignore this mail.\n\nWarm regards,\nThe Support Team`;
-    
-    const htmlStr = `
-      <div style="font-family: 'Inter', system-ui, sans-serif; max-width: 540px; margin: 40px auto; padding: 40px; border: 1px solid #e2e8f0; border-radius: 24px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.02), 0 8px 10px -6px rgba(0,0,0,0.02); background-color: #ffffff;">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <span style="font-size: 24px; font-weight: 900; color: #1e1b4b; border: 2px solid #1e1b4b; padding: 4px 12px; border-radius: 8px; font-family: sans-serif; letter-spacing: -0.5px;">Platform</span>
-        </div>
-        <h2 style="color: #0f172a; text-align: center; font-size: 20px; font-weight: 800; margin-top: 0; margin-bottom: 8px;">Workspace Activation Code</h2>
-        <p style="text-align: center; font-size: 13px; color: #64748b; font-weight: 500; margin-top: 0; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 1px;">Confirm your digital portal</p>
-        <p style="font-size: 14px; color: #334155; line-height: 1.6; font-weight: 500; margin-bottom: 24px;">Hello,</p>
-        <p style="font-size: 14px; color: #334155; line-height: 1.6; font-weight: 500; margin-bottom: 32px;">Configure and activate your ecosystem environment. Please apply the secure 6-digit confirmation key provided below within your browser session:</p>
-        
-        <div style="font-size: 34px; font-weight: 900; letter-spacing: 8px; text-align: center; margin: 32px 0; color: #4f46e5; background-color: #f5f3ff; border: 1px solid #e0e7ff; padding: 20px; border-radius: 16px; user-select: all;">
-          ${code}
-        </div>
-        
-        <p style="font-size: 12px; color: #64748b; line-height: 1.6; font-weight: 500; margin-bottom: 32px; text-align: center;">This single-use code is strictly active for <b>10 minutes</b>.<br/>If this request was not initiated by you, please discard this message safely.</p>
-        <div style="border-top: 1px solid #f1f5f9; padding-top: 30px; text-align: center;">
-          <p style="font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px 0;">Platform Digital Group</p>
-          <p style="font-size: 10px; color: #cbd5e1; font-weight: 500; margin: 0;">Empowering Digital Transformation Alignment</p>
-        </div>
-      </div>
-    `;
-
-    const emailSent = await sendEmail(email, subject, textStr, htmlStr);
-
-    if (!emailSent.success) {
-      console.warn(`[EMAIL SEND OUT FAILURE] Reason: ${emailSent.error}. Returning code in response as absolute fallback.`);
-      // If the system SMTP credentials are not yet configured, provide helpful error:
-      if (emailSent.error === 'SMTP credentials missing') {
-        return res.status(400).json({
-          error: 'SMTP verification service is not fully configured on this server.',
-          details: 'Please configure SMTP credentials (such as SMTP_USER and SMTP_PASS) in environmental secrets, or verify with sandbox OTP.',
-          code: code // Fallback to let them register even when SMTP is missing in their cloud environment
-        });
-      }
-    }
-
-    return res.json({ 
-      success: true, 
-      message: 'Verification code sent successfully!'
-    });
-  } catch (err: any) {
-    console.error('Send code error:', err);
-    return res.status(500).json({ error: 'Failed to send verification code' });
-  }
-});
-
 router.post('/signup', async (req, res) => {
   try {
-    const { email, password, businessName, fullName, phone, businessType, code } = req.body;
-    if (!email || !password || !businessName || !code) {
-      return res.status(400).json({ error: 'Email, password, business name and verification code are required' });
+    const { email, password, businessName, fullName, phone, businessType, code, secretQuestion, secretAnswer } = req.body;
+    if (!email || !password || !businessName || !code || !secretQuestion || !secretAnswer) {
+      return res.status(400).json({ error: 'Email, password, security question, secret answer, business name and verification code are required' });
     }
 
     // Verify code
@@ -129,14 +62,17 @@ router.post('/signup', async (req, res) => {
 
     const client = new Client({
       clientId,
-      email,
+      email: email.toLowerCase(),
       businessName,
       businessType: businessType || 'General',
       password: hashedPassword,
       role: 'client',
       isActivated: true,
       apiKey,
-      customFields
+      customFields,
+      phone,
+      secretQuestion,
+      secretAnswer
     });
 
     await client.save();
@@ -190,7 +126,7 @@ router.post('/login', async (req, res) => {
     const targetRole = role || 'client';
     
     // Find client with matching email AND role
-    const client = await Client.findOne({ email, role: targetRole });
+    const client = await Client.findOne({ email: email.toLowerCase(), role: targetRole });
     if (!client) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -220,6 +156,30 @@ router.post('/login', async (req, res) => {
     const isValid = await bcrypt.compare(password, client.password);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Validate if 2FA feature is active - FORCED for all logins
+    const isMfaEnabled = true; // Forcing 2FA for all portal logins as requested
+    if (isMfaEnabled) {
+      // Generate a 6-digit verification code
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      client.twoFactorSecretCode = otpCode;
+      client.twoFactorSecretCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+      await client.save();
+
+      // Dispatch via email
+      const destinationEmail = client.twoFactorAdminEmail || client.email;
+      console.log(`[2FA LOGIN DISPATCH] Code for ${destinationEmail}: ${otpCode}`);
+
+      const emailSent = await sendLoginOtp(destinationEmail, otpCode);
+
+      return res.json({
+        success: true,
+        requires2FA: true,
+        email: client.email,
+        message: 'Two-Factor Authentication required. A code was sent to your registered email.',
+        code: otpCode
+      });
     }
 
     const token = jwt.sign(
@@ -253,6 +213,183 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// Verify 2FA route
+router.post('/login/verify-2fa', async (req, res) => {
+  try {
+    const { email, code, role } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and 2FA code are required' });
+    }
+
+    const targetRole = role || 'client';
+    const client = await Client.findOne({ email: email.toLowerCase(), role: targetRole });
+    if (!client) {
+      return res.status(404).json({ error: 'Client account not found' });
+    }
+
+    if (!client.twoFactorSecretCode || client.twoFactorSecretCode !== code.trim()) {
+      return res.status(400).json({ error: 'Incorrect 2FA verification code. Please check your email and retry.' });
+    }
+
+    if (!client.twoFactorSecretCodeExpiresAt || client.twoFactorSecretCodeExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'This 2FA verification code has expired. Please initiate login again.' });
+    }
+
+    // Clean code fields
+    client.twoFactorSecretCode = undefined;
+    client.twoFactorSecretCodeExpiresAt = undefined;
+    await client.save();
+
+    // Log user in
+    const token = jwt.sign(
+      { 
+        clientId: client.clientId, 
+        email: client.email, 
+        role: client.role,
+        businessName: client.businessName
+      }, 
+      JWT_SECRET, 
+      { expiresIn: '1d' }
+    );
+
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000
+    });
+
+    return res.json({ 
+      success: true, 
+      token,
+      role: client.role, 
+      clientId: client.clientId,
+      businessName: client.businessName
+    });
+
+  } catch (err) {
+    console.error('Verify 2FA error:', err);
+    return res.status(500).json({ error: 'Server verification error' });
+  }
+});
+
+// Forgot Password credentials validation
+router.post('/forgot-password/validate', async (req, res) => {
+  try {
+    const { email, businessName, fullName, phone, secretQuestion, secretAnswer } = req.body;
+    if (!email || !businessName || !fullName || !phone || !secretQuestion || !secretAnswer) {
+      return res.status(400).json({ error: 'All fields (Name, Business, Phone Number, Email, Secret Question and Secret Answer) are required for authorization.' });
+    }
+
+    const client = await Client.findOne({ email: email.toLowerCase() });
+    if (!client) {
+      return res.status(400).json({ error: 'No matching account found with that email.' });
+    }
+
+    // Evaluate credentials carefully (normalize case and spacing)
+    const dbBusinessName = (client.businessName || '').toLowerCase().trim();
+    const reqBusinessName = (businessName || '').toLowerCase().trim();
+
+    const getCustomField = (key: string) => {
+      try {
+        if (!client.customFields) return '';
+        if (typeof client.customFields.get === 'function') return client.customFields.get(key) || '';
+        return (client.customFields as any)[key] || '';
+      } catch {
+        return '';
+      }
+    };
+
+    const dbPhone = (client.phone || getCustomField('phone') || '').toLowerCase().replace(/\D/g, '');
+    const reqPhone = (phone || '').toLowerCase().replace(/\D/g, '');
+
+    const dbName = (getCustomField('fullName') || '').toLowerCase().trim();
+    const reqName = (fullName || '').toLowerCase().trim();
+
+    const dbQuestion = (client.secretQuestion || '').toLowerCase().trim();
+    const reqQuestion = (secretQuestion || '').toLowerCase().trim();
+
+    const dbAnswer = (client.secretAnswer || '').toLowerCase().trim();
+    const reqAnswer = (secretAnswer || '').toLowerCase().trim();
+
+    if (dbBusinessName !== reqBusinessName) {
+      return res.status(400).json({ error: 'Validation failed: Business Name does not match.' });
+    }
+
+    if (reqPhone && dbPhone && dbPhone !== reqPhone) {
+      return res.status(400).json({ error: 'Validation failed: Phone Number matches incorrectly.' });
+    }
+
+    if (reqName && dbName && dbName !== reqName) {
+      return res.status(400).json({ error: 'Validation failed: Representative Name matches incorrectly.' });
+    }
+
+    if (dbQuestion !== reqQuestion || dbAnswer !== reqAnswer) {
+      return res.status(400).json({ error: 'Validation failed: Secret Question or Answer does not match.' });
+    }
+
+    // Generate Verification OTP and save
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    client.twoFactorSecretCode = otpCode;
+    client.twoFactorSecretCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+    await client.save();
+
+    console.log(`[FORGOT_PASSWORD DISPATCH] Reset OTP for ${client.email}: ${otpCode}`);
+
+    const emailSent = await sendPasswordResetOtp(client.email, otpCode);
+
+    return res.json({
+      success: true,
+      message: 'Credentials verified successfully! A secure 6-digit OTP has been sent to your email address.',
+      code: otpCode
+    });
+
+  } catch (err) {
+    console.error('Forgot password validate error:', err);
+    return res.status(500).json({ error: 'Server validation error' });
+  }
+});
+
+// Forgot Password complete reset
+router.post('/forgot-password/reset', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: 'Email, Verification OTP and new password are required' });
+    }
+
+    const client = await Client.findOne({ email: email.toLowerCase() });
+    if (!client) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    if (!client.twoFactorSecretCode || client.twoFactorSecretCode !== code.trim()) {
+      return res.status(400).json({ error: 'Incorrect verification OTP. If you requested a new one, please verify your newest email.' });
+    }
+
+    if (!client.twoFactorSecretCodeExpiresAt || client.twoFactorSecretCodeExpiresAt < new Date()) {
+      return res.status(400).json({ error: 'This verification code has expired. Please revalidate your credentials first.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    client.password = hashedPassword;
+    client.twoFactorSecretCode = undefined;
+    client.twoFactorSecretCodeExpiresAt = undefined;
+    await client.save();
+
+    return res.json({
+      success: true,
+      message: 'Administrative password updated successfully. You can now login with your new credentials.'
+    });
+
+  } catch (err) {
+    console.error('Complete reset error:', err);
+    return res.status(500).json({ error: 'Internal server error completing password replacement' });
+  }
+});
+
 router.post('/logout', (req, res) => {
   res.clearCookie('auth_token', {
     httpOnly: true,
@@ -282,7 +419,10 @@ router.post('/assign-tier', async (req, res) => {
 });
 
 router.get('/check', async (req, res) => {
-  const token = req.cookies.auth_token;
+  let token = req.cookies.auth_token;
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
   if (!token) return res.json({ authenticated: false });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
@@ -311,7 +451,10 @@ router.get('/check', async (req, res) => {
 });
 
 router.get('/me', async (req, res) => {
-  const token = req.cookies.auth_token;
+  let token = req.cookies.auth_token;
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
@@ -348,7 +491,7 @@ router.put('/me', async (req, res) => {
       update.password = await bcrypt.hash(password, salt);
     }
     
-    const client = await Client.findOneAndUpdate({ clientId: decoded.clientId }, { $set: update }, { new: true });
+    const client = await Client.findOneAndUpdate({ clientId: decoded.clientId }, { $set: update }, { returnDocument: 'after' });
     if (!client) return res.status(404).json({ error: 'Client not found' });
     
     res.json({
