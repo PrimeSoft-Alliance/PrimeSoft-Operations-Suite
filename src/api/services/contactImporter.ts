@@ -34,22 +34,6 @@ function getAiClient(): Groq | null {
   return aiClient;
 }
 
-// Lazy initialization of Gemini client
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient(): GoogleGenAI | null {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      aiClient = new GoogleGenAI({
-        apiKey: apiKey,
-        }
-      });
-    }
-  }
-  return aiClient;
-}
-
 export class ContactImporter {
   /**
    * Parse contacts from raw string content (CSV, VCF, or semi-structured list)
@@ -70,7 +54,7 @@ export class ContactImporter {
           return result;
         }
       } catch (err) {
-        logger.error({ err }, 'Gemini contact parsing failed. Falling back to rules-based parser.');
+        logger.error({ err }, 'Groq contact parsing failed. Falling back to rules-based parser.');
       }
     }
 
@@ -96,59 +80,42 @@ export class ContactImporter {
       messages: [
         {
           role: 'user',
-          content: `Target Category: ${dataType}\n\nFile Type Hint: ${fileType.toUpperCase()}\n\nRaw file contents:\n---\n${fileText}\n---\n\nReturn a valid JSON array with the parsed contacts.`
+          content: `Target Category: ${dataType}\n\nFile Type Hint: ${fileType.toUpperCase()}\n\nRaw file contents:\n---\n${fileText}\n---\n\nReturn a valid JSON array with the parsed contacts following this schema: [{name, email, phone, telegramUsername, whatsappJid, validationStatus, validationNotes}]`
         }
       ],
-      system: SYSTEM_PROMPT_TEMPLATE,
+      system: SYSTEM_PROMPT_TEMPLATE || 'You are an expert contact parser. Parse contact information and return valid JSON.',
       temperature: 0.3,
-      max_tokens: 2000,
-      response_format: { type: 'json_object' }
+      max_tokens: 2000
     });
 
     const content = response.choices[0]?.message?.content || '[]';
-    const parsed = JSON.parse(content);
+    let parsed: any;
+    
+    try {
+      // Extract JSON from potential markdown code blocks
+      const jsonMatch = content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      parsed = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+    } catch (e) {
+      logger.error({ error: e, content }, 'Failed to parse LLM response as JSON');
+      return [];
+    }
     
     // Ensure we return an array of ParsedContact objects
     if (Array.isArray(parsed)) {
-      return parsed;
+      return parsed.filter(item => this.isValidContact(item));
     } else if (parsed.contacts && Array.isArray(parsed.contacts)) {
-      return parsed.contacts;
+      return parsed.contacts.filter((item: any) => this.isValidContact(item));
     }
     
     return [];
   }
 
-  // Legacy type handling - removing unused Type references
-  private static getLegacyParseWithSchema(
-    ai: Groq, 
-    fileText: string, 
-    fileType: 'csv' | 'vcf',
-    dataType: string
-  ) {
-    // Schema validation happens in the system prompt instead with Groq
-    // This is a fallback if more structured validation is needed later
-    return {
-      name: '',
-      email: '',
-      phone: '',
-      telegramUsername: '',
-      whatsappJid: '',
-      validationStatus: ' 
-                type: Type.STRING, 
-                description: "Can be 'valid', 'warning', or 'invalid'" 
-              },
-              validationNotes: { type: Type.STRING }
-            },
-            required: ["name", "email", "phone", "validationStatus", "validationNotes"]
-          }
-        }
-      }
-    });
-
-    let text = response.choices[0]?.message?.content?.trim() || '[]';
-    text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(text);
-    return parsed as ParsedContact[];
+  private static isValidContact(item: any): item is ParsedContact {
+    return item && (
+      typeof item.name === 'string' ||
+      typeof item.email === 'string' ||
+      typeof item.phone === 'string'
+    );
   }
 
   private static fallbackParse(
@@ -237,15 +204,12 @@ export class ContactImporter {
     const notes: string[] = [];
 
     // Validate and clean name
-    // Name should not contain emails, should have at least 2 characters, and should be properly capitalized
     if (name) {
-      // capitalizes each word
       name = name
         .split(/\s+/)
         .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
         .join(' ');
       
-      // If name is garbage (e.g., contains @, or is extremely long with no spaces, or has URL patterns)
       if (name.includes('@') || name.includes('http') || name.length < 2 || /^[^a-zA-Z]+$/.test(name)) {
         notes.push('Invalid name format detected');
         name = '';
@@ -280,7 +244,7 @@ export class ContactImporter {
       }
     }
 
-    // Format WhatsApp (Strictly only if WhatsApp is explicitly provided, never guessed from general phone)
+    // Format WhatsApp
     if (whatsappJid) {
       const waDigits = whatsappJid.replace(/\D/g, '');
       if (waDigits) {
@@ -292,7 +256,7 @@ export class ContactImporter {
       whatsappJid = '';
     }
 
-    // Name fallback heuristic (if we cleared it)
+    // Name fallback heuristic
     if (!name) {
       if (email) {
         name = email.split('@')[0].split(/[._-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');

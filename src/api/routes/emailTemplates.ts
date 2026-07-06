@@ -10,8 +10,7 @@ import path from 'path';
 
 const router = express.Router();
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!,
-  }
+  apiKey: process.env.GROQ_API_KEY!
 });
 const PROMPTS_DIR = path.join(process.cwd(), 'prompts');
 

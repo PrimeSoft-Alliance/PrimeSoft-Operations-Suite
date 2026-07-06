@@ -6,8 +6,7 @@ import path from 'path';
 
 const logger = pino({ name: 'MLService' });
 const groq = new Groq({ 
-  apiKey: process.env.GROQ_API_KEY!,
-  }
+  apiKey: process.env.GROQ_API_KEY!
 });
 
 const PROMPT_PATH = path.join(process.cwd(), 'prompts', 'ml-predictions.md');

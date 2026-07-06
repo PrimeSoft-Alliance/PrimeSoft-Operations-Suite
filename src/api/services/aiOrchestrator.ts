@@ -15,8 +15,7 @@ import path from 'path';
 const logger = pino({ name: 'AIOS_Orchestrator' });
 
 const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY!,
-  }
+  apiKey: process.env.GROQ_API_KEY!
 });
 
 // --- Helpers ---
